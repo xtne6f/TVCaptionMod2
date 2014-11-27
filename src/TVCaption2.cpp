@@ -11,7 +11,7 @@
 #include "CaptionManager.h"
 #include "OsdCompositor.h"
 #define TVTEST_PLUGIN_CLASS_IMPLEMENT
-#define TVTEST_PLUGIN_VERSION TVTEST_PLUGIN_VERSION_(0,0,11)
+#define TVTEST_PLUGIN_VERSION TVTEST_PLUGIN_VERSION_(0,0,14)
 #include "TVTestPlugin.h"
 #include "resource.h"
 #include "TVCaption2.h"
@@ -171,7 +171,9 @@ bool CTVCaption2::Initialize()
         ::WritePrivateProfileString(TEXT("Settings"), TEXT("EnOsdCompositor"), TEXT("0"), m_szIniPath);
     }
     else if (EnOsdCompositor != 0) {
-        if (m_osdCompositor.Initialize()) {
+        // フィルタグラフを取得できないバージョンではAPIフックを使う
+        bool fSetHook = m_pApp->GetVersion() < TVTest::MakeVersion(0, 9, 0);
+        if (m_osdCompositor.Initialize(fSetHook)) {
             m_pApp->AddLog(L"OsdCompositorを初期化しました。");
         }
     }
@@ -725,6 +727,14 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             }
         }
         return TRUE;
+    case TVTest::EVENT_FILTERGRAPH_INITIALIZED:
+        // フィルタグラフの初期化終了
+        pThis->m_osdCompositor.OnFilterGraphInitialized(reinterpret_cast<const TVTest::FilterGraphInfo*>(lParam1)->pGraphBuilder);
+        break;
+    case TVTest::EVENT_FILTERGRAPH_FINALIZE:
+        // フィルタグラフの終了処理開始
+        pThis->m_osdCompositor.OnFilterGraphFinalize(reinterpret_cast<const TVTest::FilterGraphInfo*>(lParam1)->pGraphBuilder);
+        break;
     }
     return 0;
 }

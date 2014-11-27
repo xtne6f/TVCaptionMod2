@@ -27,8 +27,10 @@ public:
     bool SetUpdateCallback(UpdateCallbackFunc Callback, void *pClientData = NULL, bool fTop = false);
     int GetVersion();
 #endif
-    bool Initialize();
+    bool Initialize(bool fSetHook);
     void Uninitialize();
+    void OnFilterGraphInitialized(IGraphBuilder *pGraphBuilder);
+    void OnFilterGraphFinalize(IGraphBuilder *pGraphBuilder);
 private:
     struct TEXTURE_PARAM {
         int nSize;

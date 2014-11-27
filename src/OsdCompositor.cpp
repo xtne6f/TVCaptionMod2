@@ -205,7 +205,8 @@ int COsdCompositor::GetVersion()
 // 初期化する
 // 先行プラグインが既にウィンドウを作成していた場合にもfalseを返すので、
 // 実際にオブジェクトを利用できるかどうかはFindHandle()がNULLを返すかどうかで判断する
-bool COsdCompositor::Initialize()
+// fSetHook==falseとするときはOnFilterGraphInitialized()/OnFilterGraphFinalize()を適切に呼ぶ必要がある
+bool COsdCompositor::Initialize(bool fSetHook)
 {
     if (m_hwnd) return true;
 
@@ -219,18 +220,23 @@ bool COsdCompositor::Initialize()
         // ウィンドウ作成
         m_hwnd = ::CreateWindow(OSD_COMPOSITOR_WINDOW_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hBase, this);
         if (m_hwnd) {
-            // CoCreateInstanceをフック
-            m_hOle32 = ::LoadLibrary(TEXT("ole32.dll"));
-            if (m_hOle32) {
-                m_pfnCoCreateInstance = (CoCreateInstanceFunc*)::GetProcAddress(m_hOle32, "CoCreateInstance");
-                if (m_pfnCoCreateInstance) {
-                    if (Hook(CoCreateInstanceHook, m_pfnCoCreateInstance)) {
-                        return true;
+            if (fSetHook) {
+                // CoCreateInstanceをフック
+                m_hOle32 = ::LoadLibrary(TEXT("ole32.dll"));
+                if (m_hOle32) {
+                    m_pfnCoCreateInstance = (CoCreateInstanceFunc*)::GetProcAddress(m_hOle32, "CoCreateInstance");
+                    if (m_pfnCoCreateInstance) {
+                        if (Hook(CoCreateInstanceHook, m_pfnCoCreateInstance)) {
+                            return true;
+                        }
+                        m_pfnCoCreateInstance = NULL;
                     }
-                    m_pfnCoCreateInstance = NULL;
+                    ::FreeLibrary(m_hOle32);
+                    m_hOle32 = NULL;
                 }
-                ::FreeLibrary(m_hOle32);
-                m_hOle32 = NULL;
+            }
+            else {
+                return true;
             }
             ::DestroyWindow(m_hwnd);
             m_hwnd = NULL;
@@ -264,6 +270,44 @@ void COsdCompositor::Uninitialize()
         ::DestroyWindow(m_hwnd);
         ::UnregisterClass(OSD_COMPOSITOR_WINDOW_CLASS, ::GetModuleHandle(NULL));
         m_hwnd = NULL;
+    }
+}
+
+void COsdCompositor::OnFilterGraphInitialized(IGraphBuilder *pGraphBuilder)
+{
+    if (m_hwnd && !m_pfnCoCreateInstance) {
+        IEnumFilters *pEnum = NULL;
+        HRESULT hr = pGraphBuilder->EnumFilters(&pEnum);
+        if (SUCCEEDED(hr)) {
+            IBaseFilter *pFilter;
+            while (pEnum->Next(1, &pFilter, NULL) == S_OK) {
+                CLSID clsid;
+                if (SUCCEEDED(pFilter->GetClassID(&clsid))) {
+                    if (IsEqualCLSID(CLSID_VideoMixingRenderer9, clsid)) {
+                        m_pRenderer = pFilter;
+                        m_RendererType = RT_VMR9;
+                        break;
+                    }
+                    else if (IsEqualCLSID(CLSID_EnhancedVideoRenderer, clsid)) {
+                        m_pRenderer = pFilter;
+                        m_RendererType = RT_EVR;
+                        break;
+                    }
+                }
+                pFilter->Release();
+            }
+            pEnum->Release();
+        }
+    }
+}
+
+void COsdCompositor::OnFilterGraphFinalize(IGraphBuilder *pGraphBuilder)
+{
+    if (m_hwnd && !m_pfnCoCreateInstance) {
+        if (m_pRenderer) {
+            m_pRenderer->Release();
+            m_pRenderer = NULL;
+        }
     }
 }
 
