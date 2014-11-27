@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.4 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.5 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -20,7 +20,7 @@ TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
 ・縦書き (なかなか遭遇しないのでどう表示されるかもわからない)
-・字幕スーパー
+・文字スーパー
 ・点滅
 ・PNG形式の字幕
 
@@ -45,6 +45,7 @@ SettingsIndex
     # CaptionDll=Plugins\Caption.dll
     # SettingsIndex=1
     # FaceName=Windows TV ゴシック
+    # GaijiFaceName=
     # GaijiTableName=!typebank
     # Method=2
     # DelayTime=450
@@ -57,7 +58,8 @@ SettingsIndex
     # Centering=0
     # 
     # [Settings1]
-    # FaceName=和田研中丸ゴシック2004ARIB
+    # FaceName=
+    # GaijiFaceName=和田研中丸ゴシック2004ARIB
     # GaijiTableName=!std
     # Method=2
     # DelayTime=450
@@ -75,6 +77,9 @@ FaceName
     使用するフォント名を指定
     # 何も指定しないと適当な等幅フォントが使われます。
     # ARIB外字が収録されているフォントを使用すると、記号も化けずに表示できます。
+GaijiFaceName
+    外字に使用するフォント名を指定
+    # 何も指定しないと外字も上記FaceNameのフォントが使われます。
 GaijiTableName
     使用する外字テーブル名を指定
     # まず、添付の"gaiji.zip"にある"{プラグイン名}_Gaiji_{テーブル名}.txt"からフ
@@ -114,6 +119,25 @@ Centering
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
 FixRatio
     映像とウィンドウの比率がことなる場合に字幕の表示領域を調整する[=1]かどうか
+RomSoundList
+    内蔵音0～16のリストを':'区切りで指定
+    # フォーマット: [;]{内蔵音0}:{内蔵音1}: ... :{内蔵音16}
+    # 何も指定しないか';'でコメントアウトすると内蔵音再生しません。
+    # 
+    # {内蔵音0}～については、プラグインフォルダにプラグインと同名(通常は
+    # "TVCaptionMod2")のフォルダをつくり、そこに配置した"{ファイル名}.wav"という
+    # 音声ファイルの{ファイル名}の部分を指定してください。何も指定しないかファイ
+    # ルがなければ再生しません。また、先頭を'!'にするとシステムサウンドのエイリ
+    # アスを参照します。エイリアスについては
+    # http://dobon.net/vb/dotnet/programing/playsystemsound.html などを参考に、
+    # 例えば「Windowsログオン」時のサウンドは !WindowsLogon となります。
+    # 
+    # 参考-地デジの内蔵音定義(詳細はARIB TR-B14参照):
+    # ・内蔵音0～4   速報チャイム1～5
+    # ・内蔵音5～12  ボタン操作音1～8
+    # ・内蔵音13     アラート音
+    # ・内蔵音14～15 未定義
+    # なお、内蔵音16は表示設定切り替えに割りあてています(再生テストに便利)
 
 ■ソースについて
 Caption.dllのソースコードはodaruさんのもの、またはCaption2Ass_PCR付属のものとな
@@ -144,6 +168,10 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.5 (2012-05-28)
+・外字用のフォントを別に指定できるようにした
+・内蔵音再生(PRA)に対応(未検証)
+  ・文字スーパーに未対応なのであまり意味ないかも
 ver.0.4 (2012-05-26)
 ・TVH264のワンセグ字幕に対応
 ・Caption.dll:冗長なバイナリを吐いていた部分をすこし改変

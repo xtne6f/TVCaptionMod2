@@ -539,7 +539,8 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 				pCapChar->wCharHInterval = jt->wCharHInterval;
 				pCapChar->wCharVInterval = jt->wCharVInterval;
 				pCapChar->bHLC = jt->bHLC;
-				pCapChar->wAlignment = 0;
+				pCapChar->bPRA = jt->bPRA;
+				pCapChar->bAlignment = 0;
 			}
 
 			pCap->bClear = it->bClear;

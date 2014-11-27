@@ -8,6 +8,7 @@ class CTVCaption2 : public TVTest::CTVTestPlugin
     static const int PCR_PER_MSEC = 45;
     static const int PCR_PIDS_MAX = 8;
     static const int PACKET_QUEUE_SIZE = 1024;
+    static const int GAIJI_TABLE_SIZE = G_CELL_SIZE * 7;
 public:
     // CTVTestPlugin
     CTVCaption2();
@@ -19,7 +20,7 @@ private:
     HWND FindVideoContainer();
     int GetSubtitlePid();
     bool InitializeCaptionDll();
-    bool ConfigureGaijiTable(LPCTSTR tableName);
+    bool ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable);
     bool EnablePlugin(bool fEnable);
     void LoadSettings();
     void SaveSettings() const;
@@ -41,7 +42,9 @@ private:
     TCHAR m_szIniPath[MAX_PATH];
     TCHAR m_szCaptionDllPath[MAX_PATH];
     TCHAR m_szFaceName[LF_FACESIZE];
+    TCHAR m_szGaijiFaceName[LF_FACESIZE];
     TCHAR m_szGaijiTableName[LF_FACESIZE];
+    WCHAR m_customGaijiTable[GAIJI_TABLE_SIZE];
     int m_settingsIndex;
     int m_paintingMethod;
     int m_delayTime;
@@ -56,6 +59,7 @@ private:
     int m_strokeByDilate;
     bool m_fCentering;
     bool m_fFixRatio;
+    TCHAR m_szRomSoundList[32 * 20];
 
     // 字幕描画
     HWND m_hwndPainting;
@@ -94,6 +98,7 @@ private:
     GetCaptionDataCPW *m_pfnGetCaptionDataCPW;
     GetDRCSPatternCP *m_pfnDRCSPatternCP;
     SetGaijiCP *m_pfnSetGaijiCP;
+    GetGaijiCP *m_pfnGetGaijiCP;
 };
 
 #endif // INCLUDE_TV_CAPTION2_H

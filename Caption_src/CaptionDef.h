@@ -27,7 +27,8 @@ typedef struct _CAPTION_CHAR_DATA_DLL{
 	WORD wCharH;
 	WORD wCharHInterval;
 	WORD wCharVInterval;
-	WORD wAlignment; //zero cleared
+	BYTE bPRA; //PRA+1
+	BYTE bAlignment; //zero cleared
 } CAPTION_CHAR_DATA_DLL;
 
 typedef struct _CAPTION_DATA_DLL{

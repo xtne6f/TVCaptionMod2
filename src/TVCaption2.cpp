@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-05-24
+// 最終更新: 2012-05-27
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -26,8 +26,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.4; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 2;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.5; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 3;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 enum {
@@ -86,11 +86,14 @@ CTVCaption2::CTVCaption2()
     , m_pfnGetCaptionDataCPW(NULL)
     , m_pfnDRCSPatternCP(NULL)
     , m_pfnSetGaijiCP(NULL)
+    , m_pfnGetGaijiCP(NULL)
 {
     m_szIniPath[0] = 0;
     m_szCaptionDllPath[0] = 0;
     m_szFaceName[0] = 0;
+    m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
+    m_szRomSoundList[0] = 0;
     m_lang1.ucLangTag = 0xFF;
     m_lang2.ucLangTag = 0xFF;
 }
@@ -226,6 +229,7 @@ bool CTVCaption2::InitializeCaptionDll()
     m_pfnGetCaptionDataCPW = reinterpret_cast<GetCaptionDataCPW*>(::GetProcAddress(m_hCaptionDll, "GetCaptionDataCPW"));
     m_pfnDRCSPatternCP = reinterpret_cast<GetDRCSPatternCP*>(::GetProcAddress(m_hCaptionDll, "GetDRCSPatternCP"));
     m_pfnSetGaijiCP = reinterpret_cast<SetGaijiCP*>(::GetProcAddress(m_hCaptionDll, "SetGaijiCP"));
+    m_pfnGetGaijiCP = reinterpret_cast<GetGaijiCP*>(::GetProcAddress(m_hCaptionDll, "GetGaijiCP"));
     if (pfnInitializeCPW &&
         m_pfnUnInitializeCP &&
         m_pfnAddTSPacketCP &&
@@ -234,6 +238,7 @@ bool CTVCaption2::InitializeCaptionDll()
         m_pfnGetCaptionDataCPW &&
         m_pfnDRCSPatternCP &&
         m_pfnSetGaijiCP &&
+        m_pfnGetGaijiCP &&
         pfnInitializeCPW() == TRUE)
     {
         return true;
@@ -244,42 +249,57 @@ bool CTVCaption2::InitializeCaptionDll()
 }
 
 
-bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName)
+bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
 {
     if (!m_hCaptionDll || !tableName[0]) return false;
+
+    bool fRet = false;
+    TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
 
     // 組み込みのもので外字テーブル設定
     if (!::lstrcmpi(tableName, TEXT("!std"))) {
         // DLLデフォルトにリセット
         DWORD tableSize;
-        return m_pfnSetGaijiCP(0, NULL, &tableSize) == TRUE;
+        fRet = m_pfnSetGaijiCP(0, NULL, &tableSize) == TRUE;
     }
     else if (!::lstrcmpi(tableName, TEXT("!typebank"))) {
         DWORD tableSize = _countof(GaijiTable_typebank);
-        return m_pfnSetGaijiCP(1, GaijiTable_typebank, &tableSize) == TRUE;
+        fRet = m_pfnSetGaijiCP(1, GaijiTable_typebank, &tableSize) == TRUE;
     }
-
     // ファイルから外字テーブル設定
-    TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
-    if (::GetModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
+    else if (::GetModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
         ::PathRemoveExtension(gaijiPath);
         ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), tableName);
         HANDLE hFile = ::CreateFile(gaijiPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile != INVALID_HANDLE_VALUE) {
-            bool fRet = false;
-            WCHAR gaijiTable[1/*BOM*/ + G_CELL_SIZE * 7];
+            WCHAR gaijiTable[1/*BOM*/ + GAIJI_TABLE_SIZE];
             DWORD readBytes;
             if (::ReadFile(hFile, gaijiTable, sizeof(gaijiTable), &readBytes, NULL) &&
-                readBytes >= sizeof(WCHAR) && gaijiTable[0] == L'\xFEFF')
+                readBytes == sizeof(gaijiTable) && gaijiTable[0] == L'\xFEFF')
             {
-                DWORD tableSize = readBytes / sizeof(WCHAR) - 1;
+                DWORD tableSize = _countof(gaijiTable) - 1;
                 fRet = m_pfnSetGaijiCP(1, gaijiTable + 1, &tableSize) == TRUE;
             }
             ::CloseHandle(hFile);
-            return fRet;
         }
     }
-    return false;
+
+    if (fRet && pCustomTable) {
+        // 外字をプラグインで置換する場合
+        DWORD tableSize = GAIJI_TABLE_SIZE;
+        fRet = m_pfnGetGaijiCP(1, pCustomTable, &tableSize) == TRUE;
+        if (fRet) {
+            // U+E000から線形マップ
+            WCHAR gaijiTable[GAIJI_TABLE_SIZE];
+            WCHAR wc = 0xE000;
+            for (int i = 0; i < _countof(gaijiTable); ++i, ++wc) {
+                gaijiTable[i] = wc;
+            }
+            tableSize = _countof(gaijiTable);
+            fRet = m_pfnSetGaijiCP(1, gaijiTable, &tableSize) == TRUE;
+        }
+    }
+    return fRet;
 }
 
 // プラグインの有効状態が変化した
@@ -297,7 +317,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
         m_hwndPainting = ::CreateWindow(TV_CAPTION2_WINDOW_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, g_hinstDLL, this);
         if (m_hwndPainting) {
             if (InitializeCaptionDll()) {
-                if (!ConfigureGaijiTable(m_szGaijiTableName)) {
+                if (!ConfigureGaijiTable(m_szGaijiTableName, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
                     m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
                 }
                 m_captionPid = GetSubtitlePid();
@@ -330,6 +350,8 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
             ::DestroyWindow(m_hwndPainting);
             m_hwndPainting = NULL;
         }
+        // 内蔵音再生停止
+        ::PlaySound(NULL, NULL, 0);
         return true;
     }
 }
@@ -350,6 +372,7 @@ void CTVCaption2::LoadSettings()
         ::wsprintf(section + ::lstrlen(section), TEXT("%d"), m_settingsIndex);
     }
     ::GetPrivateProfileString(section, TEXT("FaceName"), TEXT(""), m_szFaceName, _countof(m_szFaceName), m_szIniPath);
+    ::GetPrivateProfileString(section, TEXT("GaijiFaceName"), TEXT(""), m_szGaijiFaceName, _countof(m_szGaijiFaceName), m_szIniPath);
     ::GetPrivateProfileString(section, TEXT("GaijiTableName"), TEXT("!std"), m_szGaijiTableName, _countof(m_szGaijiTableName), m_szIniPath);
     m_paintingMethod    = GetPrivateProfileSignedInt(section, TEXT("Method"), 2, m_szIniPath);
     m_delayTime         = GetPrivateProfileSignedInt(section, TEXT("DelayTime"), 450, m_szIniPath);
@@ -362,6 +385,9 @@ void CTVCaption2::LoadSettings()
     m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
     m_fFixRatio         = GetPrivateProfileSignedInt(section, TEXT("FixRatio"), 1, m_szIniPath) != 0;
+    ::GetPrivateProfileString(section, TEXT("RomSoundList"),
+                              TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk"),
+                              m_szRomSoundList, _countof(m_szRomSoundList), m_szIniPath);
 
     m_fEnTextColor = textColor >= 0;
     m_textColor = RGB(textColor/1000000%1000, textColor/1000%1000, textColor%1000);
@@ -384,6 +410,7 @@ void CTVCaption2::SaveSettings() const
         ::wsprintf(section + ::lstrlen(section), TEXT("%d"), m_settingsIndex);
     }
     ::WritePrivateProfileString(section, TEXT("FaceName"), m_szFaceName, m_szIniPath);
+    ::WritePrivateProfileString(section, TEXT("GaijiFaceName"), m_szGaijiFaceName, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("GaijiTableName"), m_szGaijiTableName, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Method"), m_paintingMethod, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("DelayTime"), m_delayTime, m_szIniPath);
@@ -398,6 +425,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("FixRatio"), m_fFixRatio, m_szIniPath);
+    ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
 }
 
 
@@ -413,6 +441,34 @@ void CTVCaption2::SwitchSettings()
     }
     WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_szIniPath);
     LoadSettings();
+}
+
+
+// 内蔵音再生する
+static bool PlayRomSound(LPCTSTR list, int index)
+{
+    if (index<0 || list[0]==TEXT(';')) return false;
+
+    int len = ::StrCSpn(list, TEXT(":"));
+    for (; index>0 && list[len]; --index) {
+        list += len+1;
+        len = ::StrCSpn(list, TEXT(":"));
+    }
+    if (index>0) return false;
+
+    TCHAR id[32], path[MAX_PATH + 64];
+    ::lstrcpyn(id, list, min(len+1,_countof(id)));
+
+    if (id[0]==TEXT('!')) {
+        // 定義済みのサウンド
+        return ::PlaySound(id+1, NULL, SND_ASYNC|SND_NODEFAULT|SND_NOSTOP|SND_ALIAS) != FALSE;
+    }
+    else if (id[0] && ::GetModuleFileName(g_hinstDLL, path, MAX_PATH)) {
+        ::PathRemoveExtension(path);
+        ::wsprintf(path + ::lstrlen(path), TEXT("\\%s.wav"), id);
+        return ::PlaySound(path, NULL, SND_ASYNC|SND_NODEFAULT|SND_NOSTOP|SND_FILENAME) != FALSE;
+    }
+    return false;
 }
 
 
@@ -463,9 +519,13 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             case ID_COMMAND_SWITCH_SETTING:
                 pThis->HideOsds();
                 pThis->SwitchSettings();
-                if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName)) {
+                if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName,
+                                                pThis->m_szGaijiFaceName[0]?pThis->m_customGaijiTable:NULL))
+                {
                     pThis->m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
                 }
+                ::PlaySound(NULL, NULL, 0);
+                PlayRomSound(pThis->m_szRomSoundList, 16);
                 break;
             }
         }
@@ -516,16 +576,12 @@ void CTVCaption2::DestroyOsds()
     m_osdShowCount = 0;
 }
 
-// 利用可能なOSDを1つだけ用意する
-CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style)
+static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
+                       LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
 {
-    CPseudoOSD &osd = m_osdList[m_osdShowCount % OSD_LIST_MAX];
-    osd.ClearText();
-    osd.SetImage(NULL, 0);
-
     LOGFONT logFont;
     logFont.lfHeight         = -charHeight;
-    logFont.lfWidth          = 0;
+    logFont.lfWidth          = charWidth / 2;
     logFont.lfEscapement     = 0;
     logFont.lfOrientation    = 0;
     logFont.lfWeight         = style.bBold ? FW_EXTRABOLD : FW_DONTCARE;
@@ -536,10 +592,19 @@ CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomal
     logFont.lfOutPrecision   = OUT_DEFAULT_PRECIS;
     logFont.lfClipPrecision  = CLIP_DEFAULT_PRECIS;
     logFont.lfQuality        = DRAFT_QUALITY;
-    logFont.lfPitchAndFamily = (m_szFaceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
-    ::lstrcpy(logFont.lfFaceName, m_szFaceName);
-    osd.SetFont(&logFont);
+    logFont.lfPitchAndFamily = (faceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
+    ::lstrcpy(logFont.lfFaceName, faceName);
+    pOsd->AddText(text, width, logFont);
+}
 
+// 利用可能なOSDを1つだけ用意する
+CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style)
+{
+    DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
+
+    CPseudoOSD &osd = m_osdList[m_osdShowCount % OSD_LIST_MAX];
+    osd.ClearText();
+    osd.SetImage(NULL, 0);
     osd.SetTextColor(m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB),
                      m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
 
@@ -651,9 +716,9 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
     int posX = caption.wPosX;
     int posY = caption.wPosY;
 
-    // DRCS描画のためにOSDを分割するときの、繰り越す文字列
+    // DRCSか外字の描画後に繰り越す文字列
     LPCTSTR pszCarry = NULL;
-    // 文字幅が変化するだけなのでOSDをまとめられるときの、繰り越すOSD
+    // スタイルが同じなのでOSDをまとめられるときの、繰り越すOSD
     CPseudoOSD *pOsdCarry = NULL;
 
     for (DWORD i = 0; i < caption.dwListCount; i += pszCarry?0:1) {
@@ -667,11 +732,14 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
         LPCTSTR pszShow = pszCarry ? pszCarry : charData.pszDecode;
         pszCarry = NULL;
 
-        // 文字列にDRCSが含まれるか調べる
+        // 文字列にDRCSか外字が含まれるか調べる
         const DRCS_PATTERN_DLL *pDrcs = NULL;
-        if (drcsCount != 0) {
+        bool fSearchGaiji = m_szGaijiFaceName[0] != 0;
+        WCHAR wcGaiji = 0;
+        if (drcsCount != 0 || fSearchGaiji) {
             for (int j = 0; pszShow[j]; ++j) {
                 if (0xEC00 <= pszShow[j] && pszShow[j] <= 0xECFF) {
+                    // DRCS
                     for (DWORD k = 0; k < drcsCount; ++k) {
                         if (pDrcsList[k].dwUCS == pszShow[j]) {
                             pDrcs = &pDrcsList[k];
@@ -682,9 +750,18 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
                             }
                         }
                     }
-                    // 対応する図形があるかどうかにかかわらず分割する
-                    pszCarry = &pszShow[j+1];
-                    break;
+                    if (pDrcs) {
+                        pszCarry = &pszShow[j+1];
+                        break;
+                    }
+                }
+                else if (fSearchGaiji && 0xE000 <= pszShow[j] && pszShow[j] < 0xE000+GAIJI_TABLE_SIZE) {
+                    // 外字
+                    wcGaiji = m_customGaijiTable[pszShow[j] - 0xE000];
+                    if (wcGaiji) {
+                        pszCarry = &pszShow[j+1];
+                        break;
+                    }
                 }
             }
         }
@@ -695,6 +772,9 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
             // 繰り越す
             ::lstrcpyn(szTmp, pszShow, min(static_cast<int>(pszCarry - pszShow), _countof(szTmp)));
             pszShow = szTmp;
+            if (wcGaiji) {
+                fSameStyle = true;
+            }
         }
         else if (i+1 < caption.dwListCount) {
             const CAPTION_CHAR_DATA_DLL &nextCharData = caption.pstCharList[i+1];
@@ -715,20 +795,20 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
 
         // 文字列を描画
         if (pOsdCarry) {
-            if (pszShow[0]) {
-                pOsdCarry->AddText(pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX), charScaleW/2);
-            }
+            AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
+                       charScaleW, charScaleH, m_szFaceName, charData);
             if (!fSameStyle) {
                 pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
             }
         }
         else {
-            if (pszShow[0]) {
+            if (fSameStyle || pszShow[0]) {
                 CPseudoOSD &osd = CreateOsd(hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
-                osd.AddText(pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX), charScaleW/2);
+                AddOsdText(&osd, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
+                           charScaleW, charScaleH, m_szFaceName, charData);
                 if (fSameStyle) {
                     pOsdCarry = &osd;
                 }
@@ -787,6 +867,19 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
                 osd.PrepareWindow();
                 posX += dirW;
             }
+        }
+        else if (wcGaiji) {
+            // 外字を描画
+            if (pOsdCarry) {
+                TCHAR szGaiji[] = {wcGaiji, 0};
+                AddOsdText(pOsdCarry, szGaiji, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
+                           charScaleW, charScaleH, m_szGaijiFaceName, charData);
+                posX += dirW;
+            }
+        }
+
+        if (charData.bPRA != 0) {
+            PlayRomSound(m_szRomSoundList, charData.bPRA - 1);
         }
     }
 }

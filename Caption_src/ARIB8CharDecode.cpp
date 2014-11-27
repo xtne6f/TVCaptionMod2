@@ -167,6 +167,7 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_bItalic = FALSE;
 	m_bFlushMode = 0;
 	m_bHLC = 0;
+	m_bPRA = 0;
 
 	switch(m_wSWFMode){
 	case 7:
@@ -1037,173 +1038,92 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 {
 	DWORD dwReadSize = 1;
 
-	//終端文字をさがす(シーケンス終了まで中間文字0x20は含まれない)
-	do{
-		if( (++dwReadSize)+1 > dwSrcSize ){
-			return FALSE;
+	//中間文字0x20まで移動
+	WORD wP1 = 0;
+	WORD wP2 = 0;
+	int nParam = 0;
+	for( ; dwReadSize+1<dwSrcSize; dwReadSize++ ){
+		if( pbSrc[dwReadSize] == 0x20 ){
+			if( nParam==0 ){
+				wP1 = wP2;
+			}
+			nParam++;
+			break;
+		}else if( pbSrc[dwReadSize] == 0x3B ){
+			if( nParam==0 ){
+				wP1 = wP2;
+				wP2 = 0;
+			}
+			nParam++;
+		}else if( 0x30<=pbSrc[dwReadSize] && pbSrc[dwReadSize]<=0x39 ){
+			if( nParam<=1 ){
+				wP2 = wP2*10+(pbSrc[dwReadSize]&0x0F);
+			}
 		}
-	}while( pbSrc[dwReadSize-1] != 0x20 );
-	
+	}
+	//終端文字に移動
+	if( ++dwReadSize >= dwSrcSize ){
+		return FALSE;
+	}
+
 	switch(pbSrc[dwReadSize]){
 		case 0x53:
 			//SWF
-			{
-				BOOL bCharMode = FALSE;
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( bCharMode == FALSE ){
-							m_wSWFMode = wParam;
-						}else{
-							//未サポート
-						}
-					}else if(pbSrc[i] == 0x3B){
-						bCharMode = TRUE;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
-				if( InitCaption() == FALSE ){
-					return FALSE;
-				}
+			if( nParam==1 ){
+				m_wSWFMode = wP1;
+			}else{
+				//未サポート
+			}
+			if( InitCaption() == FALSE ){
+				return FALSE;
 			}
 			break;
 		case 0x6E:
 			//RCS
-			{
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						m_bRasterColorIndex = (BYTE)(wParam&0x7F);
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
-			}
+			m_bRasterColorIndex = (BYTE)(wP1&0x7F);
 			break;
 		case 0x61:
 			//ACPS
-			{
-				BOOL bSeparate = FALSE;
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( bSeparate == FALSE ){
-							m_wPosStartX = m_wPosX = wParam;
-						}else{
-							m_wPosY = wParam;
-						}
-					}else if(pbSrc[i] == 0x3B){
-						bSeparate = TRUE;
-						m_wPosStartX = m_wPosX = wParam;
-						wParam = 0;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
+			m_wPosStartX = m_wPosX = wP1;
+			if( nParam>=2 ){
+				m_wPosY = wP2;
 			}
 			break;
 		case 0x56:
 			//SDF
-			{
-				BOOL bSeparate = FALSE;
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( bSeparate == FALSE ){
-							m_wClientW = wParam;
-						}else{
-							m_wClientH = wParam;
-						}
-					}else if(pbSrc[i] == 0x3B){
-						bSeparate = TRUE;
-						m_wClientW = wParam;
-						wParam = 0;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
+			m_wClientW = wP1;
+			if( nParam>=2 ){
+				m_wClientH = wP2;
 			}
 			break;
 		case 0x5F:
 			//SDP
-			{
-				BOOL bSeparate = FALSE;
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( bSeparate == FALSE ){
-							m_wClientX = wParam;
-						}else{
-							m_wClientY = wParam;
-						}
-					}else if(pbSrc[i] == 0x3B){
-						bSeparate = TRUE;
-						m_wClientX = wParam;
-						wParam = 0;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
-				if( m_bPosInit == FALSE ){
-					m_wPosStartX = m_wPosX = m_wClientX;
-					m_wPosY = m_wClientY + GetLineDirSize() - 1;
-				}
+			m_wClientX = wP1;
+			if( nParam>=2 ){
+				m_wClientY = wP2;
+			}
+			if( m_bPosInit == FALSE ){
+				m_wPosStartX = m_wPosX = m_wClientX;
+				m_wPosY = m_wClientY + GetLineDirSize() - 1;
 			}
 			break;
 		case 0x57:
 			//SSM
-			{
-				BOOL bSeparate = FALSE;
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( bSeparate == FALSE ){
-							m_wCharW = wParam;
-						}else{
-							m_wCharH = wParam;
-						}
-					}else if(pbSrc[i] == 0x3B){
-						bSeparate = TRUE;
-						m_wCharW = wParam;
-						wParam = 0;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
-				if( m_bPosInit == FALSE ){
-					m_wPosY = m_wClientY + GetLineDirSize() - 1;
-				}
+			m_wCharW = wP1;
+			if( nParam>=2 ){
+				m_wCharH = wP2;
+			}
+			if( m_bPosInit == FALSE ){
+				m_wPosY = m_wClientY + GetLineDirSize() - 1;
 			}
 			break;
 		case 0x58:
 			//SHS
-			{
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						m_wCharHInterval = wParam;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
-			}
+			m_wCharHInterval = wP1;
 			break;
 		case 0x59:
 			//SVS
-			{
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						m_wCharVInterval = wParam;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
-				if( m_bPosInit == FALSE ){
-					m_wPosY = m_wClientY + GetLineDirSize() - 1;
-				}
-			}
+			m_wCharVInterval = wP1;
 			break;
 		case 0x42:
 			//GSM
@@ -1227,49 +1147,22 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 			break;
 		case 0x63:
 			//ORN
-			{
-				BOOL bSeparate = FALSE;
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( bSeparate == FALSE ){
-							if( wParam == 0x02 ){
-								m_bShadow = TRUE;
-							}
-						}
-					}else if(pbSrc[i] == 0x3B){
-						bSeparate = TRUE;
-						if( wParam == 0x02 ){
-							m_bShadow = TRUE;
-						}
-						wParam = 0;
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
+			if( wP1 == 0x02 ){
+				m_bShadow = TRUE;
 			}
 			break;
 		case 0x64:
 			//MDF
-			{
-				WORD wParam = 0;
-				for( DWORD i=1; i<dwReadSize; i++ ){
-					if( pbSrc[i] == 0x20 ){
-						if( wParam == 0 ){
-							m_bBold = FALSE;
-							m_bItalic = FALSE;
-						}else if( wParam == 1 ){
-							m_bBold = TRUE;
-						}else if( wParam == 2 ){
-							m_bItalic = TRUE;
-						}else if( wParam == 3 ){
-							m_bBold = TRUE;
-							m_bItalic = TRUE;
-						}
-					}else{
-						wParam = wParam*10+(pbSrc[i]&0x0F);
-					}
-				}
+			if( wP1 == 0 ){
+				m_bBold = FALSE;
+				m_bItalic = FALSE;
+			}else if( wP1 == 1 ){
+				m_bBold = TRUE;
+			}else if( wP1 == 2 ){
+				m_bItalic = TRUE;
+			}else if( wP1 == 3 ){
+				m_bBold = TRUE;
+				m_bItalic = TRUE;
 			}
 			break;
 		case 0x66:
@@ -1278,7 +1171,9 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 			break;
 		case 0x68:
 			//PRA
-			//未サポート
+			m_bPRA = (BYTE)(wP1 + 1);
+			CheckModify(TRUE);
+			m_bPRA = 0;
 			break;
 		case 0x54:
 			//CCC
@@ -1300,9 +1195,9 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 
 //変換済みの本文をリストに移す
 //CAPTION_CHAR_DATAやCAPTION_DATAのプロパティ変更が必要な処理の直前によぶ
-void CARIB8CharDecode::CheckModify(void)
+void CARIB8CharDecode::CheckModify(BOOL bForce)
 {
-	if( m_strDecode.length() > 0 ){
+	if( bForce || !m_strDecode.empty() ){
 		if( IsCaptionPropertyChanged() ){
 #ifdef DDEBUG_OUT
 			TCHAR debug[256];
@@ -1353,6 +1248,7 @@ void CARIB8CharDecode::CreateCaptionCharData(CAPTION_CHAR_DATA* pItem) const
 	pItem->bItalic = m_bItalic;
 	pItem->bFlushMode = m_bFlushMode;
 	pItem->bHLC = m_bHLC<<4;
+	pItem->bPRA = m_bPRA;
 
 	pItem->wCharW = m_wCharW;
 	pItem->wCharH = m_wCharH;

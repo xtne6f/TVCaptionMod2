@@ -59,7 +59,8 @@ typedef struct _CAPTION_CHAR_DATA_DLL{
 	WORD wCharH;
 	WORD wCharHInterval;
 	WORD wCharVInterval;
-	WORD wAlignment; //zero cleared
+	BYTE bPRA; //PRA+1
+	BYTE bAlignment; //zero cleared
 } CAPTION_CHAR_DATA_DLL;
 
 typedef struct _CAPTION_DATA_DLL{
@@ -106,5 +107,6 @@ typedef DWORD (WINAPI GetCaptionDataCP)(unsigned char ucLangTag, CAPTION_DATA_DL
 typedef DWORD (WINAPI GetCaptionDataCPW)(unsigned char ucLangTag, CAPTION_DATA_DLL** ppList, DWORD* pdwListCount);
 typedef DWORD (WINAPI GetDRCSPatternCP)(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList, DWORD* pdwListCount);
 typedef DWORD (WINAPI SetGaijiCP)(DWORD dwCommand, const WCHAR* ppTable, DWORD* pdwTableSize);
+typedef DWORD (WINAPI GetGaijiCP)(DWORD dwCommand, WCHAR* ppTable, DWORD* pdwTableSize);
 
 #endif // INCLUDE_CAPTION_H

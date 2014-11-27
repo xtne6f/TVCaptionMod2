@@ -85,6 +85,7 @@ typedef struct _CAPTION_CHAR_DATA{
 	BOOL bItalic;
 	BYTE bFlushMode;
 	BYTE bHLC;
+	BYTE bPRA;
 
 	WORD wCharW;
 	WORD wCharH;
@@ -175,6 +176,7 @@ protected:
 	BOOL m_bItalic;
 	BYTE m_bFlushMode;
 	BYTE m_bHLC;
+	BYTE m_bPRA;
 	BOOL m_bRPC;
 	//文字繰り返しの残りカウント(ただし0x40以上のときは表示領域端まで)
 	WORD m_wRPC;
@@ -217,7 +219,7 @@ protected:
 	const BOOL IsCaptionPropertyChanged(void) const;
 	void CreateCaptionData(CAPTION_DATA* pItem) const;
 	void CreateCaptionCharData(CAPTION_CHAR_DATA* pItem) const;
-	void CheckModify(void);
+	void CheckModify(BOOL bForce=FALSE);
 
 	//制御符号
 	BOOL C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSize );

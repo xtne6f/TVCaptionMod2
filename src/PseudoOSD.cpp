@@ -88,10 +88,6 @@ CPseudoOSD::CPseudoOSD()
 	, m_hwndOwner(NULL)
 	, m_fWindowPrepared(false)
 {
-	DrawUtil::GetSystemFont(DrawUtil::FONT_DEFAULT,&m_LogFont);
-	m_LogFont.lfHeight=32;
-	m_LogFont.lfQuality=NONANTIALIASED_QUALITY;
-
 	::SetRect(&m_ImagePaintRect,0,0,0,0);
 	m_ParentPosition.x=0;
 	m_ParentPosition.y=0;
@@ -264,21 +260,18 @@ bool CPseudoOSD::IsVisible() const
 
 void CPseudoOSD::ClearText()
 {
-	if (!m_TextList.empty()) {
-		m_TextList.clear();
-		m_lfWidthList.clear();
-		m_Position.WidthList.clear();
+	if (!m_Position.StyleList.empty()) {
+		m_Position.StyleList.clear();
 		SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	}
 }
 
 
-bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,int lfWidth)
+bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf)
 {
 	SetImage(NULL,0);
-	m_TextList.push_back(pszText);
-	m_lfWidthList.push_back(lfWidth);
-	m_Position.WidthList.push_back(Width);
+	CWindowStyle st(pszText,Width,lf);
+	m_Position.StyleList.push_back(st);
 	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	/*
 	if (IsVisible()) {
@@ -410,13 +403,6 @@ void CPseudoOSD::SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBot
 }
 
 
-// *pLogFontのlfWidthメンバは使われない
-void CPseudoOSD::SetFont(const LOGFONT *pLogFont)
-{
-	m_LogFont=*pLogFont;
-}
-
-
 void CPseudoOSD::OnParentMove()
 {
 	if (m_hwnd!=NULL && m_fLayeredWindow) {
@@ -468,21 +454,21 @@ static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,COLORREF cr)
 
 void CPseudoOSD::DrawTextList(HDC hdc,int Mult) const
 {
-	LOGFONT lf=m_LogFont;
-	int intvY=m_Position.Height - (lf.lfHeight<0?-lf.lfHeight:lf.lfHeight);
-	lf.lfHeight*=Mult;
 	int x=0;
-	for (size_t i=0; i<m_TextList.size(); i++) {
+	std::vector<CWindowStyle>::const_iterator it = m_Position.StyleList.begin();
+	for (; it!=m_Position.StyleList.end(); ++it) {
 		DrawUtil::CFont Font;
-		lf.lfWidth=m_lfWidthList[i]*Mult;
-		if (!m_TextList[i].empty() && Font.Create(&lf)) {
+		LOGFONT lf=it->lf;
+		lf.lfWidth*=Mult;
+		lf.lfHeight*=Mult;
+		if (!it->Text.empty() && Font.Create(&lf)) {
 			HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
-			int intvX=m_Position.WidthList[i]/(int)m_TextList[i].length() - m_lfWidthList[i]*2;
-			TextOutMonospace(hdc,x+intvX/2,intvY/2,m_TextList[i].c_str(),
-			                 (int)m_TextList[i].length(),m_Position.WidthList[i]-intvX,Mult);
+			int intvX=it->Width/(int)it->Text.length() - it->lf.lfWidth*2;
+			int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
+			TextOutMonospace(hdc,x+intvX/2,intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,Mult);
 			::SelectObject(hdc,hfontOld);
 		}
-		x+=m_Position.WidthList[i];
+		x+=it->Width;
 	}
 }
 
@@ -498,7 +484,7 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,m_crTextColor);
 	if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,m_crTextColor);
 
-	if (!m_TextList.empty()) {
+	if (!m_Position.StyleList.empty()) {
 		COLORREF crOldTextColor;
 		int OldBkMode;
 
@@ -755,7 +741,7 @@ void CPseudoOSD::UpdateLayeredWindow()
 		fNeedToLay=true;
 	}
 
-	if (!m_TextList.empty()) {
+	if (!m_Position.StyleList.empty()) {
 		COLORREF crOldTextColor;
 		int OldBkMode;
 

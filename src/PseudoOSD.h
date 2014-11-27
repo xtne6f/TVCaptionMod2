@@ -7,19 +7,24 @@ class CPseudoOSD
 	HWND m_hwnd;
 	COLORREF m_crBackColor;
 	COLORREF m_crTextColor;
-	LOGFONT m_LogFont;
-	std::vector<std::basic_string<TCHAR>> m_TextList;
-	std::vector<int> m_lfWidthList;
 	HBITMAP m_hbm;
+
+	class CWindowStyle {
+	public:
+		std::basic_string<TCHAR> Text;
+		int Width;
+		LOGFONT lf;
+		CWindowStyle(LPCTSTR pszText,int Width_,const LOGFONT &lf_) : Text(pszText),Width(Width_),lf(lf_) {}
+	};
 	class CWindowPosition {
 	public:
 		int Left,Top,Height,ImageWidth;
-		std::vector<int> WidthList;
+		std::vector<CWindowStyle> StyleList;
 		CWindowPosition() : Left(0),Top(0),Height(0),ImageWidth(0) {}
 		int GetEntireWidth() const {
 			int w=ImageWidth;
-			for (size_t i=0; i<WidthList.size(); i++)
-				w+=WidthList[i];
+			std::vector<CWindowStyle>::const_iterator it = StyleList.begin();
+			for (; it!=StyleList.end(); ++it) w+=it->Width;
 			return w;
 		}
 	} m_Position;
@@ -66,7 +71,7 @@ public:
 	bool Hide();
 	bool IsVisible() const;
 	void ClearText();
-	bool AddText(LPCTSTR pszText,int Width,int lfWidth=0);
+	bool AddText(LPCTSTR pszText,int Width,const LOGFONT &lf);
 	bool SetPosition(int Left,int Top,int Height);
 	void GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
 	void SetTextColor(COLORREF crText,COLORREF crBack);
@@ -74,7 +79,6 @@ public:
 	bool SetOpacity(int Opacity,int BackOpacity=50);
 	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
-	void SetFont(const LOGFONT *pLogFont);
 	void OnParentMove();
 	void DrawTextList(HDC hdc,int Mult) const;
 private:
