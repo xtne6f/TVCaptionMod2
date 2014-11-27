@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-11-26
+// 最終更新: 2012-12-20
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -29,7 +29,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.4r2; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.5; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 9;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -54,8 +54,10 @@ static const LPCTSTR ROMSOUND_EXAMPLE = TEXT(";!SystemExclamation:01:02:03:04:05
 static const LPCTSTR ROMSOUND_ENABLED = TEXT("00:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:16:17:18");
 
 // 半角置換可能文字リスト
-static const LPCTSTR HALF_S_LIST = TEXT("　。、・（）「」");
-static const LPCTSTR HALF_R_LIST = TEXT(" ｡､･()｢｣");
+// 記号はJISX0213 1面1区のうちグリフが用意されている可能性が十分高そうなものだけ
+static const LPCTSTR HALF_F_LIST = TEXT("　、。，．・：；？！＾＿／｜（［］｛｝「＋－＝＜＞＄％＃＆＊＠０Ａａ");
+static const LPCTSTR HALF_T_LIST = TEXT("　、。，．・：；？！＾＿／｜）［］｛｝」＋－＝＜＞＄％＃＆＊＠９Ｚｚ");
+static const LPCTSTR HALF_R_LIST = TEXT(" ､｡,.･:;?!^_/|([]{}｢+-=<>$%#&*@0Aa");
 
 enum {
     TIMER_ID_DONE_MOVE,
@@ -245,6 +247,44 @@ HWND CTVCaption2::FindVideoContainer()
         ::EnumChildWindows(hwndFull ? hwndFull : m_pApp->GetAppWindow(), EnumWindowsProc, reinterpret_cast<LPARAM>(params));
     }
     return hwndFound;
+}
+
+
+// Video Containerウィンドウ上の映像の位置を得る
+bool CTVCaption2::GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect)
+{
+    RECT rc;
+    if (!hwndContainer || !::GetClientRect(hwndContainer, &rc)) {
+        return false;
+    }
+    if (pRect) {
+        *pRect = rc;
+    }
+    if (pVideoRect) {
+        // 正確に取得する術はなさそうなので中央に配置されていると仮定
+        int aspectX = 16;
+        int aspectY = 9;
+        TVTest::VideoInfo vi;
+        if (m_pApp->GetVideoInfo(&vi) && vi.Height == 480 && vi.YAspect * 4 == 3 * vi.XAspect) {
+            // 4:3SDを特別扱い(アスペクト比情報はいまいち正確でない可能性があるのであまり信用しない)(参考up0511mod)
+            aspectX = 4;
+            aspectY = 3;
+        }
+        if (rc.bottom * aspectX < aspectY * rc.right) {
+            // ウィンドウが動画よりもワイド
+            pVideoRect->left = (rc.right - rc.bottom * aspectX / aspectY) / 2;
+            pVideoRect->right = rc.right - pVideoRect->left;
+            pVideoRect->top = 0;
+            pVideoRect->bottom = rc.bottom;
+        }
+        else {
+            pVideoRect->top = (rc.bottom - rc.right * aspectY / aspectX) / 2;
+            pVideoRect->bottom = rc.bottom - pVideoRect->top;
+            pVideoRect->left = 0;
+            pVideoRect->right = rc.right;
+        }
+    }
+    return true;
 }
 
 
@@ -702,60 +742,38 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                 }
             }
 
-            HWND hwndContainer = FindVideoContainer();
-            RECT rc;
-            if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
-                TVTest::VideoInfo vi;
-                if (m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
-                    BITMAPINFOHEADER bihRes = bih;
-                    if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
-                        // 描画ウィンドウが動画よりもワイド
-                        bihRes.biWidth = rc.bottom * vi.XAspect / vi.YAspect;
-                        bihRes.biHeight = rc.bottom;
-                    }
-                    else {
-                        bihRes.biWidth = rc.right;
-                        bihRes.biHeight = rc.right * vi.YAspect / vi.XAspect;
-                    }
-                    // キャプチャ画像が表示中の動画サイズと異なるときは動画サイズのビットマップに変換する
-                    if (bih.biWidth < bihRes.biWidth-1 || bihRes.biWidth+1 < bih.biWidth ||
-                        bih.biHeight < bihRes.biHeight-1 || bihRes.biHeight+1 < bih.biHeight)
-                    {
-                        void *pBitsRes;
-                        HBITMAP hbmRes = ::CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&bihRes), DIB_RGB_COLORS, &pBitsRes, NULL, 0);
-                        if (hbmRes) {
-                            HDC hdc = ::CreateCompatibleDC(NULL);
-                            HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbmRes));
-                            DrawUtil::DrawBitmap(hdc, 0, 0, bihRes.biWidth, bihRes.biHeight, hbm);
-                            ::SelectObject(hdc, hbmOld);
-                            ::DeleteDC(hdc);
-                            ::DeleteObject(hbm);
-                            hbm = hbmRes;
-                            bih = bihRes;
-                            pBits = pBitsRes;
-                        }
+            RECT rc, rcVideo;
+            if (GetVideoContainerLayout(FindVideoContainer(), &rc, &rcVideo)) {
+                BITMAPINFOHEADER bihRes = bih;
+                bihRes.biWidth = rcVideo.right - rcVideo.left;
+                bihRes.biHeight = rcVideo.bottom - rcVideo.top;
+                // キャプチャ画像が表示中の動画サイズと異なるときは動画サイズのビットマップに変換する
+                if (bih.biWidth < bihRes.biWidth-3 || bihRes.biWidth+3 < bih.biWidth ||
+                    bih.biHeight < bihRes.biHeight-3 || bihRes.biHeight+3 < bih.biHeight)
+                {
+                    void *pBitsRes;
+                    HBITMAP hbmRes = ::CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&bihRes), DIB_RGB_COLORS, &pBitsRes, NULL, 0);
+                    if (hbmRes) {
+                        HDC hdc = ::CreateCompatibleDC(NULL);
+                        HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbmRes));
+                        DrawUtil::DrawBitmap(hdc, 0, 0, bihRes.biWidth, bihRes.biHeight, hbm);
+                        ::SelectObject(hdc, hbmOld);
+                        ::DeleteDC(hdc);
+                        ::DeleteObject(hbm);
+                        hbm = hbmRes;
+                        bih = bihRes;
+                        pBits = pBitsRes;
                     }
                 }
 
                 // ビットマップに表示中のOSDを合成
-                // コンテナ中央に動画が表示されていることを仮定
-                int offsetLeft, offsetTop;
-                if (bih.biWidth * rc.bottom < rc.right * bih.biHeight) {
-                    // 描画ウィンドウが動画よりもワイド
-                    offsetLeft = (rc.right - rc.bottom * bih.biWidth / bih.biHeight) / 2;
-                    offsetTop = 0;
-                }
-                else {
-                    offsetLeft = 0;
-                    offsetTop = (rc.bottom - rc.right * bih.biHeight / bih.biWidth) / 2;
-                }
                 HDC hdc = ::CreateCompatibleDC(NULL);
                 HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbm));
                 for (int i = 0; i < STREAM_MAX; ++i) {
                     for (int j = 0; j < m_osdShowCount[i]; ++j) {
                         int left, top;
                         m_pOsdUsingList[i][j]->GetPosition(&left, &top, NULL, NULL);
-                        m_pOsdUsingList[i][j]->Compose(hdc, left-offsetLeft, top-offsetTop);
+                        m_pOsdUsingList[i][j]->Compose(hdc, left - rcVideo.left, top - rcVideo.top);
                     }
                 }
                 ::SelectObject(hdc, hbmOld);
@@ -979,7 +997,8 @@ static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const 
 
 
 // 字幕本文を1行だけ処理する
-void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer)
+void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
+                                  HWND hwndContainer, const RECT &rcVideo)
 {
 #ifdef DDEBUG_OUT
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): "));
@@ -989,50 +1008,29 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     DEBUG_OUT(TEXT("\n"));
 #endif
 
-    RECT rc;
-    if (!hwndContainer || !::GetClientRect(hwndContainer, &rc)) {
-        return;
-    }
-
-    // 動画のアスペクト比を考慮して描画領域を調整
-    TVTest::VideoInfo vi;
-    if (m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
-        if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
-            // 描画ウィンドウが動画よりもワイド
-            int shrink = (rc.right - rc.bottom * vi.XAspect / vi.YAspect) / 2;
-            rc.left += shrink;
-            rc.right -= shrink;
-        }
-        else {
-            int shrink = (rc.bottom - rc.right * vi.YAspect / vi.XAspect) / 2;
-            rc.top += shrink;
-            rc.bottom -= shrink;
-        }
-    }
-
     // 字幕プレーンから描画ウィンドウへの変換係数を計算
-    double scaleX = 1.0;
-    double scaleY = 1.0;
-    int offsetX = rc.left;
-    int offsetY = rc.top;
+    double scaleX = (double)(rcVideo.right - rcVideo.left);
+    double scaleY = (double)(rcVideo.bottom - rcVideo.top);
+    int offsetX = rcVideo.left;
+    int offsetY = rcVideo.top;
     if (caption.wSWFMode==14) {
         // Cプロファイル
-        scaleX = (double)(rc.right-rc.left) / (320+20/2);
-        scaleY = (double)(rc.bottom-rc.top) / 180;
+        scaleX /= 320+20/2;
+        scaleY /= 180;
         offsetY += (int)((180-24*3)*scaleY);
     }
     else if (caption.wSWFMode==9 || caption.wSWFMode==10) {
-        scaleX = (double)(rc.right-rc.left) / 720;
-        scaleY = (double)(rc.bottom-rc.top) / 480;
+        scaleX /= 720;
+        scaleY /= 480;
     }
     else {
-        scaleX = (double)(rc.right-rc.left) / 960;
-        scaleY = (double)(rc.bottom-rc.top) / 540;
+        scaleX /= 960;
+        scaleY /= 540;
     }
     if (m_fCentering) {
         scaleX /= 1.5;
         scaleY /= 1.5;
-        offsetX += (rc.right-rc.left) / 6;
+        offsetX += (rcVideo.right - rcVideo.left) / 6;
     }
 
     bool fDoneAntiPadding = false;
@@ -1112,14 +1110,16 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     }
                 }
                 else if (fSearchHalf) {
-                    LPCTSTR p = ::StrChr(HALF_S_LIST, pszShow[j]);
-                    if (p) {
-                        // 半角置換可能文字
-                        szHalf[0] = HALF_R_LIST[p-HALF_S_LIST];
-                        szHalf[1] = 0;
-                        pszCarry = &pszShow[j+1];
-                        break;
+                    for (int k = 0; HALF_F_LIST[k]; ++k) {
+                        if (HALF_F_LIST[k] <= pszShow[j] && pszShow[j] <= HALF_T_LIST[k]) {
+                            // 半角置換可能文字
+                            szHalf[0] = HALF_R_LIST[k] + pszShow[j] - HALF_F_LIST[k];
+                            szHalf[1] = 0;
+                            pszCarry = &pszShow[j+1];
+                            break;
+                        }
                     }
+                    if (pszCarry) break;
                 }
             }
         }
@@ -1392,6 +1392,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
     }
 
     HWND hwndContainer = NULL;
+    RECT rcVideo = {0};
     int lastShowCount = m_osdShowCount[index];
     bool fTextureModified = false;
     for (;;) {
@@ -1422,13 +1423,18 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
             else {
                 if (!hwndContainer) {
                     hwndContainer = FindVideoContainer();
+                    if (!GetVideoContainerLayout(hwndContainer, NULL, &rcVideo)) {
+                        hwndContainer = NULL;
+                    }
                 }
                 const DRCS_PATTERN_DLL *pDrcsList = NULL;
                 DWORD drcsCount = 0;
                 if (!ppCaptionForTest) {
                     pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
                 }
-                ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, hwndContainer);
+                if (hwndContainer) {
+                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, hwndContainer, rcVideo);
+                }
             }
         }
     }
@@ -1439,17 +1445,10 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
             if (hbm) {
                 int left, top;
                 m_pOsdUsingList[index][lastShowCount]->GetPosition(&left, &top, NULL, NULL);
-                RECT rc;
-                TVTest::VideoInfo vi;
-                if (::GetClientRect(hwndContainer, &rc) && m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
+                if (hwndContainer) {
                     // 疑似OSD系から逆変換
-                    if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
-                        // 描画ウィンドウが動画よりもワイド
-                        left -= (rc.right - rc.bottom * vi.XAspect / vi.YAspect) / 2;
-                    }
-                    else {
-                        top -= (rc.bottom - rc.right * vi.YAspect / vi.XAspect) / 2;
-                    }
+                    left -= rcVideo.left;
+                    top -= rcVideo.top;
                 }
                 int intv = m_pOsdUsingList[index][lastShowCount]->GetFlashingInterval();
                 int group = intv > 0 ? TXGROUP_FLASHING : intv < 0 ? TXGROUP_IFLASHING : TXGROUP_NORMAL;
@@ -1478,9 +1477,8 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
 void CTVCaption2::OnSize(STREAM_INDEX index)
 {
     if (m_osdShowCount[index] > 0) {
-        HWND hwndContainer = FindVideoContainer();
         RECT rc;
-        if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
+        if (GetVideoContainerLayout(FindVideoContainer(), &rc, NULL)) {
             // とりあえずはみ出ないようにする
             for (int i = 0; i < m_osdShowCount[index]; ++i) {
                 int left, top, width, height;

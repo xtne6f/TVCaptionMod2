@@ -31,6 +31,7 @@ public:
 private:
     HWND GetFullscreenWindow();
     HWND FindVideoContainer();
+    bool GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect);
     int GetVideoPid();
     bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2]);
     bool EnablePlugin(bool fEnable);
@@ -48,7 +49,8 @@ private:
     void HideAllOsds();
     void DestroyOsds();
     CPseudoOSD &CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
-    void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer);
+    void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
+                         HWND hwndContainer, const RECT &rcVideo);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL **ppCaptionForTest = NULL);
     void OnSize(STREAM_INDEX index);

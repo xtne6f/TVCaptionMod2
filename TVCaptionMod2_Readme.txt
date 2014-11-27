@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.4r2 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.5 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -16,10 +16,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-※以下の外字テーブルのファイルに変更があるので、必要なら置きかえてください:
-・TVCaptionMod2_Gaiji_std.txt
-・TVCaptionMod2_Gaiji_typebank.txt
-(ver.1.1～ver.1.4からの移行)
+(ver.1.1～ver.1.4r2からの移行)
 TVCaptionMod2.tvtpを以前のものと置きかえてください。
 (ver.1.0以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
@@ -39,6 +36,13 @@ TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
 "TVCaptionMod2_Gaiji_std(typebank).txt"をプラグインフォルダに入れ、外字テーブル
 名を"std"や"typebank"にしておくと、ドットの粗い文字や記号の出現をかなり抑制でき
 ます(詳細は後述「設定ファイルについて」のGaijiTableNameの説明を参照)。
+
+■おまけ
+高水準漢字とARIB記号が収録されている丸ゴのフリーフォントは(多分)和田研ぐらいだと
+思いますが、割とクセのあるフォントなのでRounded M+と混ぜたものを作ってみました:
+Rounded M+ 1m for ARIB: http://www1.axfc.net/uploader/so/2722053
+外字テーブル名は和田研フォントと同じです。"j"などの下部を表示できるようにやや上
+付きなので文字位置補正のY方向を5ぐらいに設定すると丁度いいです。
 
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
@@ -252,6 +256,10 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.5 (2012-12-21)
+・一部局がMPEGヘッダのアスペクト比4:3で16:9の映像を送っている?ようなので考慮
+  ・この辺詳しい方居れば解説を…
+・半角置換対象の記号を拡大、英数字も置換するようにした
 ver.1.4r2 (2012-11-26)
 ・両端の余白を増やしたとき、字幕背景に隙間や重なりができる場合があったのを修正
 ver.1.4 (2012-11-25)
