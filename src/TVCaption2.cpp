@@ -1,9 +1,10 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2013-12-04
+// 最終更新: 2013-12-10
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
 #include <vector>
+#include <algorithm>
 #include "Util.h"
 #include "PseudoOSD.h"
 #include "Caption.h"
@@ -30,8 +31,8 @@
 #define WM_RESET_OSDS           (WM_APP + 4)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.7; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 9;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.8; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 10;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 // テスト字幕
@@ -97,6 +98,7 @@ CTVCaption2::CTVCaption2()
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
     , m_paddingWidth(0)
+    , m_fAvoidHalfAlpha(false)
     , m_fIgnoreSmall(false)
     , m_fCentering(false)
     , m_hwndPainting(NULL)
@@ -361,11 +363,12 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
                     len = ::StrCSpn(p, TEXT("\r\n"));
                     if (HexStringToByteArray(p, pair.md5, 16) && p[32] == TEXT('=')) {
                         ::lstrcpyn(pair.str, p+33, min(len-32, _countof(pair.str)));
-                        pDrcsStrMap->push_back(pair);
                         // 既ソートにしておく
-                        std::vector<DRCS_PAIR>::iterator it = pDrcsStrMap->end() - 1;
-                        for (; it != pDrcsStrMap->begin() && ::memcmp(it->md5, (it-1)->md5, 16) < 0; --it) {
-                            std::swap(*it, *(it-1));
+                        if (pDrcsStrMap->empty() || DRCS_PAIR::COMPARE()(pDrcsStrMap->back(), pair)) {
+                            pDrcsStrMap->push_back(pair);
+                        }
+                        else {
+                            pDrcsStrMap->insert(std::lower_bound(pDrcsStrMap->begin(), pDrcsStrMap->end(), pair, DRCS_PAIR::COMPARE()), pair);
                         }
                     }
                     p += len;
@@ -489,14 +492,17 @@ void CTVCaption2::LoadSettings()
     m_vertAntiAliasing  = GetBufferedProfileInt(buf, TEXT("VertAntiAliasing"), 22);
     m_rcAdjust.left     = GetBufferedProfileInt(buf, TEXT("FontXAdjust"), 0);
     m_rcAdjust.top      = GetBufferedProfileInt(buf, TEXT("FontYAdjust"), 0);
-    m_rcAdjust.right = m_rcAdjust.bottom = GetBufferedProfileInt(buf, TEXT("FontSizeAdjust"), 100);
+    m_rcAdjust.right    = GetBufferedProfileInt(buf, TEXT("FontSizeAdjust"), 100);
+    m_rcAdjust.bottom   = GetBufferedProfileInt(buf, TEXT("FontRatioAdjust"), 100);
     m_rcGaijiAdjust.left = GetBufferedProfileInt(buf, TEXT("GaijiFontXAdjust"), 0);
     m_rcGaijiAdjust.top = GetBufferedProfileInt(buf, TEXT("GaijiFontYAdjust"), 0);
-    m_rcGaijiAdjust.right = m_rcGaijiAdjust.bottom = GetBufferedProfileInt(buf, TEXT("GaijiFontSizeAdjust"), 100);
+    m_rcGaijiAdjust.right = GetBufferedProfileInt(buf, TEXT("GaijiFontSizeAdjust"), 100);
+    m_rcGaijiAdjust.bottom = GetBufferedProfileInt(buf, TEXT("GaijiFontRatioAdjust"), 100);
     m_strokeWidth       = GetBufferedProfileInt(buf, TEXT("StrokeWidth"), -5);
     m_strokeSmoothLevel = GetBufferedProfileInt(buf, TEXT("StrokeSmoothLevel"), 1);
     m_strokeByDilate    = GetBufferedProfileInt(buf, TEXT("StrokeByDilate"), 22);
     m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
+    m_fAvoidHalfAlpha   = GetBufferedProfileInt(buf, TEXT("AvoidHalfAlpha"), 0) != 0;
     m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
     m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
     GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList));
@@ -541,13 +547,16 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("FontXAdjust"), m_rcAdjust.left, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("FontYAdjust"), m_rcAdjust.top, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_rcAdjust.right, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontRatioAdjust"), m_rcAdjust.bottom, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("GaijiFontXAdjust"), m_rcGaijiAdjust.left, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("GaijiFontYAdjust"), m_rcGaijiAdjust.top, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("GaijiFontSizeAdjust"), m_rcGaijiAdjust.right, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("GaijiFontRatioAdjust"), m_rcGaijiAdjust.bottom, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("AvoidHalfAlpha"), m_fAvoidHalfAlpha, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
@@ -872,8 +881,9 @@ void CTVCaption2::HideOsds(STREAM_INDEX index)
 
     for (; m_osdShowCount[index] > 0; --m_osdShowCount[index]) {
         m_pOsdList[index].front()->Hide();
-        // 最後尾に移動
-        m_pOsdList[index].push_back(m_pOsdList[index].front());
+        // 表示待ちOSDの直後に移動
+        CPseudoOSD *p = m_pOsdList[index].front();
+        m_pOsdList[index].insert(m_pOsdList[index].begin() + m_osdShowCount[index] + m_osdPrepareCount[index], p);
         m_pOsdList[index].erase(m_pOsdList[index].begin());
     }
 }
@@ -916,10 +926,10 @@ static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth,
                        const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
 {
     LOGFONT logFont;
-    logFont.lfHeight         = -charHeight * rcFontAdjust.bottom / 100;
-    logFont.lfWidth          = charWidth * rcFontAdjust.right / 100 / 2;
-    logFont.lfEscapement     = charHeight * rcFontAdjust.top / 72;
-    logFont.lfOrientation    = charHeight * rcFontAdjust.left / 72;
+    logFont.lfHeight         = -charHeight;
+    logFont.lfWidth          = charWidth / 2;
+    logFont.lfEscapement     = 0;
+    logFont.lfOrientation    = 0;
     logFont.lfWeight         = style.bBold ? FW_EXTRABOLD : FW_DONTCARE;
     logFont.lfItalic         = style.bItalic ? TRUE : FALSE;
     logFont.lfUnderline      = style.bUnderLine ? TRUE : FALSE;
@@ -930,7 +940,8 @@ static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth,
     logFont.lfQuality        = DRAFT_QUALITY;
     logFont.lfPitchAndFamily = (faceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
     ::lstrcpy(logFont.lfFaceName, faceName);
-    pOsd->AddText(text, width, logFont);
+    RECT rc = {charHeight * rcFontAdjust.left / 72, charHeight * rcFontAdjust.top / 72, rcFontAdjust.right * rcFontAdjust.bottom / 100, rcFontAdjust.right};
+    pOsd->AddText(text, width, logFont, rc);
 }
 
 // 利用可能なOSDを1つだけ用意する
@@ -1079,21 +1090,15 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     }
                     if (pDrcs) {
                         // もしあれば置きかえ可能な文字列を取得
-                        BYTE md5[16];
-                        if (!m_drcsStrMap.empty() && CalcMD5FromDRCSPattern(md5, pDrcs)) {
+                        DRCS_PAIR e;
+                        e.str[0] = 0;
+                        if (!m_drcsStrMap.empty() && CalcMD5FromDRCSPattern(e.md5, pDrcs)) {
                             // 2分探索
-                            int lo = 0;
-                            int hi = (int)m_drcsStrMap.size() - 1;
-                            do {
-                                int k = (lo + hi) / 2;
-                                int cmp = ::memcmp(m_drcsStrMap[k].md5, md5, 16);
-                                if (!cmp) {
-                                    pszDrcsStr = m_drcsStrMap[k].str;
-                                    break;
-                                }
-                                else if (cmp > 0) hi = k - 1;
-                                else lo = k + 1;
-                            } while (lo <= hi);
+                            std::vector<DRCS_PAIR>::const_iterator it =
+                                std::lower_bound(m_drcsStrMap.begin(), m_drcsStrMap.end(), e, DRCS_PAIR::COMPARE());
+                            if (it != m_drcsStrMap.end() && !DRCS_PAIR::COMPARE()(e, *it)) {
+                                pszDrcsStr = it->str;
+                            }
                         }
                         pszCarry = &pszShow[j+1];
                         break;
@@ -1111,7 +1116,9 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 }
                 else if (fSearchHalf) {
                     for (int k = 0; HALF_F_LIST[k]; ++k) {
-                        if (HALF_F_LIST[k] <= pszShow[j] && pszShow[j] <= HALF_T_LIST[k]) {
+                        if ((!m_fAvoidHalfAlpha || HALF_R_LIST[k] != TEXT('A') && HALF_R_LIST[k] != TEXT('a')) &&
+                            HALF_F_LIST[k] <= pszShow[j] && pszShow[j] <= HALF_T_LIST[k])
+                        {
                             // 半角置換可能文字
                             szHalf[0] = HALF_R_LIST[k] + pszShow[j] - HALF_F_LIST[k];
                             szHalf[1] = 0;
@@ -1731,6 +1738,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, m_rcAdjust.left, TRUE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, m_rcAdjust.top, TRUE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, m_rcAdjust.right, FALSE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_RATIO, m_rcAdjust.bottom, FALSE);
 
     ::CheckDlgButton(hDlg, IDC_CHECK_STROKE_WIDTH, m_strokeWidth < 0 ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_STROKE_WIDTH, m_strokeWidth < 0 ? -m_strokeWidth : m_strokeWidth, FALSE);
@@ -1925,7 +1933,13 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             break;
         case IDC_EDIT_ADJUST_SIZE:
             if (HIWORD(wParam) == EN_CHANGE) {
-                m_rcAdjust.right = m_rcAdjust.bottom = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, NULL, FALSE);
+                m_rcAdjust.right = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, NULL, FALSE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_ADJUST_RATIO:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_rcAdjust.bottom = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_RATIO, NULL, FALSE);
                 fSave = fReDisp = true;
             }
             break;

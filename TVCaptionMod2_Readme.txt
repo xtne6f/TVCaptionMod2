@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.7
+﻿TVTest TVCaptionMod2 Plugin ver.1.8
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -60,7 +60,8 @@ http://www1.axfc.net/uploader/search.pl?md5=a62e691abf379ff1cf777519b65d3f5f
 
 ■設定ファイルについて
 設定ファイル"TVCaptionMod2.ini"は初回使用時プラグインフォルダに自動作成します。
-必要な場合はこれを直接編集してカスタマイズしてください。
+必要な場合はこれを直接編集してカスタマイズしてください。*付きのキーはプラグイン
+設定のダイアログから(完全には)設定できないものです。
 EnOsdCompositor
     映像への字幕合成機能を有効にする[=1]かどうか
     # レンダラはVMR9かEVRを利用し、さらに設定キーMethod[=3]としてください。
@@ -70,14 +71,14 @@ EnOsdCompositor
     # ・XPや非Aero環境での性能向上
     # APIフックを利用した比較的リスキーな機能です。Aeroな環境では従来の設定キー
     # Method[=2]を利用することを強くお勧めします。
-Version
+Version*
     設定ファイルのバージョン
     # デフォルト値を出力するために使います。特にユーザがいじる必要はありません。
 CaptureFolder
     キー割り当て「字幕付き画像の保存」の保存先フォルダを絶対パスで指定
     # たとえば[=C:\CapFolder]とすると、そのフォルダに画像を保存します。
     # 指定しないと「字幕付き画像の保存」は機能しません。
-CaptureFileName
+CaptureFileName*
     「字幕付き画像の保存」の画像ファイル名
     # たとえば[=Capture]とすると、"Capture20121231-235959.bmp"のようになります。
 SettingsIndex
@@ -147,7 +148,7 @@ Method
     字幕の表示方法
     # 通常ウィンドウ[=1]、レイヤードウィンドウ[=2]、もしくは映像と合成[=3](要
     # EnOsdCompositor[=1])のいずれかを指定してください。
-ShowFlags / ShowFlagsSuper
+ShowFlags* / ShowFlagsSuper*
     字幕/文字スーパーを表示するかどうかのフラグ
     # 基本的に、すべて表示する[=65535]または表示しない[=0]のどちらかを指定してく
     # ださい。
@@ -155,7 +156,7 @@ ShowFlags / ShowFlagsSuper
     # この設定キーはARIB STD-B24のDMF(表示モード)と関係しています。たとえばDMFの
     # 値が10(=受信時選択表示・記録再生時選択表示)の字幕/文字スーパーは、10ビット
     # 目を立てる(=設定値に1024を加える)ことで表示されるようになります。
-DelayTime / DelayTimeSuper
+DelayTime / DelayTimeSuper*
     字幕/文字スーパーを受け取ってから表示するまでの遅延時間をミリ秒で指定
     # [=-5000]から[=5000]まで。
     # 
@@ -168,7 +169,7 @@ IgnorePts
     PTSを無視する[=1]かどうか
     # 番組のPTSが信用できないときに使います。
     # とにかく即時に字幕を表示させたいときにも使えます(DelayTime[=0]にする)。
-TextColor / BackColor
+TextColor* / BackColor*
     字幕文/背景枠の色
     # [=-1]のときは自動(TSに含まれる情報をそのまま使う)です。RGB値を10進数で表現
     # してください: (例) (R,G,B)=(128,64,0)のとき、[=128064000]
@@ -183,12 +184,14 @@ VertAntiAliasing
     # 字幕表示の負荷が気になる場合は[=999]などの大きな値にしてください。
     # フォント高さがこの設定値以下のときは、StrokeByDilate以下ならばアンチエイリ
     # アス処理なし、それ以外は低品質(低負荷)なアンチエイリアスをかけます。
-FontXAdjust / FontYAdjust / GaijiFontXAdjust / GaijiFontYAdjust
+FontXAdjust / FontYAdjust / GaijiFontXAdjust* / GaijiFontYAdjust*
     フォント/外字フォントのX方向/Y方向の位置を補正
     # 文字が左寄りや上付きになるようなときに使います。
-FontSizeAdjust / GaijiFontSizeAdjust
+FontSizeAdjust / GaijiFontSizeAdjust*
     フォント/外字フォントの文字サイズを調整(単位はパーセント)
     # たとえば[=90]とすると、通常にたいして線分比で90%の大きさになります。
+FontRatioAdjust / GaijiFontRatioAdjust*
+    フォント/外字フォントの縦横比を調整(単位はパーセント)
 StrokeWidth
     字幕文の縁取りの幅
     # [=0]以上のときは画面の大きさにかかわらず指定した幅で縁取ります。
@@ -198,16 +201,21 @@ StrokeSmoothLevel
 StrokeByDilate
     膨張アルゴリズムで縁取るフォント高さ(画素数)の上限
     # 画面を小さくしたときに縁取りが汚くなる場合は値を上下させてみてください。
-PaddingWidth
+PaddingWidth*
     両端の余白をふやす幅
     # 文字の左右端が背景枠からはみ出るようなときに使います。
+AvoidHalfAlpha*
+    半角英字への置換をオフにする[=1]かどうか
+    # プロポーショナルな英字の描画が乱れるときに使います。
+    # この設定でプロポーショナルフォントが破綻なく使用できるとは限りません。等幅
+    # フォントの使用が原則です。
 IgnoreSmall
     振り仮名らしきものを除外する[=1]かどうか
     # 厳密には小型サイズ(SSZ)の字幕文を除外します。
 Centering
     字幕を画面中央に表示する[=1]かどうか
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
-RomSoundList
+RomSoundList*
     内蔵音0～18のリストを':'区切りで指定
     # フォーマット: [;]{内蔵音0}:{内蔵音1}: ... :{内蔵音18}
     # 何も指定しないか';'でコメントアウトすると内蔵音再生しません。
@@ -261,6 +269,11 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.8 (2013-12-10)
+・文字の縦横比を調整できるようにした
+・半角英字への置換をオフにできるようにした
+・文字サイズを調整したときに両端の余白幅が微妙に狂うのを修正
+・コード微整理
 ver.1.7 (2013-12-06)
 ・x86/x64ビルド環境をVC++2010Expressに統一
 ・Caption.dllを静的リンク

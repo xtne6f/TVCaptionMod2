@@ -238,11 +238,9 @@ void CPseudoOSD::ClearText()
 
 // テキストを追加する
 // lf.lfWidth<0のときは半角テキスト間隔で描画する
-// lf.lfEscapementはY方向位置補正量
-// lf.lfOrientationはX方向位置補正量
-bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf)
+bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,const RECT &AdjustRect)
 {
-	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf));
+	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf,AdjustRect));
 	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	return true;
 }
@@ -408,12 +406,9 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
 		if (lenWos > 0) {
 			LOGFONT lf=it->lf;
-			lf.lfWidth*=lf.lfWidth<0?-MultX:MultX;
-			lf.lfHeight*=MultY;
-			int adjustY=lf.lfEscapement;
-			int adjustX=lf.lfOrientation;
-			lf.lfEscapement=0;
-			lf.lfOrientation=0;
+			lf.lfWidth*=lf.lfWidth<0?-1:1;
+			lf.lfWidth=lf.lfWidth*it->AdjustRect.right/100*MultX;
+			lf.lfHeight=lf.lfHeight*it->AdjustRect.bottom/100*MultY;
 			//フォントが変化するときだけ作る
 			if (!CompareLogFont(&lf,&lfLast)) {
 				if (hfont) ::DeleteObject(hfont);
@@ -423,8 +418,8 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 			if (hfont) {
 				HGDIOBJ hfontOld=::SelectObject(hdc,hfont);
 				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
-				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
-				TextOutMonospace(hdc,x+intvX/2+adjustX,m_Position.Height-1-intvY/2+adjustY,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
+				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight)*it->AdjustRect.bottom/100;
+				TextOutMonospace(hdc,x+intvX/2+it->AdjustRect.left,m_Position.Height-1-intvY/2+it->AdjustRect.top,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
 				::SelectObject(hdc,hfontOld);
 			}
 		}

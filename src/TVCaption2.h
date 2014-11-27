@@ -19,6 +19,9 @@ class CTVCaption2 : public TVTest::CTVTestPlugin
     struct DRCS_PAIR {
         BYTE md5[16];
         TCHAR str[4];
+        struct COMPARE {
+            bool operator()(const DRCS_PAIR &l, const DRCS_PAIR &r) { return ::memcmp(l.md5, r.md5, 16) < 0; }
+        };
     };
 public:
     // CTVTestPlugin
@@ -90,6 +93,7 @@ private:
     int m_strokeSmoothLevel;
     int m_strokeByDilate;
     int m_paddingWidth;
+    bool m_fAvoidHalfAlpha;
     bool m_fIgnoreSmall;
     bool m_fCentering;
     TCHAR m_szRomSoundList[32 * 20];

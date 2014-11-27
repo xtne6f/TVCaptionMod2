@@ -12,8 +12,11 @@ class CPseudoOSD
 		HBITMAP hbm;
 		int Width;
 		LOGFONT lf;
-		RECT PaintRect;
-		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_) : Text(pszText),hbm(NULL),Width(Width_),lf(lf_) {}
+		union {
+			RECT AdjustRect;
+			RECT PaintRect;
+		};
+		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_,const RECT &AdjustRect_) : Text(pszText),hbm(NULL),Width(Width_),lf(lf_),AdjustRect(AdjustRect_) {}
 		STYLE_ELEM(HBITMAP hbm_,int Width_,const RECT &PaintRect_) : hbm(hbm_),Width(Width_),PaintRect(PaintRect_) {}
 	};
 	std::vector<STYLE_ELEM> m_StyleList;
@@ -66,7 +69,7 @@ public:
 	bool Hide();
 	bool IsVisible() const;
 	void ClearText();
-	bool AddText(LPCTSTR pszText,int Width,const LOGFONT &lf);
+	bool AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,const RECT &AdjustRect);
 	bool AddImage(HBITMAP hbm,int Width,const RECT &PaintRect);
 	bool SetPosition(int Left,int Top,int Height);
 	void GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
