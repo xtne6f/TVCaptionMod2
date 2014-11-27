@@ -29,6 +29,7 @@ class CPseudoOSD
 	int m_BackOpacity;
 	int m_StrokeWidth;
 	int m_StrokeSmoothLevel;
+	bool m_fStrokeByDilate;
 	bool m_fHLLeft,m_fHLTop,m_fHLRight,m_fHLBottom;
 	RECT m_ImagePaintRect;
 	bool m_fLayeredWindow;
@@ -62,10 +63,11 @@ public:
 	void SetTextColor(COLORREF crText,COLORREF crBack);
 	bool SetImage(HBITMAP hbm,int Width,const RECT *pPaintRect=NULL);
 	bool SetOpacity(int Opacity,int BackOpacity=50);
-	void SetStroke(int Width,int SmoothLevel);
+	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
 	void SetFont(const LOGFONT *pLogFont);
 	void OnParentMove();
+	void DrawTextList(HDC hdc,int Mult) const;
 private:
 	CPseudoOSD(const CPseudoOSD &other);
 	CPseudoOSD &operator=(const CPseudoOSD &other);

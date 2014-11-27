@@ -72,6 +72,7 @@ CPseudoOSD::CPseudoOSD()
 	, m_BackOpacity(50)
 	, m_StrokeWidth(0)
 	, m_StrokeSmoothLevel(0)
+	, m_fStrokeByDilate(false)
 	, m_fHLLeft(false)
 	, m_fHLTop(false)
 	, m_fHLRight(false)
@@ -363,10 +364,11 @@ bool CPseudoOSD::SetOpacity(int Opacity,int BackOpacity)
 }
 
 
-void CPseudoOSD::SetStroke(int Width,int SmoothLevel)
+void CPseudoOSD::SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate)
 {
 	m_StrokeWidth=Width;
 	m_StrokeSmoothLevel=SmoothLevel;
+	m_fStrokeByDilate=fStrokeByDilate;
 }
 
 
@@ -405,15 +407,15 @@ void CPseudoOSD::OnParentMove()
 }
 
 
-static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,int Width)
+static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,int Width,int Mult)
 {
 	INT dx[1024];
 	cbCount=min(cbCount,lengthof(dx));
 	for (UINT i=0; i<cbCount; i++) {
-		dx[i]=Width/(cbCount-i);
-		Width-=dx[i];
+		dx[i]=Width/(cbCount-i)*Mult;
+		Width-=Width/(cbCount-i);
 	}
-	return ::ExtTextOut(hdc,x,y,0,NULL,lpString,cbCount,dx);
+	return ::ExtTextOut(hdc,x*Mult,y*Mult,0,NULL,lpString,cbCount,dx);
 }
 
 static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,COLORREF cr)
@@ -435,6 +437,26 @@ static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,COLORREF cr)
 	}
 }
 
+void CPseudoOSD::DrawTextList(HDC hdc,int Mult) const
+{
+	LOGFONT lf=m_LogFont;
+	int intvY=m_Position.Height - (lf.lfHeight<0?-lf.lfHeight:lf.lfHeight);
+	lf.lfHeight*=Mult;
+	int x=0;
+	for (size_t i=0; i<m_TextList.size(); i++) {
+		DrawUtil::CFont Font;
+		lf.lfWidth=m_lfWidthList[i]*Mult;
+		if (!m_TextList[i].empty() && Font.Create(&lf)) {
+			HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
+			int intvX=m_Position.WidthList[i]/(int)m_TextList[i].length() - m_lfWidthList[i]*2;
+			TextOutMonospace(hdc,x+intvX/2,intvY/2,m_TextList[i].c_str(),
+			                 (int)m_TextList[i].length(),m_Position.WidthList[i]-intvX,Mult);
+			::SelectObject(hdc,hfontOld);
+		}
+		x+=m_Position.WidthList[i];
+	}
+}
+
 void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 {
 	RECT rc;
@@ -453,21 +475,7 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 
 		crOldTextColor=::SetTextColor(hdc,m_crTextColor);
 		OldBkMode=::SetBkMode(hdc,TRANSPARENT);
-		LOGFONT lf=m_LogFont;
-		int intvY=rc.bottom - (lf.lfHeight<0?-lf.lfHeight:lf.lfHeight);
-		int x=0;
-		for (size_t i=0; i<m_TextList.size(); i++) {
-			DrawUtil::CFont Font;
-			lf.lfWidth=m_lfWidthList[i];
-			if (!m_TextList[i].empty() && Font.Create(&lf)) {
-				HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
-				int intvX=m_Position.WidthList[i]/(int)m_TextList[i].length() - lf.lfWidth*2;
-				TextOutMonospace(hdc,x+intvX/2,intvY/2,m_TextList[i].c_str(),
-				                 (int)m_TextList[i].length(),m_Position.WidthList[i]-intvX);
-				::SelectObject(hdc,hfontOld);
-			}
-			x+=m_Position.WidthList[i];
-		}
+		DrawTextList(hdc,1);
 		::SetBkMode(hdc,OldBkMode);
 		::SetTextColor(hdc,crOldTextColor);
 	} else if (m_hbm!=NULL) {
@@ -483,23 +491,45 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	}
 }
 
-static void SetBitmapOpacity(void *pBits,int Width,const RECT &Rect,BYTE TextOpacity,BYTE BackOpacity,COLORREF crKey)
+// 縦横4倍の2値画像をもとにアルファチャネルを構成する
+static void SetBitmapOpacity(void *pBits,int Width,const RECT &Rect,const void *pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
+{
+	if (Rect.left%2!=0) return;
+	static const int BitSum[16]={ 0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4 };
+
+	int level=BackOpacity;
+	int range=TextOpacity-BackOpacity;
+	int stride=(Width*4+31)/32*4;
+	for (int y=Rect.top;y<Rect.bottom;y++) {
+		BYTE *p=static_cast<BYTE*>(pBits)+(y*Width+Rect.left)*4;
+		LPCBYTE q0=static_cast<LPCBYTE>(pBitsMono)+(y*4+0)*stride+Rect.left/2;
+		LPCBYTE q1=static_cast<LPCBYTE>(pBitsMono)+(y*4+1)*stride+Rect.left/2;
+		LPCBYTE q2=static_cast<LPCBYTE>(pBitsMono)+(y*4+2)*stride+Rect.left/2;
+		LPCBYTE q3=static_cast<LPCBYTE>(pBitsMono)+(y*4+3)*stride+Rect.left/2;
+		int x=Rect.left/2;
+		for (;x<Rect.right/2;x++) {
+			p[3]=(BYTE)(level+(BitSum[*q0>>4]+BitSum[*q1>>4]+BitSum[*q2>>4]+BitSum[*q3>>4])*range/16);
+			p[7]=(BYTE)(level+(BitSum[*q0&15]+BitSum[*q1&15]+BitSum[*q2&15]+BitSum[*q3&15])*range/16);
+			p+=8;
+			q0++;
+			q1++;
+			q2++;
+			q3++;
+		}
+		if (x*2<Rect.right) {
+			p[3]=(BYTE)(level+(BitSum[*q0>>4]+BitSum[*q1>>4]+BitSum[*q2>>4]+BitSum[*q3>>4])*range/16);
+		}
+	}
+}
+
+// crKeyな画素をアルファチャネルに写す
+static void LayBitmapToAlpha(void *pBits,int Width,const RECT &Rect,BYTE TextOpacity,COLORREF crKey)
 {
 	for (int y=Rect.top;y<Rect.bottom;y++) {
 		BYTE *p=static_cast<BYTE*>(pBits)+(y*Width+Rect.left)*4;
 		for (int x=Rect.left;x<Rect.right;x++) {
-			BYTE Opacity;
-
-			if (RGB(p[2],p[1],p[0])==crKey)
-				Opacity=BackOpacity;
-			else
-				Opacity=TextOpacity;
-			/*
-			p[0]=p[0]*Opacity/255;
-			p[1]=p[1]*Opacity/255;
-			p[2]=p[2]*Opacity/255;
-			*/
-			p[3]=Opacity;
+			if (RGB(p[2],p[1],p[0])!=crKey)
+				p[3]=TextOpacity;
 			p+=4;
 		}
 	}
@@ -624,17 +654,46 @@ void CPseudoOSD::UpdateLayeredWindow()
 	if (hbmSurface==NULL)
 		return;
 
+	// アルファチャネル描画用の縦横4倍の2値画像
+	struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD bmiColors[256];
+	} bmiMono={0};
+	bmiMono.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+	bmiMono.bmiHeader.biWidth=Width*4;
+	bmiMono.bmiHeader.biHeight=-Height*4;
+	bmiMono.bmiHeader.biPlanes=1;
+	bmiMono.bmiHeader.biBitCount=1;
+	bmiMono.bmiHeader.biCompression=BI_RGB;
+	bmiMono.bmiColors[1].rgbBlue=255;
+	bmiMono.bmiColors[1].rgbGreen=255;
+	bmiMono.bmiColors[1].rgbRed=255;
+	void *pBitsMono;
+	HBITMAP hbmMono=::CreateDIBSection(NULL,(BITMAPINFO*)&bmiMono,DIB_RGB_COLORS,&pBitsMono,NULL,0);
+	if (hbmMono==NULL) {
+		::DeleteObject(hbmSurface);
+		return;
+	}
+
 	HDC hdc=::GetDC(m_hwnd);
 	HDC hdcSrc=::CreateCompatibleDC(hdc);
 	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcSrc,hbmSurface));
+	HDC hdcMono=::CreateCompatibleDC(hdc);
+	HBITMAP hbmMonoOld=static_cast<HBITMAP>(::SelectObject(hdcMono,hbmMono));
 
 	::SetRect(&rc,0,0,Width,Height);
 	DrawUtil::Fill(hdcSrc,&rc,m_crBackColor);
+	::ZeroMemory(pBitsMono,(Width*4+31)/32*4 * Height*4);
 
-	if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,m_crTextColor);
-	if (m_fHLTop) DrawLine(hdcSrc,1,1,rc.right-1,1,m_crTextColor);
-	if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,m_crTextColor);
-	if (m_fHLBottom) DrawLine(hdcSrc,rc.right-1,rc.bottom-1,1,rc.bottom-1,m_crTextColor);
+	bool fNeedToLay=false;
+	bool fNeedToDilate=false;
+		if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
+		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,m_crTextColor);
+		if (m_fHLTop) DrawLine(hdcSrc,1,1,rc.right-1,1,m_crTextColor);
+		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,m_crTextColor);
+		if (m_fHLBottom) DrawLine(hdcSrc,rc.right-1,rc.bottom-1,1,rc.bottom-1,m_crTextColor);
+		fNeedToLay=true;
+	}
 
 	if (!m_TextList.empty()) {
 		COLORREF crOldTextColor;
@@ -642,23 +701,34 @@ void CPseudoOSD::UpdateLayeredWindow()
 
 		crOldTextColor=::SetTextColor(hdcSrc,m_crTextColor);
 		OldBkMode=::SetBkMode(hdcSrc,TRANSPARENT);
-		LOGFONT lf=m_LogFont;
-		int intvY=rc.bottom - (lf.lfHeight<0?-lf.lfHeight:lf.lfHeight);
-		int x=0;
-		for (size_t i=0; i<m_TextList.size(); i++) {
-			DrawUtil::CFont Font;
-			lf.lfWidth=m_lfWidthList[i];
-			if (!m_TextList[i].empty() && Font.Create(&lf)) {
-				HFONT hfontOld=DrawUtil::SelectObject(hdcSrc,Font);
-				int intvX=m_Position.WidthList[i]/(int)m_TextList[i].length() - lf.lfWidth*2;
-				TextOutMonospace(hdcSrc,x+intvX/2,intvY/2,m_TextList[i].c_str(),
-				                 (int)m_TextList[i].length(),m_Position.WidthList[i]-intvX);
-				::SelectObject(hdcSrc,hfontOld);
-			}
-			x+=m_Position.WidthList[i];
-		}
+		DrawTextList(hdcSrc,1);
 		::SetBkMode(hdcSrc,OldBkMode);
 		::SetTextColor(hdcSrc,crOldTextColor);
+
+		if (m_fStrokeByDilate) {
+			fNeedToLay=true;
+			fNeedToDilate=true;
+		}
+		else {
+			// 縁取りを描画
+			HPEN hpen=(HPEN)::CreatePen(PS_SOLID,m_StrokeWidth<=0?0:m_StrokeWidth*8/72+8,RGB(255,255,255));
+			if (hpen!=NULL) {
+				HPEN hpenOld=SelectPen(hdcMono,hpen);
+				HBRUSH hbr=(HBRUSH)::GetStockObject(WHITE_BRUSH);
+				if (hbr!=NULL) {
+					HBRUSH hbrOld=SelectBrush(hdcMono,hbr);
+					OldBkMode=::SetBkMode(hdcMono,TRANSPARENT);
+					::BeginPath(hdcMono);
+					DrawTextList(hdcMono,4);
+					::EndPath(hdcMono);
+					::StrokeAndFillPath(hdcMono);
+					::SetBkMode(hdcMono,OldBkMode);
+					SelectBrush(hdcMono,hbrOld);
+				}
+				SelectPen(hdcMono,hpenOld);
+				::DeletePen(hpen);
+			}
+		}
 	} else if (m_hbm!=NULL) {
 		BITMAP bm;
 		::GetObject(m_hbm,sizeof(BITMAP),&bm);
@@ -669,19 +739,30 @@ void CPseudoOSD::UpdateLayeredWindow()
 		} else {
 			DrawUtil::DrawBitmap(hdcSrc,0,0,Width,Height,m_hbm,&rcBitmap);
 		}
+		fNeedToLay=true;
+		fNeedToDilate=true;
 	}
 	// アルファチャネル操作
-	SetBitmapOpacity(pBits,Width,rc,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100),m_crBackColor);
-	for (int i=0; i<m_StrokeWidth; i++) {
-		DilateAlpha(pBits,Width,rc,(BYTE)(m_Opacity*255/100));
+	SetBitmapOpacity(pBits,Width,rc,pBitsMono,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100));
+	if (fNeedToLay) {
+		LayBitmapToAlpha(pBits,Width,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
 	}
-	SmoothAlpha(pBits,Width,rc,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-1);
+	if (fNeedToDilate) {
+		for (int i=0; i<(m_StrokeWidth+36)/72; i++) {
+			DilateAlpha(pBits,Width,rc,(BYTE)(m_Opacity*255/100));
+		}
+	}
+	SmoothAlpha(pBits,Width,rc,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
 	PremultiplyBitmap(pBits,Width,rc);
 
 	SIZE sz={Width,Height};
 	POINT ptSrc={0,0};
 	BLENDFUNCTION blend={AC_SRC_OVER,0,255,AC_SRC_ALPHA};
 	::UpdateLayeredWindow(m_hwnd,hdc,NULL,&sz,hdcSrc,&ptSrc,0,&blend,ULW_ALPHA);
+
+	::SelectObject(hdcMono,hbmMonoOld);
+	::DeleteDC(hdcMono);
+	::DeleteObject(hbmMono);
 
 	::SelectObject(hdcSrc,hbmOld);
 	::DeleteDC(hdcSrc);

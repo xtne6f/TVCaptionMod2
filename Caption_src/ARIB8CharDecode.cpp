@@ -195,6 +195,7 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_wClientY = 0;
 	m_wPosStartX = m_wPosX = m_wClientX;
 	m_wPosY = m_wClientY + GetLineDirSize() - 1;
+	m_bPosInit = FALSE;
 	m_wCharW = 36;
 	m_wCharH = 36;
 	m_dwWaitTime = 0;
@@ -300,6 +301,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 	case 0x0D:
 		//APR 改行
 		CheckModify();
+		m_bPosInit = TRUE;
 		m_wPosX = m_wClientX;
 		m_wPosY += GetLineDirSize();
 		if( m_wPosY >= m_wClientY + m_wClientH ){
@@ -345,6 +347,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		//APB 動作位置後退
 		{
 			CheckModify();
+			m_bPosInit = TRUE;
 			WORD wDirX = GetCharDirSize();
 			if( m_wPosX < m_wClientX + wDirX ){
 				WORD wDirY = GetLineDirSize();
@@ -370,6 +373,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 	case 0x0A:
 		//APD 動作行前進
 		CheckModify();
+		m_bPosInit = TRUE;
 		m_wPosY += GetLineDirSize();
 		if( m_wPosY >= m_wClientY + m_wClientH ){
 			m_wPosY = m_wClientY + GetLineDirSize() - 1;
@@ -381,6 +385,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		//APU 動作行後退
 		{
 			CheckModify();
+			m_bPosInit = TRUE;
 			WORD wDirY = GetLineDirSize();
 			if( m_wPosY < m_wClientY + wDirY*2-1 ){
 				m_wPosY = m_wClientY + (m_wClientH/wDirY+1) * wDirY - 1;
@@ -406,6 +411,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 			return FALSE;
 		}
 		CheckModify();
+		m_bPosInit = TRUE;
 		//動作位置基準点は左下なので1行前進しておく(参考:mark10als)
 		m_wPosY = m_wClientY + GetLineDirSize() * (pbSrc[1] - 0x40 + 1) - 1;
 		m_wPosX = m_wClientX + GetCharDirSize() * (pbSrc[2] - 0x40);
@@ -1114,6 +1120,10 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 						wParam = wParam*10+(pbSrc[i]&0x0F);
 					}
 				}
+				if( m_bPosInit == FALSE ){
+					m_wPosStartX = m_wPosX = m_wClientX;
+					m_wPosY = m_wClientY + GetLineDirSize() - 1;
+				}
 			}
 			break;
 		case 0x57:
@@ -1135,6 +1145,9 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 					}else{
 						wParam = wParam*10+(pbSrc[i]&0x0F);
 					}
+				}
+				if( m_bPosInit == FALSE ){
+					m_wPosY = m_wClientY + GetLineDirSize() - 1;
 				}
 			}
 			break;
@@ -1161,6 +1174,9 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 					}else{
 						wParam = wParam*10+(pbSrc[i]&0x0F);
 					}
+				}
+				if( m_bPosInit == FALSE ){
+					m_wPosY = m_wClientY + GetLineDirSize() - 1;
 				}
 			}
 			break;
@@ -1343,6 +1359,8 @@ const BOOL CARIB8CharDecode::IsCaptionPropertyChanged(void) const
 //動作位置前進する
 void CARIB8CharDecode::ActivePositionForward( int nCount )
 {
+	m_bPosInit = TRUE;
+
 	WORD wPosX = m_wPosX;
 	WORD wPosY = m_wPosY;
 	while( --nCount >= 0 ){

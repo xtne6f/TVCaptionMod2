@@ -29,7 +29,7 @@ private:
     void HideOsds();
     void DestroyOsds();
     CPseudoOSD &CreateOsd(HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
-    void ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount);
+    void ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     void GetNextCaption(CAPTION_DATA_DLL **ppCapList, DWORD *pCapCount, DRCS_PATTERN_DLL **ppDrcsList, DWORD *pDrcsCount);
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
@@ -51,7 +51,9 @@ private:
     int m_backOpacity;
     int m_strokeWidth;
     int m_strokeSmoothLevel;
+    int m_strokeByDilate;
     bool m_fCentering;
+    bool m_fFixRatio;
 
     // 字幕描画
     HWND m_hwndPainting;

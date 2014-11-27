@@ -159,7 +159,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="PseudoOSD.cpp" />
+    <ClCompile Include="PseudoOSD.cpp">
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">MaxSpeed</Optimization>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MaxSpeed</Optimization>
+    </ClCompile>
     <ClCompile Include="TVCaption2.cpp" />
     <ClCompile Include="Util.cpp" />
   </ItemGroup>

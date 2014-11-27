@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-05-14
+// 最終更新: 2012-05-17
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -26,8 +26,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示(based on TVCaption 2008-12-16 by odaru) (ver.0.1)");
-static const int INFO_VERSION = 1;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示(based on TVCaption 2008-12-16 by odaru) (ver.0.2)");
+static const int INFO_VERSION = 2;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 enum {
@@ -57,7 +57,9 @@ CTVCaption2::CTVCaption2()
     , m_backOpacity(0)
     , m_strokeWidth(0)
     , m_strokeSmoothLevel(0)
+    , m_strokeByDilate(0)
     , m_fCentering(false)
+    , m_fFixRatio(false)
     , m_hwndPainting(NULL)
     , m_osdShowCount(0)
     , m_fNeedtoShow(false)
@@ -350,9 +352,11 @@ void CTVCaption2::LoadSettings()
     int backColor       = GetPrivateProfileSignedInt(section, TEXT("BackColor"), -1, m_szIniPath);
     m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
     m_backOpacity       = GetPrivateProfileSignedInt(section, TEXT("BackOpacity"), -1, m_szIniPath);
-    m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -6, m_szIniPath);
+    m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -5, m_szIniPath);
     m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
+    m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
+    m_fFixRatio         = GetPrivateProfileSignedInt(section, TEXT("FixRatio"), 1, m_szIniPath) != 0;
 
     m_fEnTextColor = textColor >= 0;
     m_textColor = RGB(textColor/1000000%1000, textColor/1000%1000, textColor%1000);
@@ -386,7 +390,9 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FixRatio"), m_fFixRatio, m_szIniPath);
 }
 
 
@@ -537,7 +543,8 @@ CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomal
                       m_backOpacity>=0 ? min(m_backOpacity,100) : style.stBackColor.ucAlpha*100/255;
     osd.SetOpacity(textOpacity, backOpacity);
 
-    osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*nomalHeight/72,1) : m_strokeWidth, m_strokeSmoothLevel);
+    osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*nomalHeight,1) : m_strokeWidth*72,
+                  m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
     osd.Create(hwndContainer, m_paintingMethod==2 ? true : false);
     if (m_osdShowCount < OSD_LIST_MAX) ++m_osdShowCount;
@@ -580,7 +587,7 @@ static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const 
 
 
 // 字幕本文を1行だけ処理する
-void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount)
+void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer)
 {
 #ifdef DDEBUG_OUT
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): "));
@@ -590,29 +597,44 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
     DEBUG_OUT(TEXT("\n"));
 #endif
 
-    HWND hwndContainer = FindVideoContainer();
     RECT rc;
     if (!hwndContainer || !::GetClientRect(hwndContainer, &rc)) {
         return;
     }
 
+    // 動画のアスペクト比を考慮して描画領域を調整
+    TVTest::VideoInfo vi;
+    if (m_fFixRatio && m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
+        if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
+            // 描画ウィンドウが動画よりもワイド
+            int shrink = (rc.right - rc.bottom * vi.XAspect / vi.YAspect) / 2;
+            rc.left += shrink;
+            rc.right -= shrink;
+        }
+        else {
+            int shrink = (rc.bottom - rc.right * vi.YAspect / vi.XAspect) / 2;
+            rc.top += shrink;
+            rc.bottom -= shrink;
+        }
+    }
+
     // 字幕プレーンから描画ウィンドウへの変換係数を計算
     double scaleX = 1.0;
     double scaleY = 1.0;
-    int offsetX = 0;
-    int offsetY = 0;
+    int offsetX = rc.left;
+    int offsetY = rc.top;
     if (caption.wSWFMode==9 || caption.wSWFMode==10) {
-        scaleX = (double)rc.right / 720;
-        scaleY = (double)rc.bottom / 480;
+        scaleX = (double)(rc.right-rc.left) / 720;
+        scaleY = (double)(rc.bottom-rc.top) / 480;
     }
     else {
-        scaleX = (double)rc.right / 960;
-        scaleY = (double)rc.bottom / 540;
+        scaleX = (double)(rc.right-rc.left) / 960;
+        scaleY = (double)(rc.bottom-rc.top) / 540;
     }
     if (m_fCentering) {
         scaleX /= 1.5;
         scaleY /= 1.5;
-        offsetX = rc.right / 6;
+        offsetX += (rc.right-rc.left) / 6;
     }
 
     int posX = caption.wPosX;
@@ -762,6 +784,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
 {
     // WM_CREATEのとき不定
     CTVCaption2 *pThis = reinterpret_cast<CTVCaption2*>(::GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    HWND hwndContainer = NULL;
 
     switch (uMsg) {
     case WM_CREATE:
@@ -826,12 +849,10 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
                     pThis->HideOsds();
                 }
                 else {
-                    pThis->ShowCaptionData(*pThis->m_pCapList, pThis->m_pDrcsList, pThis->m_drcsCount);
-#ifdef DDEBUG_OUT
-                    TCHAR debug[256];
-                    ::wsprintf(debug, TEXT(__FUNCTION__) TEXT("(): OsdShowCount=%d\n"), pThis->m_osdShowCount);
-                    DEBUG_OUT(debug);
-#endif
+                    if (!hwndContainer) {
+                        hwndContainer = pThis->FindVideoContainer();
+                    }
+                    pThis->ShowCaptionData(*pThis->m_pCapList, pThis->m_pDrcsList, pThis->m_drcsCount, hwndContainer);
                 }
             }
             --pThis->m_capCount;
@@ -845,7 +866,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         return 0;
     case WM_DONE_SIZE:
         if (pThis->m_osdShowCount > 0) {
-            HWND hwndContainer = pThis->FindVideoContainer();
+            hwndContainer = pThis->FindVideoContainer();
             RECT rc;
             if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
                 // とりあえずはみ出ないようにする

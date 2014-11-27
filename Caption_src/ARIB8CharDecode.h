@@ -195,6 +195,8 @@ protected:
 	WORD m_wPosY;
 	//現在の文字列1行の動作位置(字幕プレーン左上角からの座標)
 	WORD m_wPosStartX;
+	//初期動作位置の設定が完了したかどうか
+	BOOL m_bPosInit;
 	//文字サイズ
 	WORD m_wCharW;
 	WORD m_wCharH;
