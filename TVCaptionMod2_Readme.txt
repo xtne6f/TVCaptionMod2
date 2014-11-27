@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.9r2 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.9r3 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,9 +13,9 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.0.9からの移行)
-Caption.dllを以前のものと置きかえてください。
-(ver.0.8以前からの移行)
+(ver.0.9r2からの移行)
+TVCaptionMod2.tvtpを以前のものと置きかえてください。
+(ver.0.9以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
 
 ■使い方
@@ -190,7 +190,8 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 また、TVTest ver.0.7.23から"PseudoOSD.cpp"、"PseudoOSD.h"、ほかソースコードを改
 変利用しています(ソースコメントに流用元を記述しています)。
 また、Caption.dll改造版より多くを参考にしているので、このプラグインもCaption.dll
-オリジナル版の以下ライセンスに従います。
+オリジナル版の以下ライセンスに従います(TVCaptionMod2.tvtpのソースの取り扱いにつ
+いても同様です)。改変や流用にあたって当方に連絡は不要です。
 
 ------引用開始------
 ●EpgDataCap_Bon、TSEpgView_Sample、NetworkRemocon、Caption、TSEpgViewServerの
@@ -208,6 +209,10 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.9r3 (2012-07-04)
+・通常フォントと外字フォントの(上端ではなく)下端を揃えるようにしてみた
+  ・この修正でメイリオなどのレディングの大きいフォントは下付き→上付きになるが、
+    こういうフォントは横方向の合わせも必要だったりするのでとりあえず対応を保留
 ver.0.9r2 (2012-07-01)
 ・Caption.dll 0111改造版の公開停止要望があったとの書き込みをうけ、関連するコード
   (10行ぐらい)を変更

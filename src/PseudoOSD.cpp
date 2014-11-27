@@ -471,6 +471,7 @@ static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,int cw,COLORREF cr)
 
 void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 {
+	UINT oldTa=::SetTextAlign(hdc,TA_LEFT|TA_BOTTOM|TA_NOUPDATECP);
 	int x=0;
 	std::vector<CWindowStyle>::const_iterator it = m_Position.StyleList.begin();
 	for (; it!=m_Position.StyleList.end(); ++it) {
@@ -482,11 +483,12 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 			HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
 			int intvX=it->Width/(int)it->Text.length() - it->lf.lfWidth*2;
 			int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
-			TextOutMonospace(hdc,x+intvX/2,intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
+			TextOutMonospace(hdc,x+intvX/2,m_Position.Height-1-intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
 			::SelectObject(hdc,hfontOld);
 		}
 		x+=it->Width;
 	}
+	::SetTextAlign(hdc,oldTa);
 }
 
 void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const

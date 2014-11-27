@@ -27,7 +27,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.9; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.9r3; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 6;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -381,7 +381,7 @@ void CTVCaption2::LoadSettings()
     m_fontSizeAdjust    = GetPrivateProfileSignedInt(section, TEXT("FontSizeAdjust"), 100, m_szIniPath);
     m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -5, m_szIniPath);
     m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
-    m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
+    m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 10, m_szIniPath);
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
     m_fFixRatio         = GetPrivateProfileSignedInt(section, TEXT("FixRatio"), 1, m_szIniPath) != 0;
     ::GetPrivateProfileString(section, TEXT("RomSoundList"),
