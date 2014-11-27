@@ -1,6 +1,7 @@
 ﻿#include <Windows.h>
 #include <Shlwapi.h>
 #include <CommCtrl.h>
+#include <ShlObj.h>
 #include "Util.h"
 
 // GetPrivateProfileInt()の負値対応版
@@ -69,6 +70,54 @@ int StrlenWoLoSurrogate(LPCTSTR str)
         if ((*str & 0xFC00) != 0xDC00) ++len;
     }
     return len;
+}
+
+bool HexStringToByteArray(LPCTSTR str, BYTE *pDest, int destLen)
+{
+    int x, xx = 0;
+    for (destLen *= 2; destLen > 0; --destLen, ++str) {
+        if (TEXT('0') <= *str && *str <= TEXT('9'))
+            x = *str - TEXT('0');
+        else if (TEXT('A') <= *str && *str <= TEXT('F'))
+            x = *str - TEXT('A') + 10;
+        else if (TEXT('a') <= *str && *str <= TEXT('f'))
+            x = *str - TEXT('a') + 10;
+        else
+            break;
+        if (destLen & 1)
+            *pDest++ = static_cast<BYTE>(xx | x);
+        else
+            xx = x << 4;
+    }
+    return destLen == 0;
+}
+
+void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList)
+{
+    for (; *pList; ++pList) {
+        ::SendDlgItemMessage(hDlg, id, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(*pList));
+    }
+}
+
+static int CALLBACK EnumAddFaceNameProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *, int FontType, LPARAM lParam)
+{
+    if (FontType == TRUETYPE_FONTTYPE && lpelfe->elfLogFont.lfFaceName[0] != TEXT('@')) {
+        ::SendMessage(reinterpret_cast<HWND>(lParam), CB_ADDSTRING, 0,
+                      reinterpret_cast<LPARAM>(lpelfe->elfLogFont.lfFaceName));
+    }
+    return TRUE;
+}
+
+void AddFaceNameToComboBoxList(HWND hDlg, int id)
+{
+    HDC hdc = ::GetDC(hDlg);
+    LOGFONT lf;
+    lf.lfCharSet = SHIFTJIS_CHARSET;
+    lf.lfPitchAndFamily = 0;
+    lf.lfFaceName[0] = 0;
+    ::EnumFontFamiliesEx(hdc, &lf, reinterpret_cast<FONTENUMPROC>(EnumAddFaceNameProc),
+                         reinterpret_cast<LPARAM>(::GetDlgItem(hDlg, id)), 0);
+    ::ReleaseDC(hDlg, hdc);
 }
 
 static void extract_psi(PSI *psi, const unsigned char *payload, int payload_size, int unit_start, int counter)
@@ -335,6 +384,43 @@ bool CompareLogFont(const LOGFONT *pFont1,const LOGFONT *pFont2)
 {
 	return memcmp(pFont1,pFont2,28/*offsetof(LOGFONT,lfFaceName)*/)==0
 		&& lstrcmp(pFont1->lfFaceName,pFont2->lfFaceName)==0;
+}
+
+int CALLBACK BrowseFolderCallback(HWND hwnd,UINT uMsg,LPARAM lpData,LPARAM lParam)
+{
+	switch (uMsg) {
+	case BFFM_INITIALIZED:
+		if (((LPTSTR)lParam)[0]!=TEXT('\0')) {
+			TCHAR szDirectory[MAX_PATH];
+
+			lstrcpy(szDirectory,(LPTSTR)lParam);
+			PathRemoveBackslash(szDirectory);
+			SendMessage(hwnd,BFFM_SETSELECTION,TRUE,(LPARAM)szDirectory);
+		}
+		break;
+	}
+	return 0;
+}
+
+bool BrowseFolderDialog(HWND hwndOwner,LPTSTR pszDirectory,LPCTSTR pszTitle)
+{
+	BROWSEINFO bi;
+	PIDLIST_ABSOLUTE pidl;
+	BOOL fRet;
+
+	bi.hwndOwner=hwndOwner;
+	bi.pidlRoot=NULL;
+	bi.pszDisplayName=pszDirectory;
+	bi.lpszTitle=pszTitle;
+	bi.ulFlags=BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+	bi.lpfn=BrowseFolderCallback;
+	bi.lParam=(LPARAM)pszDirectory;
+	pidl=SHBrowseForFolder(&bi);
+	if (pidl==NULL)
+		return false;
+	fRet=SHGetPathFromIDList(pidl,pszDirectory);
+	CoTaskMemFree(pidl);
+	return fRet==TRUE;
 }
 #endif
 

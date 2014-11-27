@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-08-26
+// 最終更新: 2012-11-17
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -12,6 +12,7 @@
 #define TVTEST_PLUGIN_CLASS_IMPLEMENT
 #define TVTEST_PLUGIN_VERSION TVTEST_PLUGIN_VERSION_(0,0,11)
 #include "TVTestPlugin.h"
+#include "resource.h"
 #include "TVCaption2.h"
 
 // 外字テーブル
@@ -28,11 +29,31 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.2; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 7;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.3; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 8;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
-//半角置換可能文字リスト
+// テスト字幕
+static const CAPTION_CHAR_DATA_DLL TESTCAP_CHAR_LIST[] = {
+    {NULL,CP_STR_NORMAL,{255,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0}, // 外字例示用
+    {L"まさ",CP_STR_SMALL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {L"決めた",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {L"　",CP_STR_MEDIUM,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {L"みんなで正の湯に行こう",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {L"お～",CP_STR_NORMAL,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {L"ッ",CP_STR_MEDIUM,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+};
+static const CAPTION_DATA_DLL TESTCAP_LIST[] = {
+    {FALSE,7,170,30,620,480,170,359,0,1,NULL,0}, // 外字例示用
+    {FALSE,7,170,30,620,480,510,389,0,1,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[1]),0},
+    {FALSE,7,170,30,620,480,210,449,0,3,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[2]),0},
+    {FALSE,7,170,30,620,480,310,509,0,2,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[5]),0},
+};
+
+static const LPCTSTR ROMSOUND_EXAMPLE = TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::");
+static const LPCTSTR ROMSOUND_ENABLED = TEXT("00:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:16:17:18");
+
+// 半角置換可能文字リスト
 static const LPCTSTR HALF_S_LIST = TEXT("　。、・（）「」");
 static const LPCTSTR HALF_R_LIST = TEXT(" ｡､･()｢｣");
 
@@ -58,6 +79,7 @@ static const TVTest::CommandInfo COMMAND_LIST[] = {
 
 CTVCaption2::CTVCaption2()
     : m_fTVH264(false)
+    , m_fSettingsDlgInitializing(false)
     , m_settingsIndex(0)
     , m_paintingMethod(0)
     , m_fIgnorePts(false)
@@ -68,10 +90,14 @@ CTVCaption2::CTVCaption2()
     , m_textOpacity(0)
     , m_backOpacity(0)
     , m_vertAntiAliasing(0)
+    , m_fontXAdjust(0)
+    , m_fontYAdjust(0)
     , m_fontSizeAdjust(100)
     , m_strokeWidth(0)
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
+    , m_paddingWidth(0)
+    , m_fIgnoreSmall(false)
     , m_fCentering(false)
     , m_hwndPainting(NULL)
     , m_osdUsedCount(0)
@@ -113,7 +139,7 @@ bool CTVCaption2::GetPluginInfo(TVTest::PluginInfo *pInfo)
 {
     // プラグインの情報を返す
     pInfo->Type           = TVTest::PLUGIN_TYPE_NORMAL;
-    pInfo->Flags          = 0;
+    pInfo->Flags          = TVTest::PLUGIN_FLAG_HASSETTINGS;
     pInfo->pszPluginName  = INFO_PLUGIN_NAME;
     pInfo->pszCopyright   = L"Public Domain";
     pInfo->pszDescription = INFO_DESCRIPTION;
@@ -240,7 +266,6 @@ int CTVCaption2::GetVideoPid()
 
 bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2])
 {
-    if (!tableName[0]) return false;
     pDrcsStrMap->clear();
 
     bool fRet = false;
@@ -275,16 +300,9 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
                 SKIP_CRLF(p);
                 while (*p && *p != TEXT('[')) {
                     DRCS_PAIR pair;
-                    int i = 0;
-                    for (; i < 16 && *p && *(p+1); ++i, p+=2) {
-                        TCHAR hex[] = { TEXT('0'), TEXT('x'), *p, *(p+1), 0 };
-                        int ret;
-                        if (!::StrToIntEx(hex, STIF_SUPPORT_HEX, &ret)) break;
-                        pair.md5[i] = static_cast<BYTE>(ret);
-                    }
-                    int len = ::StrCSpn(p, TEXT("\r\n"));
-                    if (i == 16 && *p == TEXT('=')) {
-                        ::lstrcpyn(pair.str, p+1, min(len, _countof(pair.str)));
+                    len = ::StrCSpn(p, TEXT("\r\n"));
+                    if (HexStringToByteArray(p, pair.md5, 16) && p[32] == TEXT('=')) {
+                        ::lstrcpyn(pair.str, p+33, min(len-32, _countof(pair.str)));
                         pDrcsStrMap->push_back(pair);
                         // 既ソートにしておく
                         std::vector<DRCS_PAIR>::iterator it = pDrcsStrMap->end() - 1;
@@ -319,6 +337,10 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
             fRet = m_captionDll.SetGaiji(1, gaijiTable, &tableSize);
         }
     }
+    if (!fRet) {
+        pDrcsStrMap->clear();
+        if (pCustomTable) ::memset(pCustomTable, 0, sizeof(WCHAR) * GAIJI_TABLE_SIZE * 2);
+    }
     return fRet;
 }
 
@@ -336,8 +358,6 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
         if (m_captionDll.Initialize(m_szCaptionDllPath)) {
             if (!ConfigureGaijiTable(m_szGaijiTableName, &m_drcsStrMap, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
                 m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
-                m_drcsStrMap.clear();
-                ::memset(m_customGaijiTable, 0, sizeof(m_customGaijiTable));
             }
             m_caption1Manager.SetCaptionDll(&m_captionDll, 0, m_fTVH264);
             m_caption2Manager.SetCaptionDll(&m_captionDll, 1, m_fTVH264);
@@ -355,6 +375,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
             }
             m_captionDll.UnInitialize();
         }
+        ::MessageBox(m_pApp->GetAppWindow(), TEXT("Caption.dllの初期化に失敗しました。"), INFO_PLUGIN_NAME, MB_OK | MB_ICONERROR);
         return false;
     }
     else {
@@ -408,14 +429,16 @@ void CTVCaption2::LoadSettings()
     m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
     m_backOpacity       = GetPrivateProfileSignedInt(section, TEXT("BackOpacity"), -1, m_szIniPath);
     m_vertAntiAliasing  = GetPrivateProfileSignedInt(section, TEXT("VertAntiAliasing"), 22, m_szIniPath);
+    m_fontXAdjust       = GetPrivateProfileSignedInt(section, TEXT("FontXAdjust"), 0, m_szIniPath);
+    m_fontYAdjust       = GetPrivateProfileSignedInt(section, TEXT("FontYAdjust"), 0, m_szIniPath);
     m_fontSizeAdjust    = GetPrivateProfileSignedInt(section, TEXT("FontSizeAdjust"), 100, m_szIniPath);
     m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -5, m_szIniPath);
     m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
     m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
+    m_paddingWidth      = GetPrivateProfileSignedInt(section, TEXT("PaddingWidth"), 0, m_szIniPath);
+    m_fIgnoreSmall      = GetPrivateProfileSignedInt(section, TEXT("IgnoreSmall"), 0, m_szIniPath) != 0;
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
-    ::GetPrivateProfileString(section, TEXT("RomSoundList"),
-                              TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::"),
-                              m_szRomSoundList, _countof(m_szRomSoundList), m_szIniPath);
+    ::GetPrivateProfileString(section, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList), m_szIniPath);
 
     m_fEnTextColor = textColor >= 0;
     m_textColor = RGB(textColor/1000000%1000, textColor/1000%1000, textColor%1000);
@@ -455,27 +478,72 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("TextOpacity"), m_textOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_vertAntiAliasing, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontXAdjust"), m_fontXAdjust, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontYAdjust"), m_fontYAdjust, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_fontSizeAdjust, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
 }
 
 
 // 設定の切り替え
-void CTVCaption2::SwitchSettings()
+// specIndex<0のとき次の設定に切り替え
+void CTVCaption2::SwitchSettings(int specIndex)
 {
+    m_settingsIndex = specIndex < 0 ? m_settingsIndex + 1 : specIndex;
     TCHAR section[32];
-    ::lstrcpy(section, TEXT("Settings"));
-    ::wsprintf(section + ::lstrlen(section), TEXT("%d"), ++m_settingsIndex);
-
+    ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
     if (GetPrivateProfileSignedInt(section, TEXT("Method"), -1, m_szIniPath) == -1) {
         m_settingsIndex = 0;
     }
     WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_szIniPath);
     LoadSettings();
+}
+
+
+void CTVCaption2::AddSettings()
+{
+    WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), GetSettingsCount(), m_szIniPath);
+    LoadSettings();
+    SaveSettings();
+}
+
+
+void CTVCaption2::DeleteSettings()
+{
+    int settingsCount = GetSettingsCount();
+    if (settingsCount >= 2) {
+        int lastIndex = m_settingsIndex;
+        // 1つずつ手前にシフト
+        for (int i = m_settingsIndex; i < settingsCount - 1; ++i) {
+            WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), i + 1, m_szIniPath);
+            LoadSettings();
+            m_settingsIndex = i;
+            SaveSettings();
+        }
+        // 末尾セクションを削除
+        TCHAR section[32];
+        ::wsprintf(section, TEXT("Settings%d"), settingsCount - 1);
+        ::WritePrivateProfileString(section, NULL, NULL, m_szIniPath);
+        SwitchSettings(min(lastIndex, settingsCount - 2));
+    }
+}
+
+
+int CTVCaption2::GetSettingsCount() const
+{
+    for (int i = 1; ; ++i) {
+        TCHAR section[32];
+        ::wsprintf(section, TEXT("Settings%d"), i);
+        if (GetPrivateProfileSignedInt(section, TEXT("Method"), -1, m_szIniPath) == -1) {
+            return i;
+        }
+    }
 }
 
 
@@ -521,6 +589,9 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             return TRUE;
         }
         return 0;
+    case TVTest::EVENT_PLUGINSETTINGS:
+        // プラグインの設定を行う
+        return pThis->PluginSettings(reinterpret_cast<HWND>(lParam1));
     case TVTest::EVENT_FULLSCREENCHANGE:
         // 全画面表示状態が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
@@ -551,9 +622,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                 pThis->m_fNeedtoShow = true;
             }
             else {
-                pThis->HideOsds(STREAM_CAPTION);
-                pThis->HideOsds(STREAM_SUPERIMPOSE);
-                pThis->DeleteTextures();
+                pThis->HideAllOsds();
                 pThis->m_fNeedtoShow = false;
             }
         }
@@ -573,16 +642,12 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                 }
                 break;
             case ID_COMMAND_SWITCH_SETTING:
-                pThis->HideOsds(STREAM_CAPTION);
-                pThis->HideOsds(STREAM_SUPERIMPOSE);
-                pThis->DeleteTextures();
+                pThis->HideAllOsds();
                 pThis->SwitchSettings();
                 if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName, &pThis->m_drcsStrMap,
                                                 pThis->m_szGaijiFaceName[0]?pThis->m_customGaijiTable:NULL))
                 {
                     pThis->m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
-                    pThis->m_drcsStrMap.clear();
-                    ::memset(pThis->m_customGaijiTable, 0, sizeof(pThis->m_customGaijiTable));
                 }
                 PlayRomSound(pThis->m_szRomSoundList, 16);
                 break;
@@ -786,6 +851,13 @@ void CTVCaption2::DeleteTextures()
     }
 }
 
+void CTVCaption2::HideAllOsds()
+{
+    HideOsds(STREAM_CAPTION);
+    HideOsds(STREAM_SUPERIMPOSE);
+    DeleteTextures();
+}
+
 void CTVCaption2::DestroyOsds()
 {
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
@@ -803,13 +875,13 @@ void CTVCaption2::DestroyOsds()
 }
 
 static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
-                       int fontSizeAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
+                       const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
 {
     LOGFONT logFont;
-    logFont.lfHeight         = -charHeight * fontSizeAdjust / 100;
-    logFont.lfWidth          = charWidth * fontSizeAdjust / 100 / 2;
-    logFont.lfEscapement     = 0;
-    logFont.lfOrientation    = 0;
+    logFont.lfHeight         = -charHeight * rcFontAdjust.bottom / 100;
+    logFont.lfWidth          = charWidth * rcFontAdjust.right / 100 / 2;
+    logFont.lfEscapement     = charHeight * rcFontAdjust.top / 72;
+    logFont.lfOrientation    = charHeight * rcFontAdjust.left / 72;
     logFont.lfWeight         = style.bBold ? FW_EXTRABOLD : FW_DONTCARE;
     logFont.lfItalic         = style.bItalic ? TRUE : FALSE;
     logFont.lfUnderline      = style.bUnderLine ? TRUE : FALSE;
@@ -954,6 +1026,8 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         offsetX += (rc.right-rc.left) / 6;
     }
 
+    RECT rcFontAdjust = { m_fontXAdjust, m_fontYAdjust, m_fontSizeAdjust, m_fontSizeAdjust };
+    bool fDoneAntiPadding = false;
     int posX = caption.wPosX;
     int posY = caption.wPosY;
 
@@ -970,8 +1044,10 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         int charScaleH = (int)(charH * scaleY);
         int charNormalScaleW = (int)(charData.wCharW * scaleX);
         int charNormalScaleH = (int)(charData.wCharH * scaleY);
+        // 両端の余白幅は文字高さを基準にきめる
+        int paddingW = (charData.wCharH * m_paddingWidth + 71) / 72;
 
-        LPCTSTR pszShow = pszCarry ? pszCarry : charData.pszDecode;
+        LPCTSTR pszShow = m_fIgnoreSmall && charData.wCharSizeMode == CP_STR_SMALL ? TEXT("") : pszCarry ? pszCarry : charData.pszDecode;
         pszCarry = NULL;
 
         // 文字列にDRCSか外字か半角置換可能文字が含まれるか調べる
@@ -1041,14 +1117,12 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
 
         TCHAR szTmp[256];
+        bool fDrawSymbol = pDrcs && pszDrcsStr || szGaiji[0] || szHalf[0];
         bool fSameStyle = false;
         if (pszCarry) {
             // 繰り越す
             ::lstrcpyn(szTmp, pszShow, min(static_cast<int>(pszCarry - pszShow), _countof(szTmp)));
             pszShow = szTmp;
-            if ((pDrcs && pszDrcsStr) || szGaiji[0] || szHalf[0]) {
-                fSameStyle = true;
-            }
         }
         else if (i+1 < caption.dwListCount) {
             const CAPTION_CHAR_DATA_DLL &nextCharData = caption.pstCharList[i+1];
@@ -1072,23 +1146,42 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         int lenWos = StrlenWoLoSurrogate(pszShow);
         if (pOsdCarry) {
             AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
-                       charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
-            if (!fSameStyle) {
+                       charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+            if (!fDrawSymbol && !fSameStyle) {
+                if (paddingW > 0) {
+                    AddOsdText(pOsdCarry, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
+                               charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                    posX += paddingW;
+                }
                 if (m_paintingMethod != 3) pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
             }
         }
         else {
-            if (fSameStyle || lenWos > 0) {
+            if (fDrawSymbol || lenWos > 0) {
+                if (paddingW > 0 && !fDoneAntiPadding) {
+                    posX -= paddingW;
+                    fDoneAntiPadding = true;
+                }
                 CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
+                if (paddingW > 0) {
+                    AddOsdText(&osd, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
+                               charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                    posX += paddingW;
+                }
                 AddOsdText(&osd, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
-                if (fSameStyle) {
+                           charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                if (fDrawSymbol || fSameStyle) {
                     pOsdCarry = &osd;
                 }
                 else {
+                    if (paddingW > 0) {
+                        AddOsdText(&osd, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
+                                   charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                        posX += paddingW;
+                    }
                     if (m_paintingMethod != 3) osd.PrepareWindow();
                 }
             }
@@ -1134,6 +1227,10 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             HBITMAP hbm = ::CreateDIBSection(NULL, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
             if (hbm) {
                 ::SetDIBits(NULL, hbm, 0, bmi.bmiHeader.biHeight, pDrcs->pbBitmap, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
+                if (paddingW > 0 && !fDoneAntiPadding) {
+                    posX -= paddingW;
+                    fDoneAntiPadding = true;
+                }
                 CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
@@ -1151,7 +1248,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
                 AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
                            charScaleW / lenWos + 1,
-                           charScaleH, m_fontSizeAdjust, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
+                           charScaleH, rcFontAdjust, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1159,7 +1256,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             // 外字を描画
             if (pOsdCarry) {
                 AddOsdText(pOsdCarry, szGaiji, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_fontSizeAdjust, m_szGaijiFaceName, charData);
+                           charScaleW, charScaleH, rcFontAdjust, m_szGaijiFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1167,7 +1264,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             // 半角文字を描画
             if (pOsdCarry) {
                 AddOsdText(pOsdCarry, szHalf, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           -charNormalScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
+                           -charNormalScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1233,9 +1330,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         }
         break;
     case WM_RESET_CAPTION:
-        pThis->HideOsds(STREAM_CAPTION);
-        pThis->HideOsds(STREAM_SUPERIMPOSE);
-        pThis->DeleteTextures();
+        pThis->HideAllOsds();
         {
             CBlockLock lock(&pThis->m_streamLock);
             pThis->m_caption1Manager.Clear();
@@ -1263,11 +1358,11 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
 }
 
 
-void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
+void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL **ppCaptionForTest)
 {
-    STREAM_INDEX index;
-    DWORD pcr;
-    {
+    STREAM_INDEX index = STREAM_CAPTION;
+    DWORD pcr = 0;
+    if (!ppCaptionForTest) {
         CBlockLock lock(&m_streamLock);
         if (pCaptionManager->IsEmpty()) {
             // 次の字幕文を取得する
@@ -1291,12 +1386,16 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
     bool fTextureModified = false;
     for (;;) {
         // 表示タイミングに達した字幕本文を1つだけ取得する
-        const CAPTION_DATA_DLL *pCaption = pCaptionManager->PopCaption(pcr, m_fIgnorePts);
+        const CAPTION_DATA_DLL *pCaption = ppCaptionForTest ? *ppCaptionForTest++ : pCaptionManager->PopCaption(pcr, m_fIgnorePts);
         if (!pCaption) {
             break;
         }
-        const LANG_TAG_INFO_DLL *pLangTag = pCaptionManager->GetLangTag();
-        if (m_fNeedtoShow && pLangTag && ((m_showFlags[index]>>pLangTag->ucDMF)&1)) {
+        int dmf = 10;
+        if (!ppCaptionForTest) {
+            const LANG_TAG_INFO_DLL *pLangTag = pCaptionManager->GetLangTag();
+            dmf = pLangTag ? pLangTag->ucDMF : 16;
+        }
+        if (m_fNeedtoShow && ((m_showFlags[index]>>dmf)&1)) {
             if (pCaption->bClear) {
                 HideOsds(index);
                 if (m_paintingMethod == 3) {
@@ -1314,9 +1413,11 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
                 if (!hwndContainer) {
                     hwndContainer = FindVideoContainer();
                 }
-                const DRCS_PATTERN_DLL *pDrcsList;
-                DWORD drcsCount;
-                pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
+                const DRCS_PATTERN_DLL *pDrcsList = NULL;
+                DWORD drcsCount = 0;
+                if (!ppCaptionForTest) {
+                    pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
+                }
                 ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, hwndContainer);
             }
         }
@@ -1523,6 +1624,387 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
             m_caption2Manager.AddPacket(pPacket);
         }
     }
+}
+
+
+// プラグインの設定を行う
+bool CTVCaption2::PluginSettings(HWND hwndOwner)
+{
+    if (!m_pApp->IsPluginEnabled()) {
+        ::MessageBox(hwndOwner, TEXT("プラグインを有効にしてください。"), INFO_PLUGIN_NAME, MB_ICONERROR | MB_OK);
+        return false;
+    }
+    ::DialogBoxParam(g_hinstDLL, MAKEINTRESOURCE(IDD_OPTIONS), hwndOwner, SettingsDlgProc, reinterpret_cast<LPARAM>(this));
+    return true;
+}
+
+
+// 設定ダイアログプロシージャ
+INT_PTR CALLBACK CTVCaption2::SettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_INITDIALOG) {
+        ::SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
+    }
+    CTVCaption2 *pThis = reinterpret_cast<CTVCaption2*>(::GetWindowLongPtr(hDlg, GWLP_USERDATA));
+    return pThis->ProcessSettingsDlg(hDlg, uMsg, wParam, lParam);
+}
+
+
+void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
+{
+    m_fSettingsDlgInitializing = true;
+
+    ::CheckDlgButton(hDlg, IDC_CHECK_OSD,
+        ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_szIniPath) != 0 ? BST_CHECKED : BST_UNCHECKED);
+
+    ::SetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, m_szCaptureFolder);
+    ::SendDlgItemMessage(hDlg, IDC_EDIT_CAPFOLDER, EM_LIMITTEXT, _countof(m_szCaptureFolder) - 1, 0);
+
+    int settingsCount = GetSettingsCount();
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_RESETCONTENT, 0, 0);
+    for (int i = 0; i < settingsCount; ++i) {
+        TCHAR text[32];
+        ::wsprintf(text, TEXT("設定%d"), i);
+        ::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
+    }
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_SETCURSEL, m_settingsIndex, 0);
+
+    HWND hItem = ::GetDlgItem(hDlg, IDC_COMBO_FACE);
+    ::SendMessage(hItem, CB_RESETCONTENT, 0, 0);
+    ::SendMessage(hItem, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT(" (指定なし)")));
+    AddFaceNameToComboBoxList(hDlg, IDC_COMBO_FACE);
+    if (!m_szFaceName[0]) {
+        ::SendMessage(hItem, CB_SETCURSEL, 0, 0);
+    }
+    else if (::SendMessage(hItem, CB_SELECTSTRING, 0, reinterpret_cast<LPARAM>(m_szFaceName)) == CB_ERR) {
+        ::SendMessage(hItem, CB_SETCURSEL, ::SendMessage(hItem, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(m_szFaceName)), 0);
+    }
+
+    hItem = ::GetDlgItem(hDlg, IDC_COMBO_GAIJI_FACE);
+    ::SendMessage(hItem, CB_RESETCONTENT, 0, 0);
+    ::SendMessage(hItem, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT(" (ベースフォントを使う)")));
+    AddFaceNameToComboBoxList(hDlg, IDC_COMBO_GAIJI_FACE);
+    if (!m_szGaijiFaceName[0]) {
+        ::SendMessage(hItem, CB_SETCURSEL, 0, 0);
+    }
+    else if (::SendMessage(hItem, CB_SELECTSTRING, 0, reinterpret_cast<LPARAM>(m_szGaijiFaceName)) == CB_ERR) {
+        ::SendMessage(hItem, CB_SETCURSEL, ::SendMessage(hItem, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(m_szGaijiFaceName)), 0);
+    }
+
+    static const LPCTSTR GAIJI_TABLE_LIST[] = {
+        TEXT("!std"), TEXT("!typebank"), TEXT("arphic"), TEXT("dyna"), TEXT("estima"), TEXT("ricoh"),
+        TEXT("ryobi"), TEXT("std"), TEXT("std19"), TEXT("typebank"), NULL
+    };
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_GAIJI_TABLE, CB_RESETCONTENT, 0, 0);
+    AddToComboBoxList(hDlg, IDC_COMBO_GAIJI_TABLE, GAIJI_TABLE_LIST);
+    ::SetDlgItemText(hDlg, IDC_COMBO_GAIJI_TABLE, m_szGaijiTableName);
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_GAIJI_TABLE, CB_LIMITTEXT, _countof(m_szGaijiTableName) - 1, 0);
+    ::ShowWindow(::GetDlgItem(hDlg, IDC_STATIC_GAIJI_TABLE), SW_HIDE);
+
+    static const LPCTSTR METHOD_LIST[] = { TEXT("1-通常ウィンドウ"), TEXT("2-レイヤードウィンドウ"), TEXT("3-映像と合成"), NULL };
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_RESETCONTENT, 0, 0);
+    AddToComboBoxList(hDlg, IDC_COMBO_METHOD, METHOD_LIST);
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_SETCURSEL, min(max(m_paintingMethod-1,0),2), 0);
+
+    ::CheckDlgButton(hDlg, IDC_CHECK_CAPTION, m_showFlags[STREAM_CAPTION] ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_SUPERIMPOSE, m_showFlags[STREAM_SUPERIMPOSE] ? BST_CHECKED : BST_UNCHECKED);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_DELAY, m_delayTime[STREAM_CAPTION], TRUE);
+    ::CheckDlgButton(hDlg, IDC_CHECK_IGNORE_PTS, m_fIgnorePts ? BST_CHECKED : BST_UNCHECKED);
+
+    ::CheckDlgButton(hDlg, IDC_CHECK_TEXTOPA, m_textOpacity >= 0 ? BST_CHECKED : BST_UNCHECKED);
+    ::EnableWindow(::GetDlgItem(hDlg, IDC_EDIT_TEXTOPA), m_textOpacity >= 0);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_TEXTOPA, max(m_textOpacity, 0), FALSE);
+
+    ::CheckDlgButton(hDlg, IDC_CHECK_BACKOPA, m_backOpacity >= 0 ? BST_CHECKED : BST_UNCHECKED);
+    ::EnableWindow(::GetDlgItem(hDlg, IDC_EDIT_BACKOPA), m_backOpacity >= 0);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_BACKOPA, max(m_backOpacity, 0), FALSE);
+
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, m_fontXAdjust, TRUE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, m_fontYAdjust, TRUE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, m_fontSizeAdjust, FALSE);
+
+    ::CheckDlgButton(hDlg, IDC_CHECK_STROKE_WIDTH, m_strokeWidth < 0 ? BST_CHECKED : BST_UNCHECKED);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_STROKE_WIDTH, m_strokeWidth < 0 ? -m_strokeWidth : m_strokeWidth, FALSE);
+
+    static const LPCTSTR STROKE_LEVEL_LIST[] = { TEXT("0"), TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5"), NULL };
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_RESETCONTENT, 0, 0);
+    AddToComboBoxList(hDlg, IDC_COMBO_STROKE_LEVEL, STROKE_LEVEL_LIST);
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_SETCURSEL, min(max(m_strokeSmoothLevel,0),5), 0);
+
+    ::SetDlgItemInt(hDlg, IDC_EDIT_BY_DILATE, m_strokeByDilate, FALSE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_VERT_ANTI, m_vertAntiAliasing, FALSE);
+    ::CheckDlgButton(hDlg, IDC_CHECK_ADD_PADDING, m_paddingWidth > 0 ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_IGNORE_SMALL, m_fIgnoreSmall ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_CENTERING, m_fCentering ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, m_szRomSoundList[0] && m_szRomSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
+
+    m_fSettingsDlgInitializing = false;
+}
+
+
+INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    bool fSave = false;
+    bool fConfigureGaiji = false;
+    bool fReDisp = false;
+
+    switch (uMsg) {
+    case WM_INITDIALOG:
+        InitializeSettingsDlg(hDlg);
+        return TRUE;
+    case WM_COMMAND:
+        // 初期化中の無駄な再帰を省く
+        if (m_fSettingsDlgInitializing) {
+            break;
+        }
+        switch (LOWORD(wParam)) {
+        case IDOK:
+        case IDCANCEL:
+            HideAllOsds();
+            ::EndDialog(hDlg, LOWORD(wParam));
+            break;
+        case IDC_CHECK_OSD:
+            WritePrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"),
+                ::IsDlgButtonChecked(hDlg, IDC_CHECK_OSD) != BST_UNCHECKED, m_szIniPath);
+            break;
+        case IDC_EDIT_CAPFOLDER:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                ::GetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, m_szCaptureFolder, _countof(m_szCaptureFolder));
+                fSave = true;
+            }
+            break;
+        case IDC_CAPFOLDER_BROWSE:
+            {
+                TCHAR dir[MAX_PATH], title[64];
+                ::GetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, dir, _countof(dir));
+                ::GetDlgItemText(hDlg, IDC_STATIC_CAPFOLDER, title, _countof(title));
+                if (BrowseFolderDialog(hDlg, dir, title)) {
+                    ::SetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, dir);
+                }
+            }
+            break;
+        case IDC_COMBO_SETTINGS:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                HideAllOsds();
+                SwitchSettings(static_cast<int>(::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_GETCURSEL, 0, 0)));
+                InitializeSettingsDlg(hDlg);
+                fConfigureGaiji = fReDisp = true;
+            }
+            break;
+        case IDC_SETTINGS_ADD:
+            HideAllOsds();
+            AddSettings();
+            InitializeSettingsDlg(hDlg);
+            fConfigureGaiji = fReDisp = true;
+            break;
+        case IDC_SETTINGS_DELETE:
+            HideAllOsds();
+            DeleteSettings();
+            InitializeSettingsDlg(hDlg);
+            fConfigureGaiji = fReDisp = true;
+            break;
+        case IDC_CHECK_SETTINGS_TEST:
+            if (::IsDlgButtonChecked(hDlg, IDC_CHECK_SETTINGS_TEST) == BST_UNCHECKED) {
+                HideAllOsds();
+            }
+            fReDisp = true;
+            break;
+        case IDC_COMBO_FACE:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                ::GetDlgItemText(hDlg, IDC_COMBO_FACE, m_szFaceName, _countof(m_szFaceName));
+                if (m_szFaceName[0] == TEXT(' ') && m_szFaceName[1] == TEXT('(')) {
+                    m_szFaceName[0] = 0;
+                }
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_COMBO_GAIJI_FACE:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                ::GetDlgItemText(hDlg, IDC_COMBO_GAIJI_FACE, m_szGaijiFaceName, _countof(m_szGaijiFaceName));
+                if (m_szGaijiFaceName[0] == TEXT(' ') && m_szGaijiFaceName[1] == TEXT('(')) {
+                    m_szGaijiFaceName[0] = 0;
+                }
+                fSave = fConfigureGaiji = fReDisp = true;
+            }
+            break;
+        case IDC_COMBO_GAIJI_TABLE:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                ::PostMessage(hDlg, WM_COMMAND, MAKEWPARAM(LOWORD(wParam), CBN_EDITCHANGE), 0);
+            }
+            else if (HIWORD(wParam) == CBN_EDITCHANGE) {
+                ::GetDlgItemText(hDlg, IDC_COMBO_GAIJI_TABLE, m_szGaijiTableName, _countof(m_szGaijiTableName));
+                ::ShowWindow(::GetDlgItem(hDlg, IDC_STATIC_GAIJI_TABLE), SW_HIDE);
+                if (m_szGaijiTableName[0] != TEXT('!')) {
+                    // 外字ファイルの存在確認
+                    TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
+                    if (GetLongModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
+                        ::PathRemoveExtension(gaijiPath);
+                        ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), m_szGaijiTableName);
+                        if (!::PathFileExists(gaijiPath)) {
+                            ::ShowWindow(::GetDlgItem(hDlg, IDC_STATIC_GAIJI_TABLE), SW_SHOW);
+                        }
+                    }
+                }
+                fSave = fConfigureGaiji = fReDisp = true;
+            }
+            break;
+        case IDC_COMBO_METHOD:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                HideAllOsds();
+                m_paintingMethod = static_cast<int>(::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_GETCURSEL, 0, 0));
+                m_paintingMethod = min(max(m_paintingMethod,0),2) + 1;
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_CHECK_CAPTION:
+            HideAllOsds();
+            m_showFlags[STREAM_CAPTION] = ::IsDlgButtonChecked(hDlg, IDC_CHECK_CAPTION) != BST_UNCHECKED ? 65535 : 0;
+            fSave = fReDisp = true;
+            break;
+        case IDC_CHECK_SUPERIMPOSE:
+            HideAllOsds();
+            m_showFlags[STREAM_SUPERIMPOSE] = ::IsDlgButtonChecked(hDlg, IDC_CHECK_SUPERIMPOSE) != BST_UNCHECKED ? 65535 : 0;
+            fSave = fReDisp = true;
+            break;
+        case IDC_EDIT_DELAY:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_delayTime[STREAM_CAPTION] = ::GetDlgItemInt(hDlg, IDC_EDIT_DELAY, NULL, TRUE);
+                fSave = true;
+            }
+            break;
+        case IDC_CHECK_IGNORE_PTS:
+            m_fIgnorePts = ::IsDlgButtonChecked(hDlg, IDC_CHECK_IGNORE_PTS) != BST_UNCHECKED;
+            fSave = true;
+            break;
+        case IDC_CHECK_TEXTOPA:
+            m_textOpacity = ::IsDlgButtonChecked(hDlg, IDC_CHECK_TEXTOPA) != BST_UNCHECKED ? 0 : -1;
+            ::EnableWindow(::GetDlgItem(hDlg, IDC_EDIT_TEXTOPA), m_textOpacity >= 0);
+            ::SetDlgItemInt(hDlg, IDC_EDIT_TEXTOPA, max(m_textOpacity, 0), FALSE);
+            fSave = fReDisp = true;
+            break;
+        case IDC_CHECK_BACKOPA:
+            m_backOpacity = ::IsDlgButtonChecked(hDlg, IDC_CHECK_BACKOPA) != BST_UNCHECKED ? 0 : -1;
+            ::EnableWindow(::GetDlgItem(hDlg, IDC_EDIT_BACKOPA), m_backOpacity >= 0);
+            ::SetDlgItemInt(hDlg, IDC_EDIT_BACKOPA, max(m_backOpacity, 0), FALSE);
+            fSave = fReDisp = true;
+            break;
+        case IDC_EDIT_TEXTOPA:
+            if (HIWORD(wParam) == EN_CHANGE && ::IsWindowEnabled(::GetDlgItem(hDlg, IDC_EDIT_TEXTOPA))) {
+                m_textOpacity = ::GetDlgItemInt(hDlg, IDC_EDIT_TEXTOPA, NULL, FALSE);
+                m_textOpacity = min(m_textOpacity, 100);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_BACKOPA:
+            if (HIWORD(wParam) == EN_CHANGE && ::IsWindowEnabled(::GetDlgItem(hDlg, IDC_EDIT_BACKOPA))) {
+                m_backOpacity = ::GetDlgItemInt(hDlg, IDC_EDIT_BACKOPA, NULL, FALSE);
+                m_backOpacity = min(m_backOpacity, 100);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_ADJUST_X:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_fontXAdjust = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, NULL, TRUE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_ADJUST_Y:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_fontYAdjust = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, NULL, TRUE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_ADJUST_SIZE:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_fontSizeAdjust = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, NULL, FALSE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_STROKE_WIDTH:
+            if (HIWORD(wParam) != EN_CHANGE) break;
+            // FALL THROUGH!
+        case IDC_CHECK_STROKE_WIDTH:
+            m_strokeWidth = ::GetDlgItemInt(hDlg, IDC_EDIT_STROKE_WIDTH, NULL, FALSE);
+            m_strokeWidth = ::IsDlgButtonChecked(hDlg, IDC_CHECK_STROKE_WIDTH) != BST_UNCHECKED ? -m_strokeWidth : m_strokeWidth;
+            fSave = fReDisp = true;
+            break;
+        case IDC_COMBO_STROKE_LEVEL:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                m_strokeSmoothLevel = static_cast<int>(::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_GETCURSEL, 0, 0));
+                m_strokeSmoothLevel = min(max(m_strokeSmoothLevel,0),5);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_BY_DILATE:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_strokeByDilate = ::GetDlgItemInt(hDlg, IDC_EDIT_BY_DILATE, NULL, FALSE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_VERT_ANTI:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_vertAntiAliasing = ::GetDlgItemInt(hDlg, IDC_EDIT_VERT_ANTI, NULL, FALSE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_CHECK_ADD_PADDING:
+            m_paddingWidth = ::IsDlgButtonChecked(hDlg, IDC_CHECK_ADD_PADDING) != BST_UNCHECKED ? 5 : 0;
+            fSave = fReDisp = true;
+            break;
+        case IDC_CHECK_IGNORE_SMALL:
+            m_fIgnoreSmall = ::IsDlgButtonChecked(hDlg, IDC_CHECK_IGNORE_SMALL) != BST_UNCHECKED;
+            fSave = fReDisp = true;
+            break;
+        case IDC_CHECK_CENTERING:
+            m_fCentering = ::IsDlgButtonChecked(hDlg, IDC_CHECK_CENTERING) != BST_UNCHECKED;
+            fSave = fReDisp = true;
+            break;
+        case IDC_CHECK_ROMSOUND:
+            ::lstrcpy(m_szRomSoundList, ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) != BST_UNCHECKED ? ROMSOUND_ENABLED : ROMSOUND_EXAMPLE);
+            fSave = true;
+            break;
+        default:
+            return FALSE;
+        }
+        if (fSave) {
+            SaveSettings();
+        }
+        if (fConfigureGaiji) {
+            if (!ConfigureGaijiTable(m_szGaijiTableName, &m_drcsStrMap, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
+                m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
+            }
+        }
+        if (fReDisp && ::IsDlgButtonChecked(hDlg, IDC_CHECK_SETTINGS_TEST) != BST_UNCHECKED) {
+            WCHAR gaijiTable[GAIJI_TABLE_SIZE * 2];
+            DWORD tableSize = GAIJI_TABLE_SIZE * 2;
+            if (m_captionDll.GetGaiji(1, gaijiTable, &tableSize)) {
+                // 例示用の外字を適当にえらぶ
+                TCHAR testGaiji[64];
+                ::lstrcpy(testGaiji, TEXT("外字"));
+                for (int i = 0, j = 0; i < GAIJI_TABLE_SIZE; ++i) {
+                    WCHAR wc[3] = {0};
+                    wc[0] = gaijiTable[j++];
+                    wc[1] = (wc[0] & 0xFC00) == 0xD800 ? gaijiTable[j++] : 0;
+                    if (i % G_CELL_SIZE == 0 || i % (G_CELL_SIZE + 1) == 9) ::lstrcat(testGaiji, wc);
+                }
+                // テスト字幕を構成
+                CAPTION_CHAR_DATA_DLL testCapCharGaiji = TESTCAP_CHAR_LIST[0];
+                CAPTION_DATA_DLL testCapGaiji = TESTCAP_LIST[0];
+                const CAPTION_DATA_DLL *testCapDisp[_countof(TESTCAP_LIST) + 1];
+                testCapCharGaiji.pszDecode = testGaiji;
+                testCapGaiji.pstCharList = &testCapCharGaiji;
+                testCapDisp[0] = &testCapGaiji;
+                testCapDisp[_countof(TESTCAP_LIST)] = NULL;
+                for (int i = 1; i < _countof(TESTCAP_LIST); ++i) {
+                    testCapDisp[i] = &TESTCAP_LIST[i];
+                }
+                HideAllOsds();
+                ProcessCaption(NULL, testCapDisp);
+            }
+        }
+        return TRUE;
+    }
+    return FALSE;
 }
 
 

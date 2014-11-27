@@ -36,22 +36,31 @@ private:
     bool EnablePlugin(bool fEnable);
     void LoadSettings();
     void SaveSettings() const;
-    void SwitchSettings();
+    void SwitchSettings(int specIndex = -1);
+    void AddSettings();
+    void DeleteSettings();
+    int GetSettingsCount() const;
     static LRESULT CALLBACK EventCallback(UINT Event, LPARAM lParam1, LPARAM lParam2, void *pClientData);
     void OnCapture(bool fSaveToFile);
     static BOOL CALLBACK WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData);
     void HideOsds(STREAM_INDEX index);
     void DeleteTextures();
+    void HideAllOsds();
     void DestroyOsds();
     CPseudoOSD &CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-    void ProcessCaption(CCaptionManager *pCaptionManager);
+    void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL **ppCaptionForTest = NULL);
     void OnSize(STREAM_INDEX index);
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
     void ProcessPacket(BYTE *pPacket);
+    bool PluginSettings(HWND hwndOwner);
+    static INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+    void InitializeSettingsDlg(HWND hDlg);
+    INT_PTR ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     bool m_fTVH264;
+    bool m_fSettingsDlgInitializing;
 
     // 設定
     TCHAR m_szIniPath[MAX_PATH];
@@ -75,10 +84,14 @@ private:
     int m_textOpacity;
     int m_backOpacity;
     int m_vertAntiAliasing;
+    int m_fontXAdjust;
+    int m_fontYAdjust;
     int m_fontSizeAdjust;
     int m_strokeWidth;
     int m_strokeSmoothLevel;
     int m_strokeByDilate;
+    int m_paddingWidth;
+    bool m_fIgnoreSmall;
     bool m_fCentering;
     TCHAR m_szRomSoundList[32 * 20];
 

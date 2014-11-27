@@ -245,6 +245,8 @@ void CPseudoOSD::ClearText()
 
 // テキストを追加する
 // lf.lfWidth<0のときは半角テキスト間隔で描画する
+// lf.lfEscapementはY方向位置補正量
+// lf.lfOrientationはX方向位置補正量
 bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf)
 {
 	SetImage(NULL,0);
@@ -464,6 +466,10 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 			LOGFONT lf=it->lf;
 			lf.lfWidth*=lf.lfWidth<0?-MultX:MultX;
 			lf.lfHeight*=MultY;
+			int adjustY=lf.lfEscapement;
+			int adjustX=lf.lfOrientation;
+			lf.lfEscapement=0;
+			lf.lfOrientation=0;
 			//フォントが変化するときだけ作る
 			if (!CompareLogFont(&lf,&lfLast)) {
 				Font.Create(&lf);
@@ -473,7 +479,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 				HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
 				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
 				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
-				TextOutMonospace(hdc,x+intvX/2,m_Position.Height-1-intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
+				TextOutMonospace(hdc,x+intvX/2+adjustX,m_Position.Height-1-intvY/2+adjustY,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
 				::SelectObject(hdc,hfontOld);
 			}
 		}

@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.2 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.3 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -7,24 +7,34 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 作成した字幕プラグインです。字幕の中央表示をしたいがために作りました。
 
 ■動作環境
-・Windows XP以降。ただしVistaは未確認
+・Windows XP以降。ただしVistaと7は未確認
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
+  # 動作テスト環境:
+  # ・Windows 8(x64):  TVTest0.8.0(x86), TVTest0.8.0(x64), TVH264_0.5.2(x86公式)
+  # ・Windows XP(x86): TVTest0.7.23(x86公式)
 ・通常版: Visual C++ 2005 SP1 再頒布可能パッケージ(TVTestが起動するなら入ってる)
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.1.1からの移行)
-TVCaptionMod2.tvtpを以前のものと置きかえてください。
-(ver.1.0以前からの移行)
-TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。以下の外
-字テーブルのファイルにも変更があるので、必要なら置きかえてください:
+※以下の外字テーブルのファイルに変更があるので、必要なら置きかえてください:
 ・TVCaptionMod2_Gaiji_std.txt
 ・TVCaptionMod2_Gaiji_typebank.txt
+(ver.1.1～ver.1.2からの移行)
+TVCaptionMod2.tvtpを以前のものと置きかえてください。
+(ver.1.0以前からの移行)
+TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpとCaption.dllとを入れ、右クリック
 メニューからプラグインを有効にして、字幕のある番組で字幕が表示されればOKです。
 TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
+
+プラグイン設定は 右クリックメニュー→設定→プラグイン→TVCaptionMod2 から行いま
+す。各設定について詳細は後述「設定ファイルについて」の対応する項目を参照してくだ
+さい。必須ではないですが、記号の文字化けを防ぐために外字用フォントとして「和田研
+ゴシック2004ARIB」(外字テーブル名!std)や「Windows TV ゴシック」(!typebank)を導入
+・設定しておくことをお勧めします。
+(参考)和田研フォント入手先: http://sourceforge.jp/projects/jis2004/
 
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
@@ -39,7 +49,7 @@ EnOsdCompositor
     # レンダラはVMR9かEVRを利用し、さらに設定キーMethod[=3]としてください。
     # TVTest設定→OSD表示→「映像と合成する」とおなじ方法で字幕を表示できるよう
     # にします。たぶんつぎの場合に効果的です:
-    # ・TVTest本体のキャプチャ機能やTSMemoryでキャプをとりたい
+    # ・TVTest本体のキャプチャ機能でキャプをとりたい
     # ・XPや非Aero環境での性能向上
     # APIフックを利用した比較的リスキーな機能です。Aeroな環境では従来の設定キー
     # Method[=2]を利用することを強くお勧めします。
@@ -159,7 +169,10 @@ VertAntiAliasing
     フォントの垂直方向アンチエイリアスを行うフォント高さ(画素数)の下限
     # ver.0.9r3以降のデフォルトは[=22] (StrokeByDilateと同じ値を推奨)
     # ClearTypeフォントの横線のジャギーが気になる場合に効果的です。
-    # Method[=2]のときだけ効果があります。
+    # Method[=2,3]のときだけ効果があります。
+FontXAdjust / FontYAdjust
+    フォントのX方向/Y方向の位置を補正
+    # 文字が左寄りや上付きになるようなときに使います。
 FontSizeAdjust
     フォントの文字サイズを調整(単位はパーセント)
     # たとえば[=90]とすると、通常にたいして線分比で90%の大きさになります。
@@ -173,6 +186,12 @@ StrokeByDilate
     膨張アルゴリズムで縁取るフォント高さ(画素数)の上限
     # デフォルトは[=22]
     # 画面を小さくしたときに縁取りが汚くなる場合は値を上下させてみてください。
+PaddingWidth
+    両端の余白をふやす幅
+    # 文字の左右端が背景枠からはみ出るようなときに使います。
+IgnoreSmall
+    振り仮名らしきものを除外する[=1]かどうか
+    # 厳密には小型サイズ(SSZ)の字幕文を除外します。
 Centering
     字幕を画面中央に表示する[=1]かどうか
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
@@ -230,6 +249,12 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.3 (2012-11-17)
+・プラグイン設定ダイアログを追加
+  ・一部の設定はiniを直接編集する必要あり
+・文字位置補正機能を追加
+・振り仮名除外機能を追加
+・両端の余白を増やせるようにした
 ver.1.2 (2012-08-26)
 ・「字幕Plugin改変版(090627)」やTVTest本体のコードを参考に、映像への字幕合成機能
   を追加(設定キーEnOsdCompositor)

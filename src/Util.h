@@ -16,6 +16,9 @@ BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPC
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
 WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
 int StrlenWoLoSurrogate(LPCTSTR str);
+bool HexStringToByteArray(LPCTSTR str, BYTE *pDest, int destLen);
+void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList);
+void AddFaceNameToComboBoxList(HWND hDlg, int id);
 
 #define APP_NAME TEXT("TVCaption2")
 
@@ -132,6 +135,7 @@ private:
 };
 
 bool CompareLogFont(const LOGFONT *pFont1,const LOGFONT *pFont2);
+bool BrowseFolderDialog(HWND hwndOwner,LPTSTR pszDirectory,LPCTSTR pszTitle);
 
 namespace DrawUtil {
 
