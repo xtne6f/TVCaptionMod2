@@ -21,6 +21,7 @@ int StrlenWoLoSurrogate(LPCTSTR str);
 bool HexStringToByteArray(LPCTSTR str, BYTE *pDest, int destLen);
 void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList);
 void AddFaceNameToComboBoxList(HWND hDlg, int id);
+inline bool Is1SegPmtPid(int pid) { return 0x1FC8 <= pid && pid <= 0x1FCF; }
 
 #define APP_NAME TEXT("TVCaption2")
 
@@ -29,6 +30,7 @@ void AddFaceNameToComboBoxList(HWND hDlg, int id);
 #define H_262_VIDEO         0x02
 #define PES_PRIVATE_DATA    0x06
 #define AVC_VIDEO           0x1B
+#define H_265_VIDEO         0x24
 
 typedef struct {
 	int           sync;

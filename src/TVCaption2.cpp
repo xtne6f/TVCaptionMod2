@@ -82,8 +82,7 @@ static const TVTest::CommandInfo COMMAND_LIST[] = {
 };
 
 CTVCaption2::CTVCaption2()
-    : m_fTVH264(false)
-    , m_settingsIndex(0)
+    : m_settingsIndex(0)
     , m_paintingMethod(0)
     , m_fIgnorePts(false)
     , m_fEnTextColor(false)
@@ -104,6 +103,7 @@ CTVCaption2::CTVCaption2()
     , m_hwndContainer(NULL)
     , m_fNeedtoShow(false)
     , m_fFlashingFlipFlop(false)
+    , m_fProfileC(false)
     , m_pcr(0)
     , m_procCapTick(0)
     , m_fResetPat(false)
@@ -177,9 +177,6 @@ bool CTVCaption2::Initialize()
             m_pApp->AddLog(L"OsdCompositorを初期化しました。");
         }
     }
-
-    TVTest::HostInfo hostInfo;
-    m_fTVH264 = m_pApp->GetHostInfo(&hostInfo) && !::lstrcmp(hostInfo.pszAppName, TEXT("TVH264"));
 
     // コマンドを登録
     m_pApp->RegisterCommand(COMMAND_LIST, _countof(COMMAND_LIST));
@@ -421,8 +418,11 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
             if (!ConfigureGaijiTable(m_szGaijiTableName, &m_drcsStrMap, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
                 m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
             }
-            m_caption1Manager.SetCaptionDll(&m_captionDll, 0, m_fTVH264);
-            m_caption2Manager.SetCaptionDll(&m_captionDll, 1, m_fTVH264);
+            m_fProfileC = false;
+            m_caption1Manager.SetProfileC(m_fProfileC);
+            m_caption2Manager.SetProfileC(m_fProfileC);
+            m_caption1Manager.SetCaptionDll(&m_captionDll, 0);
+            m_caption2Manager.SetCaptionDll(&m_captionDll, 1);
 
             // 字幕描画処理ウィンドウ作成
             m_hwndPainting = ::CreateWindow(TV_CAPTION2_WINDOW_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, g_hinstDLL, this);
@@ -672,6 +672,8 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             ::SendMessage(pThis->m_hwndPainting, WM_RESET_OSDS, 0, 0);
         }
         break;
+    case TVTest::EVENT_CHANNELCHANGE:
+        // チャンネルが変更された
     case TVTest::EVENT_SERVICECHANGE:
         // サービスが変更された
     case TVTest::EVENT_SERVICEUPDATE:
@@ -967,7 +969,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
                      m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
 
     int textOpacity = m_textOpacity>=0 ? min(m_textOpacity,100) : style.stCharColor.ucAlpha*100/255;
-    int backOpacity = !m_fTVH264 && style.stBackColor.ucAlpha==0 ? 0 :
+    int backOpacity = !m_fProfileC && style.stBackColor.ucAlpha==0 ? 0 :
                       m_backOpacity>=0 ? min(m_backOpacity,100) : style.stBackColor.ucAlpha*100/255;
     osd.SetOpacity(textOpacity, backOpacity);
 
@@ -1346,6 +1348,12 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         pThis->HideAllOsds();
         {
             CBlockLock lock(&pThis->m_streamLock);
+            if (wParam != 0) {
+                // ワンセグ字幕をすばやく表示するため
+                pThis->m_fProfileC = wParam != 1;
+                pThis->m_caption1Manager.SetProfileC(pThis->m_fProfileC);
+                pThis->m_caption2Manager.SetProfileC(pThis->m_fProfileC);
+            }
             pThis->m_caption1Manager.Clear();
             pThis->m_caption2Manager.Clear();
         }
@@ -1522,7 +1530,7 @@ BOOL CALLBACK CTVCaption2::StreamCallback(BYTE *pData, void *pClientData)
 }
 
 
-static void GetPidsFromVideoPmt(int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
+static void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
 {
     for (int i = 0; i < pPat->pid_count; ++i) {
         const PMT *pPmt = pPat->pmt[i];
@@ -1544,12 +1552,14 @@ static void GetPidsFromVideoPmt(int *pPcrPid, int *pCaption1Pid, int *pCaption2P
             }
         }
         if (fVideoPmt) {
+            *pPmtPid = pPat->pid[i];
             *pPcrPid = pPmt->pcr_pid;
             *pCaption1Pid = privPid[0];
             *pCaption2Pid = privPid[1];
             return;
         }
     }
+    *pPmtPid = -1;
     *pPcrPid = -1;
     *pCaption1Pid = -1;
     *pCaption2Pid = -1;
@@ -1616,11 +1626,15 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
         int payloadSize = 188 - static_cast<int>(pPayload - pPacket);
 
         // PAT監視
+        int pmtPid;
         if (header.pid == 0) {
             extract_pat(&m_pat, pPayload, payloadSize,
                         header.payload_unit_start_indicator,
                         header.continuity_counter);
-            GetPidsFromVideoPmt(&m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
+            GetPidsFromVideoPmt(&pmtPid, &m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
+            if (pmtPid >= 0 && Is1SegPmtPid(pmtPid) != m_fProfileC) {
+                ::SendNotifyMessage(m_hwndPainting, WM_RESET_CAPTION, Is1SegPmtPid(pmtPid) ? 2 : 1, 0);
+            }
             return;
         }
         // PATリストにあるPMT監視
@@ -1630,7 +1644,10 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
                 extract_pmt(pPmt, pPayload, payloadSize,
                             header.payload_unit_start_indicator,
                             header.continuity_counter);
-                GetPidsFromVideoPmt(&m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
+                GetPidsFromVideoPmt(&pmtPid, &m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
+                if (pmtPid >= 0 && Is1SegPmtPid(pmtPid) != m_fProfileC) {
+                    ::SendNotifyMessage(m_hwndPainting, WM_RESET_CAPTION, Is1SegPmtPid(pmtPid) ? 2 : 1, 0);
+                }
                 return;
             }
         }

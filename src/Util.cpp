@@ -297,7 +297,8 @@ void extract_pmt(PMT *pmt, const unsigned char *payload, int payload_size, int u
             es_info_length = (table[pos+3]&0x03)<<8 | table[pos+4];
             if ((stream_type == H_262_VIDEO ||
                  stream_type == PES_PRIVATE_DATA ||
-                 stream_type == AVC_VIDEO) &&
+                 stream_type == AVC_VIDEO ||
+                 stream_type == H_265_VIDEO) &&
                 pos + 5 + es_info_length <= 3 + pmt->psi.section_length - 4/*CRC32*/)
             {
                 // ストリーム識別記述子を探す(運用規定と異なり必ずしも先頭に配置されない)

@@ -27,11 +27,10 @@ CCaptionManager::CCaptionManager()
     m_lang2.ucLangTag = 0xFF;
 }
 
-void CCaptionManager::SetCaptionDll(const CCaptionDll *pCaptionDll, DWORD dwIndexToUse, bool fProfileC)
+void CCaptionManager::SetCaptionDll(const CCaptionDll *pCaptionDll, DWORD dwIndexToUse)
 {
     m_pCaptionDll = pCaptionDll;
     m_dwIndex = dwIndexToUse;
-    m_fProfileC = fProfileC;
     Clear();
 }
 

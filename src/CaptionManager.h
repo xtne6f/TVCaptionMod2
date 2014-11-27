@@ -6,7 +6,7 @@ class CCaptionManager
     static const int PACKET_QUEUE_SIZE = 1024;
 public:
     CCaptionManager();
-    void SetCaptionDll(const CCaptionDll *pCaptionDll, DWORD dwIndexToUse, bool fProfileC=false);
+    void SetCaptionDll(const CCaptionDll *pCaptionDll, DWORD dwIndexToUse);
     void Clear();
     void AddPacket(LPCBYTE pPacket);
     void Analyze(DWORD currentPcr);
@@ -18,6 +18,7 @@ public:
     const LANG_TAG_INFO_DLL *GetLangTag() const {
         return m_fShowLang2 && m_lang2.ucLangTag!=0xFF ? &m_lang2 : m_lang1.ucLangTag!=0xFF ? &m_lang1 : NULL;
     }
+    void SetProfileC(bool fProfileC) { m_fProfileC = fProfileC; }
 private:
     const CCaptionDll *m_pCaptionDll;
     DWORD m_dwIndex;

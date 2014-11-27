@@ -63,8 +63,6 @@ private:
     void InitializeSettingsDlg(HWND hDlg);
     INT_PTR ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-    bool m_fTVH264;
-
     // 設定
     TCHAR m_szIniPath[MAX_PATH];
     TCHAR m_szCaptureFolder[MAX_PATH];
@@ -106,6 +104,7 @@ private:
     bool m_fOsdClear[STREAM_MAX];
     bool m_fNeedtoShow;
     bool m_fFlashingFlipFlop;
+    bool m_fProfileC;
 
     // 字幕解析
     CCaptionDll m_captionDll;
