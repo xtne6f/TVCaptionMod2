@@ -90,6 +90,7 @@ CPseudoOSD::CPseudoOSD()
 	, m_fHLTop(false)
 	, m_fHLRight(false)
 	, m_fHLBottom(false)
+	, m_fVertAntiAliasing(false)
 	, m_fLayeredWindow(false)
 	, m_hwndParent(NULL)
 	, m_hwndOwner(NULL)
@@ -413,6 +414,12 @@ void CPseudoOSD::SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBot
 }
 
 
+void CPseudoOSD::SetVerticalAntiAliasing(bool fVertAntiAliasing)
+{
+	m_fVertAntiAliasing=fVertAntiAliasing;
+}
+
+
 void CPseudoOSD::OnParentMove()
 {
 	if (m_hwnd!=NULL && m_fLayeredWindow) {
@@ -432,25 +439,25 @@ void CPseudoOSD::OnParentMove()
 }
 
 
-static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,int Width,int Mult)
+static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,int Width,int MultX,int MultY)
 {
 	INT dx[1024];
 	cbCount=min(cbCount,lengthof(dx));
 	for (UINT i=0; i<cbCount; i++) {
-		dx[i]=Width/(cbCount-i)*Mult;
+		dx[i]=Width/(cbCount-i)*MultX;
 		Width-=Width/(cbCount-i);
 	}
-	return ::ExtTextOut(hdc,x*Mult,y*Mult,0,NULL,lpString,cbCount,dx);
+	return ::ExtTextOut(hdc,x*MultX,y*MultY,0,NULL,lpString,cbCount,dx);
 }
 
-static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,COLORREF cr)
+static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,int cw,COLORREF cr)
 {
 	LOGBRUSH lb;
 	lb.lbStyle=BS_SOLID;
 	lb.lbColor=cr;
 	lb.lbHatch=0;
 
-	HPEN hPen=::ExtCreatePen(PS_SOLID|PS_GEOMETRIC|PS_ENDCAP_SQUARE,2,&lb,0,NULL);
+	HPEN hPen=::ExtCreatePen(PS_SOLID|PS_GEOMETRIC|PS_ENDCAP_SQUARE,cw,&lb,0,NULL);
 	if (hPen) {
 		HGDIOBJ hPenOld=::SelectObject(hdc,hPen);
 		POINT lastPos;
@@ -462,20 +469,20 @@ static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,COLORREF cr)
 	}
 }
 
-void CPseudoOSD::DrawTextList(HDC hdc,int Mult) const
+void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 {
 	int x=0;
 	std::vector<CWindowStyle>::const_iterator it = m_Position.StyleList.begin();
 	for (; it!=m_Position.StyleList.end(); ++it) {
 		DrawUtil::CFont Font;
 		LOGFONT lf=it->lf;
-		lf.lfWidth*=Mult;
-		lf.lfHeight*=Mult;
+		lf.lfWidth*=MultX;
+		lf.lfHeight*=MultY;
 		if (!it->Text.empty() && Font.Create(&lf)) {
 			HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
 			int intvX=it->Width/(int)it->Text.length() - it->lf.lfWidth*2;
 			int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
-			TextOutMonospace(hdc,x+intvX/2,intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,Mult);
+			TextOutMonospace(hdc,x+intvX/2,intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
 			::SelectObject(hdc,hfontOld);
 		}
 		x+=it->Width;
@@ -489,10 +496,10 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	::GetClientRect(m_hwnd,&rc);
 	DrawUtil::Fill(hdc,&rc,m_crBackColor);
 
-	if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,m_crTextColor);
-	if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,m_crTextColor);
-	if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,m_crTextColor);
-	if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,m_crTextColor);
+	if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,2,m_crTextColor);
+	if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,2,m_crTextColor);
+	if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
+	if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,2,m_crTextColor);
 
 	if (!m_Position.StyleList.empty()) {
 		COLORREF crOldTextColor;
@@ -500,7 +507,7 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 
 		crOldTextColor=::SetTextColor(hdc,m_crTextColor);
 		OldBkMode=::SetBkMode(hdc,TRANSPARENT);
-		DrawTextList(hdc,1);
+		DrawTextList(hdc,1,1);
 		::SetBkMode(hdc,OldBkMode);
 		::SetTextColor(hdc,crOldTextColor);
 	} else if (m_hbm!=NULL) {
@@ -551,8 +558,30 @@ void CPseudoOSD::Compose(HDC hdc,int Left,int Top)
 	::DeleteObject(hbmTmp);
 }
 
+// インプレースでビットマップの縦方向を1/4に縮小処理する
+static void ShrinkBitmap(void *pBits,int Width,RECT Rect)
+{
+	MAGIC_NUMBER(0x47920258);
+	for (int y=0;y<Rect.bottom-Rect.top;y++) {
+		DWORD *p=static_cast<DWORD*>(pBits)+(Rect.top+y)*Width+Rect.left;
+		DWORD *q0=static_cast<DWORD*>(pBits)+(Rect.top+y*4+0)*Width+Rect.left;
+		DWORD *q1=static_cast<DWORD*>(pBits)+(Rect.top+y*4+1)*Width+Rect.left;
+		DWORD *q2=static_cast<DWORD*>(pBits)+(Rect.top+y*4+2)*Width+Rect.left;
+		DWORD *q3=static_cast<DWORD*>(pBits)+(Rect.top+y*4+3)*Width+Rect.left;
+		for (int x=Rect.left;x<Rect.right;x++) {
+			DWORD v0=(*q0&*q1)+(((*q0^*q1)&0xfefefefe)>>1);
+			DWORD v1=(*q2&*q3)+(((*q2^*q3)&0xfefefefe)>>1);
+			*p++=(v0&v1)+(((v0^v1)&0xfefefefe)>>1);
+			q0++;
+			q1++;
+			q2++;
+			q3++;
+		}
+	}
+}
+
 // 縦横4倍の2値画像をもとにアルファチャネルを構成する
-static void SetBitmapOpacity(void *pBits,int Width,const RECT &Rect,const void *pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
+static void SetBitmapOpacity(BYTE* __restrict pBits,int Width,RECT Rect,const BYTE* __restrict pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
 {
 	MAGIC_NUMBER(0x77867563);
 	if (Rect.left%2!=0) return;
@@ -562,29 +591,32 @@ static void SetBitmapOpacity(void *pBits,int Width,const RECT &Rect,const void *
 	int range=TextOpacity-BackOpacity;
 	int stride=(Width*4+31)/32*4;
 	for (int y=Rect.top;y<Rect.bottom;y++) {
-		BYTE *p=static_cast<BYTE*>(pBits)+(y*Width+Rect.left)*4;
-		LPCBYTE q0=static_cast<LPCBYTE>(pBitsMono)+(y*4+0)*stride+Rect.left/2;
-		LPCBYTE q1=static_cast<LPCBYTE>(pBitsMono)+(y*4+1)*stride+Rect.left/2;
-		LPCBYTE q2=static_cast<LPCBYTE>(pBitsMono)+(y*4+2)*stride+Rect.left/2;
-		LPCBYTE q3=static_cast<LPCBYTE>(pBitsMono)+(y*4+3)*stride+Rect.left/2;
+		int i=(y*Width+Rect.left)*4;
+		int j0=(y*4+0)*stride+Rect.left/2;
+		int j1=(y*4+1)*stride+Rect.left/2;
+		int j2=(y*4+2)*stride+Rect.left/2;
+		int j3=(y*4+3)*stride+Rect.left/2;
 		int x=Rect.left/2;
 		for (;x<Rect.right/2;x++) {
-			p[3]=(BYTE)(level+(BitSum[*q0>>4]+BitSum[*q1>>4]+BitSum[*q2>>4]+BitSum[*q3>>4])*range/16);
-			p[7]=(BYTE)(level+(BitSum[*q0&15]+BitSum[*q1&15]+BitSum[*q2&15]+BitSum[*q3&15])*range/16);
-			p+=8;
-			q0++;
-			q1++;
-			q2++;
-			q3++;
+			pBits[i+3]=(BYTE)(level+(BitSum[pBitsMono[j0]>>4]+BitSum[pBitsMono[j1]>>4]+
+			                         BitSum[pBitsMono[j2]>>4]+BitSum[pBitsMono[j3]>>4])*range/16);
+			pBits[i+7]=(BYTE)(level+(BitSum[pBitsMono[j0]&15]+BitSum[pBitsMono[j1]&15]+
+			                         BitSum[pBitsMono[j2]&15]+BitSum[pBitsMono[j3]&15])*range/16);
+			i+=8;
+			j0++;
+			j1++;
+			j2++;
+			j3++;
 		}
 		if (x*2<Rect.right) {
-			p[3]=(BYTE)(level+(BitSum[*q0>>4]+BitSum[*q1>>4]+BitSum[*q2>>4]+BitSum[*q3>>4])*range/16);
+			pBits[i+3]=(BYTE)(level+(BitSum[pBitsMono[j0]>>4]+BitSum[pBitsMono[j1]>>4]+
+			                         BitSum[pBitsMono[j2]>>4]+BitSum[pBitsMono[j3]>>4])*range/16);
 		}
 	}
 }
 
 // crKeyな画素をアルファチャネルに写す
-static void LayBitmapToAlpha(void *pBits,int Width,const RECT &Rect,BYTE TextOpacity,COLORREF crKey)
+static void LayBitmapToAlpha(void *pBits,int Width,RECT Rect,BYTE TextOpacity,COLORREF crKey)
 {
 	MAGIC_NUMBER(0x66735267);
 	DWORD dwKey=(GetRValue(crKey)<<16)|(GetGValue(crKey)<<8)|GetBValue(crKey);
@@ -598,7 +630,7 @@ static void LayBitmapToAlpha(void *pBits,int Width,const RECT &Rect,BYTE TextOpa
 	}
 }
 
-static void PremultiplyBitmap(void *pBits,int Width,const RECT &Rect)
+static void PremultiplyBitmap(void *pBits,int Width,RECT Rect)
 {
 	MAGIC_NUMBER(0x67683625);
 	for (int y=Rect.top;y<Rect.bottom;y++) {
@@ -613,7 +645,7 @@ static void PremultiplyBitmap(void *pBits,int Width,const RECT &Rect)
 }
 
 // Opacityなアルファチャネルを膨張させる
-static void DilateAlpha(void *pBits,int Width,const RECT &Rect,BYTE Opacity)
+static void DilateAlpha(void *pBits,int Width,RECT Rect,BYTE Opacity)
 {
 	MAGIC_NUMBER(0x94275645);
 	BYTE LastLine[1+8192];
@@ -649,7 +681,7 @@ static void DilateAlpha(void *pBits,int Width,const RECT &Rect,BYTE Opacity)
 }
 
 // アルファチャネルを平滑化する
-static void SmoothAlpha(void *pBits,int Width,const RECT &Rect,BYTE EdgeOpacity,int SmoothLevel)
+static void SmoothAlpha(void *pBits,int Width,RECT Rect,BYTE EdgeOpacity,int SmoothLevel)
 {
 	MAGIC_NUMBER(0x47673283);
 	static const BYTE Coefs[5][10]={
@@ -696,19 +728,19 @@ static void SmoothAlpha(void *pBits,int Width,const RECT &Rect,BYTE EdgeOpacity,
 }
 
 // アルファ合成する
-static void ComposeAlpha(void *pBitsDest,int WidthDest,const void *pBits,int Width,const RECT &Rect)
+static void ComposeAlpha(BYTE* __restrict pBitsDest,int WidthDest,const BYTE* __restrict pBits,int Width,RECT Rect)
 {
 	MAGIC_NUMBER(0x36481956);
 	for (int y=Rect.top,yy=0;y<Rect.bottom;y++,yy++) {
-		const BYTE *p=static_cast<const BYTE*>(pBits)+(y*Width+Rect.left)*4;
-		BYTE *q=static_cast<BYTE*>(pBitsDest)+(yy*WidthDest)*4;
+		int i=(y*Width+Rect.left)*4;
+		int j=(yy*WidthDest)*4;
 		for (int x=Rect.left;x<Rect.right;x++) {
-			q[0]=((p[0]<<8) + (q[0]*(255-p[3])+255))>>8;
-			q[1]=((p[1]<<8) + (q[1]*(255-p[3])+255))>>8;
-			q[2]=((p[2]<<8) + (q[2]*(255-p[3])+255))>>8;
-			q[3]=0;
-			p+=4;
-			q+=4;
+			pBitsDest[j+0]=((pBits[i+0]<<8) + (pBitsDest[j+0]*(255-pBits[i+3])+255))>>8;
+			pBitsDest[j+1]=((pBits[i+1]<<8) + (pBitsDest[j+1]*(255-pBits[i+3])+255))>>8;
+			pBitsDest[j+2]=((pBits[i+2]<<8) + (pBitsDest[j+2]*(255-pBits[i+3])+255))>>8;
+			pBitsDest[j+3]=0;
+			i+=4;
+			j+=4;
 		}
 	}
 }
@@ -725,14 +757,15 @@ void CPseudoOSD::FreeWorkBitmap()
 
 // 作業用ビットマップを確保
 // 全オブジェクトで共用(状況によってはMB単位の確保と解放を秒単位でくり返すことになるため)
-bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *pAllocHeight)
+bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth)
 {
 	if (m_hbmWork!=NULL) {
-		BITMAP bm;
+		BITMAP bm,bmMono;
 		if (::GetObject(m_hbmWork,sizeof(BITMAP),&bm) &&
-			bm.bmWidth>=Width && bm.bmHeight>=Height) {
+			::GetObject(m_hbmWorkMono,sizeof(BITMAP),&bmMono) &&
+			bm.bmWidth>=Width && bm.bmHeight>=Height && bmMono.bmHeight>=HeightMono)
+		{
 			*pAllocWidth=bm.bmWidth;
-			*pAllocHeight=bm.bmHeight;
 			return true;
 		}
 		FreeWorkBitmap();
@@ -757,7 +790,7 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *p
 	} bmiMono={0};
 	bmiMono.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
 	bmiMono.bmiHeader.biWidth=Width*4;
-	bmiMono.bmiHeader.biHeight=-Height*4;
+	bmiMono.bmiHeader.biHeight=-HeightMono;
 	bmiMono.bmiHeader.biPlanes=1;
 	bmiMono.bmiHeader.biBitCount=1;
 	bmiMono.bmiHeader.biCompression=BI_RGB;
@@ -771,7 +804,6 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *p
 		return false;
 	}
 	*pAllocWidth=Width;
-	*pAllocHeight=Height;
 	return true;
 }
 
@@ -789,8 +821,9 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	if (Width<1 || Height<1)
 		return;
 
-	int AllocWidth,AllocHeight;
-	if (!AllocateWorkBitmap(Width,Height,&AllocWidth,&AllocHeight))
+	int VertMult=m_fVertAntiAliasing?4:1;
+	int AllocWidth;
+	if (!AllocateWorkBitmap(Width,Height*VertMult,Height*4,&AllocWidth))
 		return;
 
 	HDC hdc,hdcSrc,hdcMono;
@@ -806,18 +839,20 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcSrc,m_hbmWork));
 	HBITMAP hbmMonoOld=static_cast<HBITMAP>(::SelectObject(hdcMono,m_hbmWorkMono));
 
+	rc.bottom=Height*VertMult;
 	DrawUtil::Fill(hdcSrc,&rc,m_crBackColor);
 	::ZeroMemory(m_pBitsMono,(AllocWidth*4+31)/32*4 * Height*4);
 
 	bool fNeedToLay=false;
 	bool fNeedToDilate=false;
 	if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
-		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,m_crTextColor);
-		if (m_fHLTop) DrawLine(hdcSrc,1,1,rc.right-1,1,m_crTextColor);
-		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,m_crTextColor);
-		if (m_fHLBottom) DrawLine(hdcSrc,rc.right-1,rc.bottom-1,1,rc.bottom-1,m_crTextColor);
+		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,2,m_crTextColor);
+		if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rc.right-1,VertMult,2*VertMult,m_crTextColor);
+		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
+		if (m_fHLBottom) DrawLine(hdcSrc,rc.right-1,rc.bottom-VertMult,1,rc.bottom-VertMult,2*VertMult,m_crTextColor);
 		fNeedToLay=true;
 	}
+	rc.bottom=Height;
 
 	if (!m_Position.StyleList.empty()) {
 		COLORREF crOldTextColor;
@@ -825,7 +860,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 
 		crOldTextColor=::SetTextColor(hdcSrc,m_crTextColor);
 		OldBkMode=::SetBkMode(hdcSrc,TRANSPARENT);
-		DrawTextList(hdcSrc,1);
+		DrawTextList(hdcSrc,1,VertMult);
 		::SetBkMode(hdcSrc,OldBkMode);
 		::SetTextColor(hdcSrc,crOldTextColor);
 
@@ -843,7 +878,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 					HBRUSH hbrOld=SelectBrush(hdcMono,hbr);
 					OldBkMode=::SetBkMode(hdcMono,TRANSPARENT);
 					::BeginPath(hdcMono);
-					DrawTextList(hdcMono,4);
+					DrawTextList(hdcMono,4,4);
 					::EndPath(hdcMono);
 					::StrokeAndFillPath(hdcMono);
 					::SetBkMode(hdcMono,OldBkMode);
@@ -858,18 +893,22 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		::GetObject(m_hbm,sizeof(BITMAP),&bm);
 		RECT rcBitmap={0,0,bm.bmWidth,bm.bmHeight};
 		if (m_ImagePaintRect.right!=0 && m_ImagePaintRect.bottom!=0) {
-			DrawUtil::DrawBitmap(hdcSrc,m_ImagePaintRect.left,m_ImagePaintRect.top,
-			                     m_ImagePaintRect.right,m_ImagePaintRect.bottom,m_hbm,&rcBitmap);
+			DrawUtil::DrawBitmap(hdcSrc,m_ImagePaintRect.left,m_ImagePaintRect.top*VertMult,
+			                     m_ImagePaintRect.right,m_ImagePaintRect.bottom*VertMult,m_hbm,&rcBitmap);
 		} else {
-			DrawUtil::DrawBitmap(hdcSrc,0,0,Width,Height,m_hbm,&rcBitmap);
+			DrawUtil::DrawBitmap(hdcSrc,0,0,Width,Height*VertMult,m_hbm,&rcBitmap);
 		}
 		fNeedToLay=true;
 		fNeedToDilate=true;
 	}
 	::GdiFlush();
 
+	// 縦方向アンチエイリアス
+	if (m_fVertAntiAliasing) {
+		ShrinkBitmap(m_pBits,AllocWidth,rc);
+	}
 	// アルファチャネル操作
-	SetBitmapOpacity(m_pBits,AllocWidth,rc,m_pBitsMono,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100));
+	SetBitmapOpacity((BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100));
 	if (fNeedToLay) {
 		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
 	}
@@ -882,7 +921,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	PremultiplyBitmap(m_pBits,AllocWidth,rc);
 
 	if (hdcCompose) {
-		ComposeAlpha(pBitsCompose,Width,m_pBits,AllocWidth,rc);
+		ComposeAlpha((BYTE*)pBitsCompose,Width,(BYTE*)m_pBits,AllocWidth,rc);
 	} else {
 		SIZE sz={Width,Height};
 		POINT ptSrc={0,0};

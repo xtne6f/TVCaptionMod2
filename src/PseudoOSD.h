@@ -36,6 +36,7 @@ class CPseudoOSD
 	int m_StrokeSmoothLevel;
 	bool m_fStrokeByDilate;
 	bool m_fHLLeft,m_fHLTop,m_fHLRight,m_fHLBottom;
+	bool m_fVertAntiAliasing;
 	RECT m_ImagePaintRect;
 	bool m_fLayeredWindow;
 	HWND m_hwndParent;
@@ -43,9 +44,9 @@ class CPseudoOSD
 	POINT m_ParentPosition;
 	bool m_fWindowPrepared;
 
-	void DrawTextList(HDC hdc,int Mult) const;
+	void DrawTextList(HDC hdc,int MultX,int MultY) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
-	static bool AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *pAllocHeight);
+	static bool AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth);
 	void UpdateLayeredWindow(HDC hdcCompose=NULL,void *pBitsCompose=NULL,int WidthCompose=0,int HeightCompose=0);
 
 	static const LPCTSTR m_pszWindowClass;
@@ -80,6 +81,7 @@ public:
 	bool SetOpacity(int Opacity,int BackOpacity=50);
 	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
+	void SetVerticalAntiAliasing(bool fVertAntiAliasing);
 	void OnParentMove();
 	void Compose(HDC hdc,int Left,int Top);
 private:

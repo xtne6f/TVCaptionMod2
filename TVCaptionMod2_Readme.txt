@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.8 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.9 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,7 +13,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.0.6～ver.0.7からの移行)
+(ver.0.6～ver.0.8からの移行)
 TVCaptionMod2.tvtpを以前のものと置きかえてください。
 (ver.0.5以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
@@ -134,6 +134,13 @@ TextOpacity / BackOpacity
     字幕文/背景枠の透過率
     # [=-1]のときは自動(TSに含まれる情報をそのまま使う)です。0%[=0]～100%[=100]
     # で指定してください。
+VertAntiAliasing
+    フォントの垂直方向アンチエイリアスを行う[=1]かどうか
+    # ClearTypeフォントの横線のジャギーが気になる場合に効果的です。
+    # Method[=2]のときだけ効果があります。
+FontSizeAdjust
+    フォントの文字サイズを調整(単位はパーセント)
+    # たとえば[=90]とすると、通常にたいして線分比で90%の大きさになります。
 StrokeWidth
     字幕文の縁取りの幅
     # [=0]以上のときは画面の大きさにかかわらず指定した幅で縁取ります。
@@ -201,6 +208,10 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.9 (2012-06-29)
+・垂直方向アンチエイリアスを利かせてみた(設定キーVertAntiAliasing)
+・文字サイズを微調整できるようにした(設定キーFontSizeAdjust)
+・レンダリングの細かな最適化
 ver.0.8 (2012-06-13)
 ・字幕付きでクリップボードに画像コピーできるようにした
 ・DRCSを文字列置換できるようにした(設定キーGaijiTableNameの説明を参照)

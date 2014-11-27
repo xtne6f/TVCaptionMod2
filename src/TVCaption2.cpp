@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-06-12
+// 最終更新: 2012-06-28
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,8 +27,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.8; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 5;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.9; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 6;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 enum {
@@ -59,6 +59,8 @@ CTVCaption2::CTVCaption2()
     , m_backColor(RGB(0,0,0))
     , m_textOpacity(0)
     , m_backOpacity(0)
+    , m_fVertAntiAliasing(false)
+    , m_fontSizeAdjust(100)
     , m_strokeWidth(0)
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
@@ -375,6 +377,8 @@ void CTVCaption2::LoadSettings()
     int backColor       = GetPrivateProfileSignedInt(section, TEXT("BackColor"), -1, m_szIniPath);
     m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
     m_backOpacity       = GetPrivateProfileSignedInt(section, TEXT("BackOpacity"), -1, m_szIniPath);
+    m_fVertAntiAliasing = GetPrivateProfileSignedInt(section, TEXT("VertAntiAliasing"), 1, m_szIniPath) != 0;
+    m_fontSizeAdjust    = GetPrivateProfileSignedInt(section, TEXT("FontSizeAdjust"), 100, m_szIniPath);
     m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -5, m_szIniPath);
     m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
     m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
@@ -419,6 +423,8 @@ void CTVCaption2::SaveSettings() const
                            GetRValue(m_backColor)*1000000 + GetGValue(m_backColor)*1000 + GetBValue(m_backColor), m_szIniPath);
     WritePrivateProfileInt(section, TEXT("TextOpacity"), m_textOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_fVertAntiAliasing, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_fontSizeAdjust, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
@@ -672,11 +678,11 @@ void CTVCaption2::DestroyOsds()
 }
 
 static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
-                       LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
+                       int fontSizeAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
 {
     LOGFONT logFont;
-    logFont.lfHeight         = -charHeight;
-    logFont.lfWidth          = charWidth / 2;
+    logFont.lfHeight         = -charHeight * fontSizeAdjust / 100;
+    logFont.lfWidth          = charWidth * fontSizeAdjust / 100 / 2;
     logFont.lfEscapement     = 0;
     logFont.lfOrientation    = 0;
     logFont.lfWeight         = style.bBold ? FW_EXTRABOLD : FW_DONTCARE;
@@ -725,6 +731,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
     osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*nomalHeight,1) : m_strokeWidth*72,
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
+    osd.SetVerticalAntiAliasing(m_fVertAntiAliasing);
     osd.Create(hwndContainer, m_paintingMethod==2 ? true : false);
     return osd;
 }
@@ -922,7 +929,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         // 文字列を描画
         if (pOsdCarry) {
             AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
-                       charScaleW, charScaleH, m_szFaceName, charData);
+                       charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
             if (!fSameStyle) {
                 pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
@@ -934,7 +941,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
                 AddOsdText(&osd, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_szFaceName, charData);
+                           charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
                 if (fSameStyle) {
                     pOsdCarry = &osd;
                 }
@@ -1000,7 +1007,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
                 AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
                            charScaleW / ::lstrlen(pszDrcsStr) + 1,
-                           charScaleH, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
+                           charScaleH, m_fontSizeAdjust, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1009,7 +1016,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             if (pOsdCarry) {
                 TCHAR szGaiji[] = {wcGaiji, 0};
                 AddOsdText(pOsdCarry, szGaiji, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_szGaijiFaceName, charData);
+                           charScaleW, charScaleH, m_fontSizeAdjust, m_szGaijiFaceName, charData);
                 posX += dirW;
             }
         }
