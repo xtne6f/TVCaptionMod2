@@ -36,23 +36,32 @@ class CPseudoOSD
 	HWND m_hwndParent;
 	HWND m_hwndOwner;
 	POINT m_ParentPosition;
+	bool m_fWindowPrepared;
 
 	void Draw(HDC hdc,const RECT &PaintRect) const;
+	static bool AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *pAllocHeight);
 	void UpdateLayeredWindow();
 
 	static const LPCTSTR m_pszWindowClass;
 	static HINSTANCE m_hinst;
+	static int m_RefCount;
+	static HBITMAP m_hbmWork;
+	static HBITMAP m_hbmWorkMono;
+	static void *m_pBits;
+	static void *m_pBitsMono;
 	static CPseudoOSD *GetThis(HWND hwnd);
 	static LRESULT CALLBACK WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,LPARAM lParam);
 
 public:
 	static bool Initialize(HINSTANCE hinst);
 	static bool IsPseudoOSD(HWND hwnd);
+	static void FreeWorkBitmap();
 
 	CPseudoOSD();
 	~CPseudoOSD();
 	bool Create(HWND hwndParent,bool fLayeredWindow=false);
 	bool Destroy();
+	bool PrepareWindow(DWORD Time=0,bool fAnimation=false);
 	bool Show(DWORD Time=0,bool fAnimation=false);
 	bool Hide();
 	bool IsVisible() const;

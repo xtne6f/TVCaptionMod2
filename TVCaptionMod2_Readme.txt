@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.2 (人柱版) + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.3 (人柱版) + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -145,6 +145,8 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.3 (2012-05-20)
+・字幕表示のちらつき防止と効率化
 ver.0.2 (2012-05-17)
 ・画面左上の字幕の位置がずれる場合があったのを修正
 ・映像とウィンドウのアスペクト比がことなる場合の動作を改善

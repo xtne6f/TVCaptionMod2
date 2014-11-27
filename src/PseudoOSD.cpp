@@ -27,6 +27,12 @@ static char THIS_FILE[]=__FILE__;
 
 const LPCTSTR CPseudoOSD::m_pszWindowClass=APP_NAME TEXT(" Pseudo OSD");
 HINSTANCE CPseudoOSD::m_hinst=NULL;
+int CPseudoOSD::m_RefCount=0;
+
+HBITMAP CPseudoOSD::m_hbmWork=NULL;
+HBITMAP CPseudoOSD::m_hbmWorkMono=NULL;
+void *CPseudoOSD::m_pBits=NULL;
+void *CPseudoOSD::m_pBitsMono=NULL;
 
 
 bool CPseudoOSD::Initialize(HINSTANCE hinst)
@@ -80,6 +86,7 @@ CPseudoOSD::CPseudoOSD()
 	, m_fLayeredWindow(false)
 	, m_hwndParent(NULL)
 	, m_hwndOwner(NULL)
+	, m_fWindowPrepared(false)
 {
 	DrawUtil::GetSystemFont(DrawUtil::FONT_DEFAULT,&m_LogFont);
 	m_LogFont.lfHeight=32;
@@ -88,12 +95,16 @@ CPseudoOSD::CPseudoOSD()
 	::SetRect(&m_ImagePaintRect,0,0,0,0);
 	m_ParentPosition.x=0;
 	m_ParentPosition.y=0;
+	m_RefCount++;
 }
 
 
 CPseudoOSD::~CPseudoOSD()
 {
 	Destroy();
+	if (--m_RefCount==0) {
+		FreeWorkBitmap();
+	}
 }
 
 
@@ -148,11 +159,13 @@ bool CPseudoOSD::Destroy()
 }
 
 
-bool CPseudoOSD::Show(DWORD Time,bool fAnimation)
+// ウィンドウの描画作業を完了する
+bool CPseudoOSD::PrepareWindow(DWORD Time,bool fAnimation)
 {
 	if (m_hwnd==NULL)
 		return false;
 
+	m_fWindowPrepared=true;
 	if (m_fLayeredWindow) {
 		if (Time>0) {
 			POINT pt;
@@ -177,13 +190,6 @@ bool CPseudoOSD::Show(DWORD Time,bool fAnimation)
 			m_TimerID&=~TIMER_ID_HIDE;
 		}
 		UpdateLayeredWindow();
-		::ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
-		::UpdateWindow(m_hwnd);
-
-		RECT rc;
-		::GetWindowRect(m_hwndParent,&rc);
-		m_ParentPosition.x=rc.left;
-		m_ParentPosition.y=rc.top;
 		return true;
 	}
 
@@ -202,6 +208,29 @@ bool CPseudoOSD::Show(DWORD Time,bool fAnimation)
 	} else if ((m_TimerID&TIMER_ID_HIDE)!=0) {
 		::KillTimer(m_hwnd,TIMER_ID_HIDE);
 		m_TimerID&=~TIMER_ID_HIDE;
+	}
+	return true;
+}
+
+
+bool CPseudoOSD::Show(DWORD Time,bool fAnimation)
+{
+	if (!m_fWindowPrepared)
+		PrepareWindow(Time,fAnimation);
+	m_fWindowPrepared=false;
+
+	if (m_hwnd==NULL)
+		return false;
+
+	if (m_fLayeredWindow) {
+		::ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
+		::UpdateWindow(m_hwnd);
+
+		RECT rc;
+		::GetWindowRect(m_hwndParent,&rc);
+		m_ParentPosition.x=rc.left;
+		m_ParentPosition.y=rc.top;
+		return true;
 	}
 	if (::IsWindowVisible(m_hwnd)) {
 		::RedrawWindow(m_hwnd,NULL,NULL,RDW_INVALIDATE | RDW_UPDATENOW);
@@ -629,6 +658,68 @@ static void SmoothAlpha(void *pBits,int Width,const RECT &Rect,BYTE EdgeOpacity,
 	}
 }
 
+void CPseudoOSD::FreeWorkBitmap()
+{
+	if (m_hbmWork!=NULL) {
+		::DeleteObject(m_hbmWork);
+		::DeleteObject(m_hbmWorkMono);
+		m_hbmWork=NULL;
+		m_hbmWorkMono=NULL;
+	}
+}
+
+// 作業用ビットマップを確保
+// 全オブジェクトで共用(状況によってはMB単位の確保と解放を秒単位でくり返すことになるため)
+bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *pAllocHeight)
+{
+	if (m_hbmWork!=NULL) {
+		BITMAP bm;
+		if (::GetObject(m_hbmWork,sizeof(BITMAP),&bm) &&
+			bm.bmWidth>=Width && bm.bmHeight>=Height) {
+			*pAllocWidth=bm.bmWidth;
+			*pAllocHeight=bm.bmHeight;
+			return true;
+		}
+		FreeWorkBitmap();
+	}
+	BITMAPINFO bmi;
+	::ZeroMemory(&bmi,sizeof(bmi));
+	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth=Width;
+	bmi.bmiHeader.biHeight=-Height;
+	bmi.bmiHeader.biPlanes=1;
+	bmi.bmiHeader.biBitCount=32;
+	bmi.bmiHeader.biCompression=BI_RGB;
+	m_hbmWork=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&m_pBits,NULL,0);
+	if (m_hbmWork==NULL) {
+		return false;
+	}
+
+	// アルファチャネル描画用の縦横4倍の2値画像
+	struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD bmiColors[2];
+	} bmiMono={0};
+	bmiMono.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+	bmiMono.bmiHeader.biWidth=Width*4;
+	bmiMono.bmiHeader.biHeight=-Height*4;
+	bmiMono.bmiHeader.biPlanes=1;
+	bmiMono.bmiHeader.biBitCount=1;
+	bmiMono.bmiHeader.biCompression=BI_RGB;
+	bmiMono.bmiColors[1].rgbBlue=255;
+	bmiMono.bmiColors[1].rgbGreen=255;
+	bmiMono.bmiColors[1].rgbRed=255;
+	m_hbmWorkMono=::CreateDIBSection(NULL,(BITMAPINFO*)&bmiMono,DIB_RGB_COLORS,&m_pBitsMono,NULL,0);
+	if (m_hbmWorkMono==NULL) {
+		::DeleteObject(m_hbmWork);
+		m_hbmWork=NULL;
+		return false;
+	}
+	*pAllocWidth=Width;
+	*pAllocHeight=Height;
+	return true;
+}
+
 void CPseudoOSD::UpdateLayeredWindow()
 {
 	RECT rc;
@@ -640,54 +731,23 @@ void CPseudoOSD::UpdateLayeredWindow()
 	if (Width<1 || Height<1)
 		return;
 
-	BITMAPINFO bmi;
-	::ZeroMemory(&bmi,sizeof(bmi));
-	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-	bmi.bmiHeader.biWidth=Width;
-	bmi.bmiHeader.biHeight=-Height;
-	bmi.bmiHeader.biPlanes=1;
-	bmi.bmiHeader.biBitCount=32;
-	bmi.bmiHeader.biCompression=BI_RGB;
-	HBITMAP hbmSurface;
-	void *pBits;
-	hbmSurface=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&pBits,NULL,0);
-	if (hbmSurface==NULL)
+	int AllocWidth,AllocHeight;
+	if (!AllocateWorkBitmap(Width,Height,&AllocWidth,&AllocHeight))
 		return;
-
-	// アルファチャネル描画用の縦横4倍の2値画像
-	struct {
-		BITMAPINFOHEADER bmiHeader;
-		RGBQUAD bmiColors[256];
-	} bmiMono={0};
-	bmiMono.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-	bmiMono.bmiHeader.biWidth=Width*4;
-	bmiMono.bmiHeader.biHeight=-Height*4;
-	bmiMono.bmiHeader.biPlanes=1;
-	bmiMono.bmiHeader.biBitCount=1;
-	bmiMono.bmiHeader.biCompression=BI_RGB;
-	bmiMono.bmiColors[1].rgbBlue=255;
-	bmiMono.bmiColors[1].rgbGreen=255;
-	bmiMono.bmiColors[1].rgbRed=255;
-	void *pBitsMono;
-	HBITMAP hbmMono=::CreateDIBSection(NULL,(BITMAPINFO*)&bmiMono,DIB_RGB_COLORS,&pBitsMono,NULL,0);
-	if (hbmMono==NULL) {
-		::DeleteObject(hbmSurface);
-		return;
-	}
 
 	HDC hdc=::GetDC(m_hwnd);
 	HDC hdcSrc=::CreateCompatibleDC(hdc);
-	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcSrc,hbmSurface));
+	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcSrc,m_hbmWork));
 	HDC hdcMono=::CreateCompatibleDC(hdc);
-	HBITMAP hbmMonoOld=static_cast<HBITMAP>(::SelectObject(hdcMono,hbmMono));
+	HBITMAP hbmMonoOld=static_cast<HBITMAP>(::SelectObject(hdcMono,m_hbmWorkMono));
 
 	::SetRect(&rc,0,0,Width,Height);
 	DrawUtil::Fill(hdcSrc,&rc,m_crBackColor);
-	::ZeroMemory(pBitsMono,(Width*4+31)/32*4 * Height*4);
+	::ZeroMemory(m_pBitsMono,(AllocWidth*4+31)/32*4 * Height*4);
 
 	bool fNeedToLay=false;
 	bool fNeedToDilate=false;
-		if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
+	if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
 		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,m_crTextColor);
 		if (m_fHLTop) DrawLine(hdcSrc,1,1,rc.right-1,1,m_crTextColor);
 		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,m_crTextColor);
@@ -742,18 +802,20 @@ void CPseudoOSD::UpdateLayeredWindow()
 		fNeedToLay=true;
 		fNeedToDilate=true;
 	}
+	::GdiFlush();
+
 	// アルファチャネル操作
-	SetBitmapOpacity(pBits,Width,rc,pBitsMono,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100));
+	SetBitmapOpacity(m_pBits,AllocWidth,rc,m_pBitsMono,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100));
 	if (fNeedToLay) {
-		LayBitmapToAlpha(pBits,Width,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
+		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
 	}
 	if (fNeedToDilate) {
 		for (int i=0; i<(m_StrokeWidth+36)/72; i++) {
-			DilateAlpha(pBits,Width,rc,(BYTE)(m_Opacity*255/100));
+			DilateAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100));
 		}
 	}
-	SmoothAlpha(pBits,Width,rc,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
-	PremultiplyBitmap(pBits,Width,rc);
+	SmoothAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
+	PremultiplyBitmap(m_pBits,AllocWidth,rc);
 
 	SIZE sz={Width,Height};
 	POINT ptSrc={0,0};
@@ -762,12 +824,10 @@ void CPseudoOSD::UpdateLayeredWindow()
 
 	::SelectObject(hdcMono,hbmMonoOld);
 	::DeleteDC(hdcMono);
-	::DeleteObject(hbmMono);
 
 	::SelectObject(hdcSrc,hbmOld);
 	::DeleteDC(hdcSrc);
 	::ReleaseDC(m_hwnd,hdc);
-	::DeleteObject(hbmSurface);
 }
 
 

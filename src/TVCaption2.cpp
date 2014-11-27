@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-05-17
+// 最終更新: 2012-05-20
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -26,7 +26,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示(based on TVCaption 2008-12-16 by odaru) (ver.0.2)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.3;based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 2;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -507,6 +507,7 @@ void CTVCaption2::DestroyOsds()
     for (int i = 0; i < OSD_LIST_MAX; ++i) {
         m_osdList[i].Destroy();
     }
+    CPseudoOSD::FreeWorkBitmap();
     m_osdShowCount = 0;
 }
 
@@ -708,7 +709,7 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
                 pOsdCarry->AddText(pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX), charScaleW/2);
             }
             if (!fSameStyle) {
-                pOsdCarry->Show();
+                pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
             }
         }
@@ -722,7 +723,7 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
                     pOsdCarry = &osd;
                 }
                 else {
-                    osd.Show();
+                    osd.PrepareWindow();
                 }
             }
         }
@@ -758,6 +759,10 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
             bmi.bmiColors[3].rgbBlue  = charC.ucB;
             bmi.bmiColors[3].rgbGreen = charC.ucG;
             bmi.bmiColors[3].rgbRed   = charC.ucR;
+            // 残りのテーブルは被らない色にしておく
+            for (int j=4; j<16; ++j) {
+                bmi.bmiColors[j].rgbGreen = 15;
+            }
 
             void *pBits;
             HBITMAP hbm = ::CreateDIBSection(NULL, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
@@ -769,7 +774,7 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
                 RECT rc;
                 ::SetRect(&rc, (int)((dirW-charW)/2*scaleX), (int)((dirH-charH)/2*scaleY), charScaleW, charScaleH);
                 osd.SetImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), &rc);
-                osd.Show();
+                osd.PrepareWindow();
                 posX += dirW;
             }
         }
@@ -784,7 +789,6 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
 {
     // WM_CREATEのとき不定
     CTVCaption2 *pThis = reinterpret_cast<CTVCaption2*>(::GetWindowLongPtr(hwnd, GWLP_USERDATA));
-    HWND hwndContainer = NULL;
 
     switch (uMsg) {
     case WM_CREATE:
@@ -826,6 +830,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         }
         return 0;
     case WM_PROCESS_CAPTION:
+        {
         if (pThis->m_capCount == 0) {
             // 次の字幕文を取得する
             pThis->GetNextCaption(&pThis->m_pCapList, &pThis->m_capCount,
@@ -834,6 +839,8 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         if (!pThis->m_fEnCaptionPts) {
             pThis->m_capCount = 0;
         }
+        HWND hwndContainer = NULL;
+        int lastShowCount = pThis->m_osdShowCount;
         while (pThis->m_capCount != 0) {
             {
                 CBlockLock lock(&pThis->m_streamLock);
@@ -847,6 +854,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
                 // 字幕本文を1つだけ処理
                 if (pThis->m_pCapList->bClear) {
                     pThis->HideOsds();
+                    lastShowCount = 0;
                 }
                 else {
                     if (!hwndContainer) {
@@ -858,6 +866,11 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             --pThis->m_capCount;
             ++pThis->m_pCapList;
         }
+        // ちらつき防止のため表示処理をまとめる
+        while (lastShowCount < pThis->m_osdShowCount) {
+            pThis->m_osdList[lastShowCount++].Show();
+        }
+        }
         return 0;
     case WM_DONE_MOVE:
         for (int i=0; i<pThis->m_osdShowCount; ++i) {
@@ -866,7 +879,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         return 0;
     case WM_DONE_SIZE:
         if (pThis->m_osdShowCount > 0) {
-            hwndContainer = pThis->FindVideoContainer();
+            HWND hwndContainer = pThis->FindVideoContainer();
             RECT rc;
             if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
                 // とりあえずはみ出ないようにする
