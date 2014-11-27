@@ -14,7 +14,8 @@ public:
     bool IsSuperimpose() const { return m_fSuperimpose; }
     bool IsEmpty() const { return m_capCount == 0; }
     void GetDrcsList(const DRCS_PATTERN_DLL **ppList, DWORD *pCount) const { *ppList=m_pDrcsList; *pCount=m_drcsCount; }
-    bool SwitchLang() { return m_fShowLang2 = !m_fShowLang2; }
+    bool IsShowLang2() const { return m_fShowLang2; }
+    void ShowLang2(bool fShowLang2) { m_fShowLang2 = fShowLang2; }
     const LANG_TAG_INFO_DLL *GetLangTag() const {
         return m_fShowLang2 && m_lang2.ucLangTag!=0xFF ? &m_lang2 : m_lang1.ucLangTag!=0xFF ? &m_lang1 : NULL;
     }

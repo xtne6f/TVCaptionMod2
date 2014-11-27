@@ -74,13 +74,6 @@ enum {
     ID_COMMAND_SAVE,
 };
 
-static const TVTest::CommandInfo COMMAND_LIST[] = {
-    {ID_COMMAND_SWITCH_LANG, L"SwitchLang", L"字幕言語切り替え"},
-    {ID_COMMAND_SWITCH_SETTING, L"SwitchSetting", L"表示設定切り替え"},
-    {ID_COMMAND_CAPTURE, L"Capture", L"字幕付き画像のコピー"},
-    {ID_COMMAND_SAVE, L"Save", L"字幕付き画像の保存"},
-};
-
 CTVCaption2::CTVCaption2()
     : m_settingsIndex(0)
     , m_paintingMethod(0)
@@ -178,8 +171,42 @@ bool CTVCaption2::Initialize()
         }
     }
 
+    // アイコンを登録
+    m_pApp->RegisterPluginIconFromResource(g_hinstDLL, MAKEINTRESOURCE(IDB_ICON));
+
     // コマンドを登録
-    m_pApp->RegisterCommand(COMMAND_LIST, _countof(COMMAND_LIST));
+    TVTest::PluginCommandInfo ciList[4];
+    ciList[0].ID = ID_COMMAND_SWITCH_LANG;
+    ciList[0].State = TVTest::PLUGIN_COMMAND_STATE_DISABLED;
+    ciList[0].pszText = L"SwitchLang";
+    ciList[0].pszName = L"字幕言語切り替え";
+    ciList[0].hbmIcon = static_cast<HBITMAP>(::LoadImage(g_hinstDLL, MAKEINTRESOURCE(IDB_SWITCH_LANG), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
+    ciList[1].ID = ID_COMMAND_SWITCH_SETTING;
+    ciList[1].State = TVTest::PLUGIN_COMMAND_STATE_DISABLED;
+    ciList[1].pszText = L"SwitchSetting";
+    ciList[1].pszName = L"表示設定切り替え";
+    ciList[1].hbmIcon = static_cast<HBITMAP>(::LoadImage(g_hinstDLL, MAKEINTRESOURCE(IDB_SWITCH_SETTING), IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
+    ciList[2].ID = ID_COMMAND_CAPTURE;
+    ciList[2].State = 0;
+    ciList[2].pszText = L"Capture";
+    ciList[2].pszName = L"字幕付き画像のコピー";
+    ciList[2].hbmIcon = NULL;
+    ciList[3].ID = ID_COMMAND_SAVE;
+    ciList[3].State = 0;
+    ciList[3].pszText = L"Save";
+    ciList[3].pszName = L"字幕付き画像の保存";
+    ciList[3].hbmIcon = NULL;
+    for (int i = 0; i < _countof(ciList); ++i) {
+        ciList[i].Size = sizeof(ciList[0]);
+        ciList[i].Flags = ciList[i].hbmIcon ? TVTest::PLUGIN_COMMAND_FLAG_ICONIZE : 0;
+        ciList[i].pszDescription = ciList[i].pszName;
+        if (!m_pApp->RegisterPluginCommand(&ciList[i])) {
+            m_pApp->RegisterCommand(ciList[i].ID, ciList[i].pszText, ciList[i].pszName);
+        }
+        if (ciList[i].hbmIcon) {
+            ::DeleteObject(ciList[i].hbmIcon);
+        }
+    }
 
     // イベントコールバック関数を登録
     m_pApp->SetEventCallback(EventCallback, this);
@@ -421,6 +448,8 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
             m_fProfileC = false;
             m_caption1Manager.SetProfileC(m_fProfileC);
             m_caption2Manager.SetProfileC(m_fProfileC);
+            m_caption1Manager.ShowLang2(false);
+            m_caption2Manager.ShowLang2(false);
             m_caption1Manager.SetCaptionDll(&m_captionDll, 0);
             m_caption2Manager.SetCaptionDll(&m_captionDll, 1);
 
@@ -433,6 +462,9 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
                 // コールバックの登録
                 m_pApp->SetStreamCallback(0, StreamCallback, this);
                 m_pApp->SetWindowMessageCallback(WindowMsgCallback, this);
+
+                m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_LANG, 0);
+                m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_SETTING, 0);
                 return true;
             }
             m_captionDll.UnInitialize();
@@ -453,6 +485,9 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
         ::PlaySound(NULL, NULL, 0);
 
         m_captionDll.UnInitialize();
+
+        m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_LANG, TVTest::PLUGIN_COMMAND_STATE_DISABLED);
+        m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_SETTING, TVTest::PLUGIN_COMMAND_STATE_DISABLED);
         return true;
     }
 }
@@ -703,8 +738,10 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             case ID_COMMAND_SWITCH_LANG:
                 ::SendMessage(pThis->m_hwndPainting, WM_RESET_CAPTION, 0, 0);
                 {
-                    pThis->m_caption1Manager.SwitchLang();
-                    bool fShowLang2 = pThis->m_caption2Manager.SwitchLang();
+                    pThis->m_caption1Manager.ShowLang2(!pThis->m_caption1Manager.IsShowLang2());
+                    pThis->m_caption2Manager.ShowLang2(!pThis->m_caption2Manager.IsShowLang2());
+                    bool fShowLang2 = pThis->m_caption1Manager.IsShowLang2();
+                    pThis->m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_LANG, fShowLang2 ? TVTest::PLUGIN_COMMAND_STATE_CHECKED : 0);
                     TCHAR str[32];
                     ::wsprintf(str, TEXT("第%d言語に切り替えました。"), fShowLang2 ? 2 : 1);
                     pThis->m_pApp->AddLog(str);

@@ -3,6 +3,9 @@
 #endif
 
 #define IDD_OPTIONS                             100
+#define IDB_ICON                                110
+#define IDB_SWITCH_LANG                         111
+#define IDB_SWITCH_SETTING                      112
 #define IDC_CHECK_OSD                           1000
 #define IDC_EDIT_CAPFOLDER                      1001
 #define IDC_CAPFOLDER_BROWSE                    1002
