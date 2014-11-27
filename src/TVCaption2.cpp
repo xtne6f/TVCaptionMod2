@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-05-27
+// 最終更新: 2012-06-01
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -7,6 +7,7 @@
 #include "Util.h"
 #include "PseudoOSD.h"
 #include "Caption.h"
+#include "CaptionManager.h"
 #define TVTEST_PLUGIN_CLASS_IMPLEMENT
 #define TVTEST_PLUGIN_VERSION TVTEST_PLUGIN_VERSION_(0,0,11)
 #include "TVTestPlugin.h"
@@ -26,8 +27,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.5; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 3;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.6; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 4;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 enum {
@@ -49,7 +50,6 @@ CTVCaption2::CTVCaption2()
     : m_fTVH264(false)
     , m_settingsIndex(0)
     , m_paintingMethod(0)
-    , m_delayTime(0)
     , m_fEnTextColor(false)
     , m_fEnBackColor(false)
     , m_textColor(RGB(0,0,0))
@@ -62,31 +62,15 @@ CTVCaption2::CTVCaption2()
     , m_fCentering(false)
     , m_fFixRatio(false)
     , m_hwndPainting(NULL)
-    , m_osdShowCount(0)
+    , m_osdUsedCount(0)
     , m_fNeedtoShow(false)
-    , m_fShowLang2(false)
-    , m_fEnCaptionPts(false)
-    , m_captionPts(0)
-    , m_pCapList(NULL)
-    , m_pDrcsList(NULL)
-    , m_capCount(0)
-    , m_drcsCount(0)
     , m_pcr(0)
     , m_procCapTick(0)
+    , m_fResetPat(false)
+    , m_videoPid(-1)
     , m_pcrPid(-1)
-    , m_pcrPidsLen(0)
-    , m_packetQueueFront(0)
-    , m_packetQueueRear(0)
-    , m_captionPid(-1)
-    , m_hCaptionDll(NULL)
-    , m_pfnUnInitializeCP(NULL)
-    , m_pfnAddTSPacketCP(NULL)
-    , m_pfnClearCP(NULL)
-    , m_pfnGetTagInfoCP(NULL)
-    , m_pfnGetCaptionDataCPW(NULL)
-    , m_pfnDRCSPatternCP(NULL)
-    , m_pfnSetGaijiCP(NULL)
-    , m_pfnGetGaijiCP(NULL)
+    , m_caption1Pid(-1)
+    , m_caption2Pid(-1)
 {
     m_szIniPath[0] = 0;
     m_szCaptionDllPath[0] = 0;
@@ -94,8 +78,19 @@ CTVCaption2::CTVCaption2()
     m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
     m_szRomSoundList[0] = 0;
-    m_lang1.ucLangTag = 0xFF;
-    m_lang2.ucLangTag = 0xFF;
+
+    for (int index = 0; index < STREAM_MAX; ++index) {
+        m_showFlags[index] = 0;
+        m_delayTime[index] = 0;
+        m_osdUsingCount[index] = 0;
+        m_osdShowCount[index] = 0;
+    }
+    ::memset(&m_pat, 0, sizeof(m_pat));
+}
+
+CTVCaption2::~CTVCaption2()
+{
+    reset_pat(&m_pat);
 }
 
 
@@ -123,7 +118,7 @@ bool CTVCaption2::Initialize()
 
     if (!CPseudoOSD::Initialize(g_hinstDLL)) return false;
 
-    if (!::GetModuleFileName(g_hinstDLL, m_szIniPath, _countof(m_szIniPath)) ||
+    if (!GetLongModuleFileName(g_hinstDLL, m_szIniPath, _countof(m_szIniPath)) ||
         !::PathRenameExtension(m_szIniPath, TEXT(".ini"))) return false;
 
     TVTest::HostInfo hostInfo;
@@ -201,57 +196,22 @@ HWND CTVCaption2::FindVideoContainer()
 }
 
 
-// 字幕PIDを取得する(無い場合は-1)
+// 映像PIDを取得する(無い場合は-1)
 // プラグインAPIが内部でストリームをロックするので、デッドロックを完成させないように注意
-int CTVCaption2::GetSubtitlePid()
+int CTVCaption2::GetVideoPid()
 {
     int index = m_pApp->GetService();
     TVTest::ServiceInfo si;
-    if (index >= 0 && m_pApp->GetServiceInfo(index, &si) && si.SubtitlePID != 0) {
-        return si.SubtitlePID;
+    if (index >= 0 && m_pApp->GetServiceInfo(index, &si) && si.VideoPID != 0) {
+        return si.VideoPID;
     }
     return -1;
 }
 
 
-bool CTVCaption2::InitializeCaptionDll()
-{
-    if (m_hCaptionDll) return true;
-
-    m_hCaptionDll = ::LoadLibrary(m_szCaptionDllPath);
-    if (!m_hCaptionDll) return false;
-
-    InitializeCPW *pfnInitializeCPW = reinterpret_cast<InitializeCPW*>(::GetProcAddress(m_hCaptionDll, "InitializeCPW"));
-    m_pfnUnInitializeCP = reinterpret_cast<UnInitializeCP*>(::GetProcAddress(m_hCaptionDll, "UnInitializeCP"));
-    m_pfnAddTSPacketCP = reinterpret_cast<AddTSPacketCP*>(::GetProcAddress(m_hCaptionDll, "AddTSPacketCP"));
-    m_pfnClearCP = reinterpret_cast<ClearCP*>(::GetProcAddress(m_hCaptionDll, "ClearCP"));
-    m_pfnGetTagInfoCP = reinterpret_cast<GetTagInfoCP*>(::GetProcAddress(m_hCaptionDll, "GetTagInfoCP"));
-    m_pfnGetCaptionDataCPW = reinterpret_cast<GetCaptionDataCPW*>(::GetProcAddress(m_hCaptionDll, "GetCaptionDataCPW"));
-    m_pfnDRCSPatternCP = reinterpret_cast<GetDRCSPatternCP*>(::GetProcAddress(m_hCaptionDll, "GetDRCSPatternCP"));
-    m_pfnSetGaijiCP = reinterpret_cast<SetGaijiCP*>(::GetProcAddress(m_hCaptionDll, "SetGaijiCP"));
-    m_pfnGetGaijiCP = reinterpret_cast<GetGaijiCP*>(::GetProcAddress(m_hCaptionDll, "GetGaijiCP"));
-    if (pfnInitializeCPW &&
-        m_pfnUnInitializeCP &&
-        m_pfnAddTSPacketCP &&
-        m_pfnClearCP &&
-        m_pfnGetTagInfoCP &&
-        m_pfnGetCaptionDataCPW &&
-        m_pfnDRCSPatternCP &&
-        m_pfnSetGaijiCP &&
-        m_pfnGetGaijiCP &&
-        pfnInitializeCPW() == TRUE)
-    {
-        return true;
-    }
-    ::FreeLibrary(m_hCaptionDll);
-    m_hCaptionDll = NULL;
-    return false;
-}
-
-
 bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
 {
-    if (!m_hCaptionDll || !tableName[0]) return false;
+    if (!tableName[0]) return false;
 
     bool fRet = false;
     TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
@@ -260,14 +220,14 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
     if (!::lstrcmpi(tableName, TEXT("!std"))) {
         // DLLデフォルトにリセット
         DWORD tableSize;
-        fRet = m_pfnSetGaijiCP(0, NULL, &tableSize) == TRUE;
+        fRet = m_captionDll.SetGaiji(0, NULL, &tableSize);
     }
     else if (!::lstrcmpi(tableName, TEXT("!typebank"))) {
         DWORD tableSize = _countof(GaijiTable_typebank);
-        fRet = m_pfnSetGaijiCP(1, GaijiTable_typebank, &tableSize) == TRUE;
+        fRet = m_captionDll.SetGaiji(1, GaijiTable_typebank, &tableSize);
     }
     // ファイルから外字テーブル設定
-    else if (::GetModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
+    else if (GetLongModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
         ::PathRemoveExtension(gaijiPath);
         ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), tableName);
         HANDLE hFile = ::CreateFile(gaijiPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -278,7 +238,7 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
                 readBytes == sizeof(gaijiTable) && gaijiTable[0] == L'\xFEFF')
             {
                 DWORD tableSize = _countof(gaijiTable) - 1;
-                fRet = m_pfnSetGaijiCP(1, gaijiTable + 1, &tableSize) == TRUE;
+                fRet = m_captionDll.SetGaiji(1, gaijiTable + 1, &tableSize);
             }
             ::CloseHandle(hFile);
         }
@@ -287,7 +247,7 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
     if (fRet && pCustomTable) {
         // 外字をプラグインで置換する場合
         DWORD tableSize = GAIJI_TABLE_SIZE;
-        fRet = m_pfnGetGaijiCP(1, pCustomTable, &tableSize) == TRUE;
+        fRet = m_captionDll.GetGaiji(1, pCustomTable, &tableSize);
         if (fRet) {
             // U+E000から線形マップ
             WCHAR gaijiTable[GAIJI_TABLE_SIZE];
@@ -296,7 +256,7 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
                 gaijiTable[i] = wc;
             }
             tableSize = _countof(gaijiTable);
-            fRet = m_pfnSetGaijiCP(1, gaijiTable, &tableSize) == TRUE;
+            fRet = m_captionDll.SetGaiji(1, gaijiTable, &tableSize);
         }
     }
     return fRet;
@@ -313,25 +273,26 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
             // デフォルトの設定キーを出力するため
             SaveSettings();
         }
-        // 字幕描画処理ウィンドウ作成
-        m_hwndPainting = ::CreateWindow(TV_CAPTION2_WINDOW_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, g_hinstDLL, this);
-        if (m_hwndPainting) {
-            if (InitializeCaptionDll()) {
-                if (!ConfigureGaijiTable(m_szGaijiTableName, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
-                    m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
-                }
-                m_captionPid = GetSubtitlePid();
-                m_packetQueueFront = m_packetQueueRear;
-                m_pcrPid = -1;
-                m_pcrPidsLen = 0;
+        if (m_captionDll.Initialize(m_szCaptionDllPath)) {
+            if (!ConfigureGaijiTable(m_szGaijiTableName, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
+                m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
+                ::memset(m_customGaijiTable, 0, sizeof(m_customGaijiTable));
+            }
+            m_caption1Manager.SetCaptionDll(&m_captionDll, 0, m_fTVH264);
+            m_caption2Manager.SetCaptionDll(&m_captionDll, 1, m_fTVH264);
+
+            // 字幕描画処理ウィンドウ作成
+            m_hwndPainting = ::CreateWindow(TV_CAPTION2_WINDOW_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, g_hinstDLL, this);
+            if (m_hwndPainting) {
+                m_videoPid = GetVideoPid();
+                m_fResetPat = true;
 
                 // コールバックの登録
                 m_pApp->SetStreamCallback(0, StreamCallback, this);
                 m_pApp->SetWindowMessageCallback(WindowMsgCallback, this);
                 return true;
             }
-            ::DestroyWindow(m_hwndPainting);
-            m_hwndPainting = NULL;
+            m_captionDll.UnInitialize();
         }
         return false;
     }
@@ -340,11 +301,6 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
         m_pApp->SetWindowMessageCallback(NULL, NULL);
         m_pApp->SetStreamCallback(TVTest::STREAM_CALLBACK_REMOVE, StreamCallback);
 
-        if (m_hCaptionDll) {
-            m_pfnUnInitializeCP();
-            ::FreeLibrary(m_hCaptionDll);
-            m_hCaptionDll = NULL;
-        }
         // 字幕描画ウィンドウの破棄
         if (m_hwndPainting) {
             ::DestroyWindow(m_hwndPainting);
@@ -352,6 +308,8 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
         }
         // 内蔵音再生停止
         ::PlaySound(NULL, NULL, 0);
+
+        m_captionDll.UnInitialize();
         return true;
     }
 }
@@ -375,7 +333,10 @@ void CTVCaption2::LoadSettings()
     ::GetPrivateProfileString(section, TEXT("GaijiFaceName"), TEXT(""), m_szGaijiFaceName, _countof(m_szGaijiFaceName), m_szIniPath);
     ::GetPrivateProfileString(section, TEXT("GaijiTableName"), TEXT("!std"), m_szGaijiTableName, _countof(m_szGaijiTableName), m_szIniPath);
     m_paintingMethod    = GetPrivateProfileSignedInt(section, TEXT("Method"), 2, m_szIniPath);
-    m_delayTime         = GetPrivateProfileSignedInt(section, TEXT("DelayTime"), 450, m_szIniPath);
+    m_showFlags[STREAM_CAPTION]     = GetPrivateProfileSignedInt(section, TEXT("ShowFlags"), 65535, m_szIniPath);
+    m_showFlags[STREAM_SUPERIMPOSE] = GetPrivateProfileSignedInt(section, TEXT("ShowFlagsSuper"), 65535, m_szIniPath);
+    m_delayTime[STREAM_CAPTION]     = GetPrivateProfileSignedInt(section, TEXT("DelayTime"), 450, m_szIniPath);
+    m_delayTime[STREAM_SUPERIMPOSE] = GetPrivateProfileSignedInt(section, TEXT("DelayTimeSuper"), 0, m_szIniPath);
     int textColor       = GetPrivateProfileSignedInt(section, TEXT("TextColor"), -1, m_szIniPath);
     int backColor       = GetPrivateProfileSignedInt(section, TEXT("BackColor"), -1, m_szIniPath);
     m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
@@ -413,7 +374,10 @@ void CTVCaption2::SaveSettings() const
     ::WritePrivateProfileString(section, TEXT("GaijiFaceName"), m_szGaijiFaceName, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("GaijiTableName"), m_szGaijiTableName, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Method"), m_paintingMethod, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("DelayTime"), m_delayTime, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("ShowFlags"), m_showFlags[STREAM_CAPTION], m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("ShowFlagsSuper"), m_showFlags[STREAM_SUPERIMPOSE], m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("DelayTime"), m_delayTime[STREAM_CAPTION], m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("DelayTimeSuper"), m_delayTime[STREAM_SUPERIMPOSE], m_szIniPath);
     WritePrivateProfileInt(section, TEXT("TextColor"), !m_fEnTextColor ? -1 :
                            GetRValue(m_textColor)*1000000 + GetGValue(m_textColor)*1000 + GetBValue(m_textColor), m_szIniPath);
     WritePrivateProfileInt(section, TEXT("BackColor"), !m_fEnBackColor ? -1 :
@@ -463,7 +427,7 @@ static bool PlayRomSound(LPCTSTR list, int index)
         // 定義済みのサウンド
         return ::PlaySound(id+1, NULL, SND_ASYNC|SND_NODEFAULT|SND_NOSTOP|SND_ALIAS) != FALSE;
     }
-    else if (id[0] && ::GetModuleFileName(g_hinstDLL, path, MAX_PATH)) {
+    else if (id[0] && GetLongModuleFileName(g_hinstDLL, path, MAX_PATH)) {
         ::PathRemoveExtension(path);
         ::wsprintf(path + ::lstrlen(path), TEXT("\\%s.wav"), id);
         return ::PlaySound(path, NULL, SND_ASYNC|SND_NODEFAULT|SND_NOSTOP|SND_FILENAME) != FALSE;
@@ -487,13 +451,20 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
         if (pThis->m_pApp->IsPluginEnabled()) {
             // オーナーが変わるので破棄する必要がある
             pThis->DestroyOsds();
+            HWND hwndContainer = pThis->FindVideoContainer();
+            if (hwndContainer) {
+                for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
+                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod == 2);
+                }
+            }
         }
         break;
     case TVTest::EVENT_SERVICEUPDATE:
         // サービスの構成が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
             ::SendMessage(pThis->m_hwndPainting, WM_RESET_CAPTION, 0, 0);
-            pThis->m_captionPid = pThis->GetSubtitlePid();
+            pThis->m_videoPid = pThis->GetVideoPid();
+            pThis->m_fResetPat = true;
         }
         break;
     case TVTest::EVENT_PREVIEWCHANGE:
@@ -503,7 +474,8 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                 pThis->m_fNeedtoShow = true;
             }
             else {
-                pThis->HideOsds();
+                pThis->HideOsds(STREAM_CAPTION);
+                pThis->HideOsds(STREAM_SUPERIMPOSE);
                 pThis->m_fNeedtoShow = false;
             }
         }
@@ -514,15 +486,23 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             switch (static_cast<int>(lParam1)) {
             case ID_COMMAND_SWITCH_LANG:
                 ::SendMessage(pThis->m_hwndPainting, WM_RESET_CAPTION, 0, 0);
-                pThis->m_fShowLang2 = !pThis->m_fShowLang2;
+                {
+                    pThis->m_caption1Manager.SwitchLang();
+                    bool fShowLang2 = pThis->m_caption2Manager.SwitchLang();
+                    TCHAR str[32];
+                    ::wsprintf(str, TEXT("第%d言語に切り替えました。"), fShowLang2 ? 2 : 1);
+                    pThis->m_pApp->AddLog(str);
+                }
                 break;
             case ID_COMMAND_SWITCH_SETTING:
-                pThis->HideOsds();
+                pThis->HideOsds(STREAM_CAPTION);
+                pThis->HideOsds(STREAM_SUPERIMPOSE);
                 pThis->SwitchSettings();
                 if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName,
                                                 pThis->m_szGaijiFaceName[0]?pThis->m_customGaijiTable:NULL))
                 {
                     pThis->m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
+                    ::memset(pThis->m_customGaijiTable, 0, sizeof(pThis->m_customGaijiTable));
                 }
                 ::PlaySound(NULL, NULL, 0);
                 PlayRomSound(pThis->m_szRomSoundList, 16);
@@ -556,12 +536,12 @@ BOOL CALLBACK CTVCaption2::WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam
 }
 
 
-void CTVCaption2::HideOsds()
+void CTVCaption2::HideOsds(STREAM_INDEX index)
 {
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
-    while (m_osdShowCount > 0) {
-        m_osdList[--m_osdShowCount].Hide();
+    while (m_osdShowCount[index] > 0) {
+        m_pOsdUsingList[index][--m_osdShowCount[index]]->Hide();
     }
 }
 
@@ -573,7 +553,11 @@ void CTVCaption2::DestroyOsds()
         m_osdList[i].Destroy();
     }
     CPseudoOSD::FreeWorkBitmap();
-    m_osdShowCount = 0;
+    m_osdUsedCount = 0;
+    m_osdUsingCount[STREAM_CAPTION] = 0;
+    m_osdUsingCount[STREAM_SUPERIMPOSE] = 0;
+    m_osdShowCount[STREAM_CAPTION] = 0;
+    m_osdShowCount[STREAM_SUPERIMPOSE] = 0;
 }
 
 static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
@@ -598,11 +582,25 @@ static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth,
 }
 
 // 利用可能なOSDを1つだけ用意する
-CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style)
+CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style)
 {
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
-    CPseudoOSD &osd = m_osdList[m_osdShowCount % OSD_LIST_MAX];
+    CPseudoOSD *pOsd;
+    if (m_osdShowCount[index] >= OSD_LIST_MAX) {
+        pOsd = m_pOsdUsingList[index][0];
+    }
+    else if (m_osdShowCount[index] < m_osdUsingCount[index]) {
+        pOsd = m_pOsdUsingList[index][m_osdShowCount[index]++];
+    }
+    else if (m_osdUsedCount >= OSD_LIST_MAX) {
+        pOsd = &m_osdList[0];
+    }
+    else {
+        m_pOsdUsingList[index][m_osdUsingCount[index]++] = &m_osdList[m_osdUsedCount++];
+        pOsd = m_pOsdUsingList[index][m_osdShowCount[index]++];
+    }
+    CPseudoOSD &osd = *pOsd;
     osd.ClearText();
     osd.SetImage(NULL, 0);
     osd.SetTextColor(m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB),
@@ -617,7 +615,6 @@ CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomal
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
     osd.Create(hwndContainer, m_paintingMethod==2 ? true : false);
-    if (m_osdShowCount < OSD_LIST_MAX) ++m_osdShowCount;
     return osd;
 }
 
@@ -657,7 +654,7 @@ static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const 
 
 
 // 字幕本文を1行だけ処理する
-void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer)
+void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer)
 {
 #ifdef DDEBUG_OUT
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): "));
@@ -804,7 +801,7 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
         }
         else {
             if (fSameStyle || pszShow[0]) {
-                CPseudoOSD &osd = CreateOsd(hwndContainer, charScaleH, charNormalScaleH, charData);
+                CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
                 AddOsdText(&osd, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
@@ -858,7 +855,7 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
             HBITMAP hbm = ::CreateDIBSection(NULL, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
             if (hbm) {
                 ::SetDIBits(NULL, hbm, 0, bmi.bmiHeader.biHeight, pDrcs->pbBitmap, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
-                CPseudoOSD &osd = CreateOsd(hwndContainer, charScaleH, charNormalScaleH, charData);
+                CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
                 RECT rc;
@@ -900,12 +897,13 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             pThis = reinterpret_cast<CTVCaption2*>(pcs->lpCreateParams);
             ::SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pThis));
 
-            pThis->m_fEnCaptionPts = false;
-            pThis->m_capCount = 0;
-            pThis->m_lang1.ucLangTag = 0xFF;
-            pThis->m_lang2.ucLangTag = 0xFF;
+            HWND hwndContainer = pThis->FindVideoContainer();
+            if (hwndContainer) {
+                for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
+                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod == 2);
+                }
+            }
             pThis->m_fNeedtoShow = true;
-            pThis->m_fShowLang2 = false;
         }
         return 0;
     case WM_DESTROY:
@@ -924,167 +922,109 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         }
         break;
     case WM_RESET_CAPTION:
+        pThis->HideOsds(STREAM_CAPTION);
+        pThis->HideOsds(STREAM_SUPERIMPOSE);
         {
-            pThis->HideOsds();
-            pThis->m_fEnCaptionPts = false;
-            pThis->m_capCount = 0;
-            pThis->m_pfnClearCP();
-            pThis->m_lang1.ucLangTag = 0xFF;
-            pThis->m_lang2.ucLangTag = 0xFF;
-            if (pThis->m_fTVH264) {
-                // 既定の字幕管理データを取得済みにする
-                LANG_TAG_INFO_DLL *pLangList;
-                if (pThis->m_pfnGetTagInfoCP(&pLangList, NULL) == TRUE) {
-                    pThis->m_lang1 = pLangList[0];
-                }
-            }
             CBlockLock lock(&pThis->m_streamLock);
-            pThis->m_packetQueueFront = pThis->m_packetQueueRear;
+            pThis->m_caption1Manager.Clear();
+            pThis->m_caption2Manager.Clear();
         }
         return 0;
     case WM_PROCESS_CAPTION:
-        {
-        if (pThis->m_capCount == 0) {
-            // 次の字幕文を取得する
-            pThis->GetNextCaption(&pThis->m_pCapList, &pThis->m_capCount,
-                                  &pThis->m_pDrcsList, &pThis->m_drcsCount);
-        }
-        if (!pThis->m_fEnCaptionPts) {
-            pThis->m_capCount = 0;
-        }
-        HWND hwndContainer = NULL;
-        int lastShowCount = pThis->m_osdShowCount;
-        while (pThis->m_capCount != 0) {
-            {
-                CBlockLock lock(&pThis->m_streamLock);
-                // 次の字幕本文の表示タイミングに達したか
-                DWORD waitTime = static_cast<DWORD>((min(max(pThis->m_delayTime,0),5000) + pThis->m_pCapList->dwWaitTime) * PCR_PER_MSEC);
-                if (!MSB(pThis->m_captionPts + waitTime - pThis->m_pcr)) {
-                    break;
-                }
-            }
-            if (pThis->m_fNeedtoShow) {
-                // 字幕本文を1つだけ処理
-                if (pThis->m_pCapList->bClear) {
-                    pThis->HideOsds();
-                    lastShowCount = 0;
-                }
-                else {
-                    if (!hwndContainer) {
-                        hwndContainer = pThis->FindVideoContainer();
-                    }
-                    pThis->ShowCaptionData(*pThis->m_pCapList, pThis->m_pDrcsList, pThis->m_drcsCount, hwndContainer);
-                }
-            }
-            --pThis->m_capCount;
-            ++pThis->m_pCapList;
-        }
-        // ちらつき防止のため表示処理をまとめる
-        while (lastShowCount < pThis->m_osdShowCount) {
-            pThis->m_osdList[lastShowCount++].Show();
-        }
-        }
+        pThis->ProcessCaption(&pThis->m_caption1Manager);
+        pThis->ProcessCaption(&pThis->m_caption2Manager);
         return 0;
     case WM_DONE_MOVE:
-        for (int i=0; i<pThis->m_osdShowCount; ++i) {
-            pThis->m_osdList[i].OnParentMove();
+        for (int i = 0; i < pThis->m_osdShowCount[STREAM_CAPTION]; ++i) {
+            pThis->m_pOsdUsingList[STREAM_CAPTION][i]->OnParentMove();
+        }
+        for (int i = 0; i < pThis->m_osdShowCount[STREAM_SUPERIMPOSE]; ++i) {
+            pThis->m_pOsdUsingList[STREAM_SUPERIMPOSE][i]->OnParentMove();
         }
         return 0;
     case WM_DONE_SIZE:
-        if (pThis->m_osdShowCount > 0) {
-            HWND hwndContainer = pThis->FindVideoContainer();
-            RECT rc;
-            if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
-                // とりあえずはみ出ないようにする
-                for (int i=0; i<pThis->m_osdShowCount; ++i) {
-                    int left, top, width, height;
-                    pThis->m_osdList[i].GetPosition(&left, &top, &width, &height);
-                    int adjLeft = left+width>=rc.right ? rc.right-width : left;
-                    int adjTop = top+height>=rc.bottom ? rc.bottom-height : top;
-                    if (adjLeft < 0 || adjTop < 0) {
-                        pThis->m_osdList[i].Hide();
-                    }
-                    else if (left != adjLeft || top != adjTop) {
-                        pThis->m_osdList[i].SetPosition(adjLeft, adjTop, height);
-                    }
-                }
-            }
-        }
+        pThis->OnSize(STREAM_CAPTION);
+        pThis->OnSize(STREAM_SUPERIMPOSE);
         return 0;
     }
     return ::DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
 
-// キューにある字幕ストリームから次の字幕文を取得する
-// キューが空になるか字幕文を得る(*pCapCount!=0)と返る
-void CTVCaption2::GetNextCaption(CAPTION_DATA_DLL **ppCapList, DWORD *pCapCount, DRCS_PATTERN_DLL **ppDrcsList, DWORD *pDrcsCount)
+void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
 {
-    int rear;
+    STREAM_INDEX index;
+    DWORD pcr;
     {
         CBlockLock lock(&m_streamLock);
-        rear = m_packetQueueRear;
-    }
-    *pCapCount = *pDrcsCount = 0;
-
-    while (m_packetQueueFront != rear) {
-        BYTE *pPacket = m_packetQueue[m_packetQueueFront];
-        m_packetQueueFront = (m_packetQueueFront+1) % PACKET_QUEUE_SIZE;
-
-        TS_HEADER header;
-        extract_ts_header(&header, pPacket);
-
-        // 字幕PTSを取得
-        if (header.payload_unit_start_indicator &&
-            (header.adaptation_field_control&1)/*1,3*/)
-        {
-            BYTE *pPayload = pPacket + 4;
-            if (header.adaptation_field_control == 3) {
-                // アダプテーションに続けてペイロードがある
-                ADAPTATION_FIELD adapt;
-                extract_adaptation_field(&adapt, pPayload);
-                pPayload = adapt.adaptation_field_length >= 0 ? pPayload + adapt.adaptation_field_length + 1 : NULL;
+        if (pCaptionManager->IsEmpty()) {
+            // 次の字幕文を取得する
+            bool fDebug = pCaptionManager->Analyze(m_pcr);
+#ifdef _DEBUG
+            if (pCaptionManager->IsSuperimpose() && (fDebug || !pCaptionManager->IsEmpty())) {
+                PlayRomSound(m_szRomSoundList, 16);
             }
-            if (pPayload) {
-                int payloadSize = 188 - static_cast<int>(pPayload - pPacket);
-                PES_HEADER pesHeader;
-                extract_pes_header(&pesHeader, pPayload, payloadSize);
-                if (pesHeader.packet_start_code_prefix && pesHeader.pts_dts_flags >= 2) {
-                    m_captionPts = (DWORD)pesHeader.pts_45khz;
-                    m_fEnCaptionPts = true;
-                }
+#endif
+            if (pCaptionManager->IsEmpty()) {
+                return;
             }
+            // 字幕か文字スーパーのどちらかが取得できた
         }
+        index = pCaptionManager->IsSuperimpose() ? STREAM_SUPERIMPOSE : STREAM_CAPTION;
+        pcr = m_pcr - static_cast<DWORD>(min(max(m_delayTime[index],0),5000) * PCR_PER_MSEC);
+    }
 
-        DWORD ret = m_pfnAddTSPacketCP(pPacket);
-        if (!m_fShowLang2 && ret==CP_NO_ERR_CAPTION_1 || m_fShowLang2 && ret==CP_NO_ERR_CAPTION_1+1) {
-            // 字幕文データ
-            if (m_pfnGetCaptionDataCPW(0, ppCapList, pCapCount) != TRUE) {
-                *pCapCount = 0;
+    HWND hwndContainer = NULL;
+    int lastShowCount = m_osdShowCount[index];
+    for (;;) {
+        // 表示タイミングに達した字幕本文を1つだけ取得する
+        const CAPTION_DATA_DLL *pCaption = pCaptionManager->PopCaption(pcr);
+        if (!pCaption) {
+            break;
+        }
+        const LANG_TAG_INFO_DLL *pLangTag = pCaptionManager->GetLangTag();
+        if (m_fNeedtoShow && pLangTag && ((m_showFlags[index]>>pLangTag->ucDMF)&1)) {
+            if (pCaption->bClear) {
+                HideOsds(index);
+                lastShowCount = 0;
             }
             else {
-                // DRCS図形データ(あれば)
-                if (m_pfnDRCSPatternCP(0, ppDrcsList, pDrcsCount) != TRUE) {
-                    *pDrcsCount = 0;
+                if (!hwndContainer) {
+                    hwndContainer = FindVideoContainer();
                 }
-                break;
+                const DRCS_PATTERN_DLL *pDrcsList;
+                DWORD drcsCount;
+                pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
+                ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, hwndContainer);
             }
         }
-        else if (ret == CP_CHANGE_VERSION) {
-            // 字幕管理データ(未使用)
-            m_lang1.ucLangTag = 0xFF;
-            m_lang2.ucLangTag = 0xFF;
-            LANG_TAG_INFO_DLL *pLangList;
-            DWORD langCount;
-            if (m_pfnGetTagInfoCP(&pLangList, &langCount) == TRUE) {
-                if (langCount >= 1) m_lang1 = pLangList[0];
-                if (langCount >= 2) m_lang2 = pLangList[1];
+    }
+    // ちらつき防止のため表示処理をまとめる
+    while (lastShowCount < m_osdShowCount[index]) {
+        m_pOsdUsingList[index][lastShowCount++]->Show();
+    }
+}
+
+
+void CTVCaption2::OnSize(STREAM_INDEX index)
+{
+    if (m_osdShowCount[index] > 0) {
+        HWND hwndContainer = FindVideoContainer();
+        RECT rc;
+        if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
+            // とりあえずはみ出ないようにする
+            for (int i = 0; i < m_osdShowCount[index]; ++i) {
+                int left, top, width, height;
+                m_pOsdUsingList[index][i]->GetPosition(&left, &top, &width, &height);
+                int adjLeft = left+width>=rc.right ? rc.right-width : left;
+                int adjTop = top+height>=rc.bottom ? rc.bottom-height : top;
+                if (adjLeft < 0 || adjTop < 0) {
+                    m_pOsdUsingList[index][i]->Hide();
+                }
+                else if (left != adjLeft || top != adjTop) {
+                    m_pOsdUsingList[index][i]->SetPosition(adjLeft, adjTop, height);
+                }
             }
-        }
-        else if (ret != TRUE && ret != CP_ERR_NEED_NEXT_PACKET && ret != CP_NO_ERR_TAG_INFO &&
-                 (ret < CP_NO_ERR_CAPTION_1 || CP_NO_ERR_CAPTION_8 < ret))
-        {
-            DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): Error packet!\n"));
         }
     }
 }
@@ -1093,26 +1033,25 @@ void CTVCaption2::GetNextCaption(CAPTION_DATA_DLL **ppCapList, DWORD *pCapCount,
 // ストリームコールバック(別スレッド)
 BOOL CALLBACK CTVCaption2::StreamCallback(BYTE *pData, void *pClientData)
 {
-    CTVCaption2 *pThis = static_cast<CTVCaption2*>(pClientData);
-    TS_HEADER header;
-    extract_ts_header(&header, pData);
-
-    // Early reject
-    if ((header.adaptation_field_control&2)/*2,3*/ ||
-        header.pid == pThis->m_captionPid)
-    {
-        pThis->ProcessPacket(pData);
-    }
+    static_cast<CTVCaption2*>(pClientData)->ProcessPacket(pData);
     return TRUE;
 }
 
 
 void CTVCaption2::ProcessPacket(BYTE *pPacket)
 {
+    if (m_fResetPat) {
+        reset_pat(&m_pat);
+        m_pcrPid = -1;
+        m_caption1Pid = -1;
+        m_caption2Pid = -1;
+        m_fResetPat = false;
+    }
+
     TS_HEADER header;
     extract_ts_header(&header, pPacket);
 
-    // PCRの取得手順はTvtPlayのCTsSenderと同じ
+    // PCRを取得
     if ((header.adaptation_field_control&2)/*2,3*/ &&
         !header.transport_error_indicator)
     {
@@ -1121,38 +1060,9 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
         extract_adaptation_field(&adapt, pPacket + 4);
 
         if (adapt.pcr_flag) {
-            CBlockLock lock(&m_streamLock);
-
-            // 参照PIDが決まっていないとき、最初に3回PCRが出現したPIDを参照PIDとする
-            // 参照PIDのPCRが現れることなく5回別のPCRが出現すれば、参照PIDを変更する
-            if (header.pid != m_pcrPid) {
-                bool fFound = false;
-                for (int i = 0; i < m_pcrPidsLen; i++) {
-                    if (m_pcrPids[i] == header.pid) {
-                        ++m_pcrPidCounts[i];
-                        if (m_pcrPid < 0 && m_pcrPidCounts[i] >= 3) {
-                            m_pcrPid = header.pid;
-                            m_pcr = (DWORD)adapt.pcr_45khz;
-                        }
-                        else if (m_pcrPidCounts[i] >= 5) {
-                            m_pcrPid = header.pid;
-                            m_pcr = (DWORD)adapt.pcr_45khz;
-                            DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): PCR-PID changed!\n"));
-                            ::SendNotifyMessage(m_hwndPainting, WM_RESET_CAPTION, 0, 0);
-                        }
-                        fFound = true;
-                        break;
-                    }
-                }
-                if (!fFound && m_pcrPidsLen < PCR_PIDS_MAX) {
-                    m_pcrPids[m_pcrPidsLen] = header.pid;
-                    m_pcrPidCounts[m_pcrPidsLen] = 1;
-                    m_pcrPidsLen++;
-                }
-            }
             // 参照PIDのときはPCRを取得する
             if (header.pid == m_pcrPid) {
-                m_pcrPidsLen = 0;
+                CBlockLock lock(&m_streamLock);
                 DWORD pcr = (DWORD)adapt.pcr_45khz;
 
                 // PCRの連続性チェック
@@ -1172,14 +1082,69 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
         }
     }
 
-    // 字幕ストリームを取得
-    if (header.pid == m_captionPid &&
+    // 字幕か文字スーパーとPCRのPIDを取得
+    if ((header.adaptation_field_control&1)/*1,3*/ &&
         !header.transport_scrambling_control &&
         !header.transport_error_indicator)
     {
-        CBlockLock lock(&m_streamLock);
-        ::memcpy(m_packetQueue[m_packetQueueRear], pPacket, 188);
-        m_packetQueueRear = (m_packetQueueRear+1) % PACKET_QUEUE_SIZE;
+        LPCBYTE pPayload = pPacket + 4;
+        if (header.adaptation_field_control == 3) {
+            // アダプテーションに続けてペイロードがある
+            ADAPTATION_FIELD adapt;
+            extract_adaptation_field(&adapt, pPayload);
+            if (adapt.adaptation_field_length < 0) return;
+            pPayload += adapt.adaptation_field_length + 1;
+        }
+        int payloadSize = 188 - static_cast<int>(pPayload - pPacket);
+
+        // PAT監視
+        if (header.pid == 0) {
+            extract_pat(&m_pat, pPayload, payloadSize,
+                        header.payload_unit_start_indicator,
+                        header.continuity_counter);
+            return;
+        }
+        // PATリストにあるPMT監視
+        for (int i = 0; i < m_pat.pid_count; ++i) {
+            if (header.pid == m_pat.pid[i]/* && header.pid != 0*/) {
+                PMT *pPmt = m_pat.pmt[i];
+                extract_pmt(pPmt, pPayload, payloadSize,
+                            header.payload_unit_start_indicator,
+                            header.continuity_counter);
+
+                // このPMTに現在再生中の映像PIDが含まれるか調べる
+                bool fVideoPmt = false;
+                int privPid[2] = {-1, -1};
+                for (int j = 0; j < pPmt->pid_count; ++j) {
+                    if (pPmt->stream_type[j] == PES_PRIVATE_DATA) {
+                        privPid[privPid[0]>=0?1:0] = pPmt->pid[j];
+                    }
+                    else if (pPmt->pid[j] == m_videoPid) {
+                        fVideoPmt = true;
+                    }
+                }
+                if (fVideoPmt) {
+                    m_pcrPid = pPmt->pcr_pid;
+                    m_caption1Pid = privPid[0];
+                    m_caption2Pid = privPid[1];
+                }
+                return;
+            }
+        }
+    }
+
+    // 字幕か文字スーパーのストリームを取得
+    if (!header.transport_scrambling_control &&
+        !header.transport_error_indicator)
+    {
+        if (header.pid == m_caption1Pid) {
+            CBlockLock lock(&m_streamLock);
+            m_caption1Manager.AddPacket(pPacket);
+        }
+        else if (header.pid == m_caption2Pid) {
+            CBlockLock lock(&m_streamLock);
+            m_caption2Manager.AddPacket(pPacket);
+        }
     }
 }
 

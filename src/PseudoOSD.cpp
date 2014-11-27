@@ -219,7 +219,10 @@ bool CPseudoOSD::Show(DWORD Time,bool fAnimation)
 		return false;
 
 	if (m_fLayeredWindow) {
-		::ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
+		// 実際には親子関係じゃないので自力で可視になるか判断する必要がある
+		if (::IsWindowVisible(m_hwndParent)) {
+			::ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
+		}
 		::UpdateWindow(m_hwnd);
 
 		RECT rc;

@@ -189,13 +189,22 @@ DWORD CCaptionMain::ParseListData()
 		dwReadBuff+=m_PayloadList[i].wSize;
 	}
 
-	if( dwReadBuff >= 9 ){
+	if( dwReadBuff >= 6 ){
+		BYTE bStreamID = m_pbBuff[3];
 		WORD wPesSize = ((WORD)(m_pbBuff[4]))<<8 | m_pbBuff[5];
-		WORD wHeadSize = m_pbBuff[8];
-		WORD wStartPos = 9+wHeadSize;
-		int dataSize = (6+wPesSize)-wStartPos;
-		if( dataSize >= 0 && (int)dwReadBuff >= wStartPos+dataSize ){
-			return ParseCaption(m_pbBuff+wStartPos, dataSize);
+		WORD wStartPos = 6;
+		int nDataSize = 0;
+		if( bStreamID == 0xBF ){
+			//private_stream_2
+			nDataSize = wPesSize;
+		}else if(  bStreamID == 0xBD && dwReadBuff >= 9 ){
+			//private_stream_1
+			WORD wHeadSize = m_pbBuff[8];
+			wStartPos += 3+wHeadSize;
+			nDataSize = (6+wPesSize)-wStartPos;
+		}
+		if( nDataSize > 0 && (int)dwReadBuff >= wStartPos+nDataSize ){
+			return ParseCaption(m_pbBuff+wStartPos, nDataSize);
 		}
 	}
 	return ERR_INVALID_PACKET;

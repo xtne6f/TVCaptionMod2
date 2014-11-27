@@ -20,6 +20,167 @@ BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPC
     return ::WritePrivateProfileString(lpAppName, lpKeyName, szValue, lpFileName);
 }
 
+DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
+{
+    TCHAR longOrShortName[MAX_PATH];
+    DWORD nRet = ::GetModuleFileName(hModule, longOrShortName, MAX_PATH);
+    if (nRet && nRet < MAX_PATH) {
+        nRet = ::GetLongPathName(longOrShortName, lpFileName, nSize);
+        if (nRet < nSize) return nRet;
+    }
+    return 0;
+}
+
+static void extract_psi(PSI *psi, const unsigned char *payload, int payload_size, int unit_start, int counter)
+{
+    int pointer;
+    int section_length;
+    const unsigned char *table;
+
+    if (unit_start) {
+        psi->continuity_counter = 0x20|counter;
+        psi->data_count = psi->version_number = 0;
+    }
+    else {
+        psi->continuity_counter = (psi->continuity_counter+1)&0x2f;
+        if (psi->continuity_counter != (0x20|counter)) {
+            psi->continuity_counter = psi->data_count = psi->version_number = 0;
+            return;
+        }
+    }
+    if (psi->data_count + payload_size <= sizeof(psi->data)) {
+        memcpy(psi->data + psi->data_count, payload, payload_size);
+        psi->data_count += payload_size;
+    }
+    // TODO: CRC32
+
+    // psi->version_number != 0 のとき各フィールドは有効
+    if (psi->data_count >= 1) {
+        pointer = psi->data[0];
+        if (psi->data_count >= pointer + 4) {
+            section_length = ((psi->data[pointer+2]&0x03)<<8) | psi->data[pointer+3];
+            if (section_length >= 3 && psi->data_count >= pointer + 4 + section_length) {
+                table = psi->data + 1 + pointer;
+                psi->pointer_field          = pointer;
+                psi->table_id               = table[0];
+                psi->section_length         = section_length;
+                psi->version_number         = 0x20 | ((table[5]>>1)&0x1f);
+                psi->current_next_indicator = table[5] & 0x01;
+            }
+        }
+    }
+}
+
+void reset_pat(PAT *pat)
+{
+    while (pat->pid_count > 0) {
+        delete pat->pmt[--pat->pid_count];
+    }
+    ::memset(pat, 0, sizeof(PAT));
+}
+
+// 参考: ITU-T H.222.0 Sec.2.4.4.3 および ARIB TR-B14 第一分冊第二編8.2
+void extract_pat(PAT *pat, const unsigned char *payload, int payload_size, int unit_start, int counter)
+{
+    int program_number;
+    int found;
+    int pos, i, j, n;
+    int pmt_exists[PAT_PID_MAX];
+    unsigned short pid;
+    const unsigned char *table;
+
+    extract_psi(&pat->psi, payload, payload_size, unit_start, counter);
+
+    if (pat->psi.version_number &&
+        pat->psi.version_number != pat->version_number &&
+        pat->psi.current_next_indicator &&
+        pat->psi.table_id == 0 &&
+        pat->psi.section_length >= 5)
+    {
+        // PAT更新
+        table = pat->psi.data + 1 + pat->psi.pointer_field;
+        pat->transport_stream_id = (table[3]<<8) | table[4];
+        pat->version_number = pat->psi.version_number;
+
+        // 受信済みPMTを調べ、必要ならば新規に生成する
+        memset(pmt_exists, 0, sizeof(pmt_exists));
+        pos = 3 + 5;
+        while (pos < 3 + pat->psi.section_length - 4) {
+            program_number = (table[pos]<<8) | (table[pos+1]);
+            if (program_number != 0) {
+                pid = ((table[pos+2]&0x1f)<<8) | table[pos+3];
+                for (found=0, i=0; i < pat->pid_count; ++i) {
+                    if (pat->pid[i] == pid) {
+                        pmt_exists[i] = found = 1;
+                        break;
+                    }
+                }
+                if (!found && pat->pid_count < PAT_PID_MAX) {
+                    //pat->program_number[pat->pid_count] = program_number;
+                    pat->pid[pat->pid_count] = pid;
+                    pat->pmt[pat->pid_count] = new PMT;
+                    memset(pat->pmt[pat->pid_count], 0, sizeof(PMT));
+                    pmt_exists[pat->pid_count++] = 1;
+                }
+            }
+            pos += 4;
+        }
+        // PATから消えたPMTを破棄する
+        n = pat->pid_count;
+        for (i=0, j=0; i < n; ++i) {
+            if (!pmt_exists[i]) {
+                delete pat->pmt[i];
+                --pat->pid_count;
+            }
+            else {
+                pat->pid[j] = pat->pid[i];
+                pat->pmt[j++] = pat->pmt[i];
+            }
+        }
+    }
+}
+
+// 参考: ITU-T H.222.0 Sec.2.4.4.8
+void extract_pmt(PMT *pmt, const unsigned char *payload, int payload_size, int unit_start, int counter)
+{
+    int program_info_length;
+    int es_info_length;
+    int stream_type;
+    int pos;
+    const unsigned char *table;
+
+    extract_psi(&pmt->psi, payload, payload_size, unit_start, counter);
+
+    if (pmt->psi.version_number &&
+        pmt->psi.version_number != pmt->version_number &&
+        pmt->psi.current_next_indicator &&
+        pmt->psi.table_id == 2 &&
+        pmt->psi.section_length >= 9)
+    {
+        // PMT更新
+        table = pmt->psi.data + 1 + pmt->psi.pointer_field;
+        pmt->program_number = (table[3]<<8) | table[4];
+        pmt->version_number = pmt->psi.version_number;
+        pmt->pcr_pid        = ((table[8]&0x1f)<<8) | table[9];
+        program_info_length = ((table[10]&0x03)<<8) | table[11];
+
+        pmt->pid_count = 0;
+        pos = 3 + 9 + program_info_length;
+        while (pos < 3 + pmt->psi.section_length - 5) {
+            stream_type = table[pos];
+            if (stream_type == H_262_VIDEO ||
+                stream_type == PES_PRIVATE_DATA ||
+                stream_type == AVC_VIDEO)
+            {
+                pmt->stream_type[pmt->pid_count] = (unsigned char)stream_type;
+                pmt->pid[pmt->pid_count++] = (table[pos+1]&0x1f)<<8 | table[pos+2];
+            }
+            es_info_length = (table[pos+3]&0x03)<<8 | table[pos+4];
+            pos += 5 + es_info_length;
+        }
+    }
+}
+
 #define PROGRAM_STREAM_MAP          0xBC
 #define PADDING_STREAM              0xBE
 #define PRIVATE_STREAM_2            0xBF

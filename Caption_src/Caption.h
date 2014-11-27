@@ -5,6 +5,13 @@
 extern "C" {
 #endif
 
+//ストリーム切り替え
+//ひとつのストリームしか扱わないときは無視して構わない
+//戻り値：エラーコード
+//FALSE:失敗, TRUE:成功
+__declspec(dllexport)
+DWORD WINAPI SwitchStreamCP(DWORD dwIndex);
+
 //DLLの初期化
 //戻り値：エラーコード
 //ERR_INIT:既に初期化されている, TRUE:成功

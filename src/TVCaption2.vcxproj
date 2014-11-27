@@ -159,6 +159,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CaptionManager.cpp" />
     <ClCompile Include="PseudoOSD.cpp">
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">MaxSpeed</Optimization>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MaxSpeed</Optimization>
@@ -168,6 +169,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Caption.h" />
+    <ClInclude Include="CaptionManager.h" />
     <ClInclude Include="GaijiTable_typebank.h" />
     <ClInclude Include="PseudoOSD.h" />
     <ClInclude Include="TVCaption2.h" />

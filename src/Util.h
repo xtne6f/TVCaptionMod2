@@ -10,8 +10,15 @@
 
 int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName);
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
+DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
 
 #define APP_NAME TEXT("TVCaption2")
+
+#define PCR_PER_MSEC 45
+
+#define H_262_VIDEO         0x02
+#define PES_PRIVATE_DATA    0x06
+#define AVC_VIDEO           0x1B
 
 typedef struct {
 	int           sync;
@@ -38,6 +45,39 @@ typedef struct {
 } ADAPTATION_FIELD; // (partial)
 
 typedef struct {
+    int             pointer_field;
+    int             table_id;
+    int             section_length;
+    int             version_number;
+    int             current_next_indicator;
+    int             continuity_counter;
+    int             data_count;
+    unsigned char   data[1025];
+} PSI;
+
+typedef struct {
+    int             program_number;
+    int             version_number;
+    int             pcr_pid;
+    int             pid_count;
+    unsigned char   stream_type[256];
+    unsigned short  pid[256]; // PESの一部に限定
+    PSI             psi;
+} PMT;
+
+#define PAT_PID_MAX 64
+
+typedef struct {
+    int             transport_stream_id;
+    int             version_number;
+    int             pid_count;
+    //unsigned short  program_number[PAT_PID_MAX];
+    unsigned short  pid[PAT_PID_MAX]; // NITを除く
+    PMT             *pmt[PAT_PID_MAX];
+    PSI             psi;
+} PAT;
+
+typedef struct {
     int           packet_start_code_prefix;
     int           stream_id;
     int           pes_packet_length;
@@ -46,6 +86,9 @@ typedef struct {
     unsigned int  dts_45khz;
 } PES_HEADER; // (partial)
 
+void reset_pat(PAT *pat);
+void extract_pat(PAT *pat, const unsigned char *payload, int payload_size, int unit_start, int counter);
+void extract_pmt(PMT *pmt, const unsigned char *payload, int payload_size, int unit_start, int counter);
 void extract_pes_header(PES_HEADER *dst, const unsigned char *payload, int payload_size/*, int stream_type*/);
 void extract_adaptation_field(ADAPTATION_FIELD *dst, const unsigned char *data);
 

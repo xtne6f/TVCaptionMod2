@@ -18,10 +18,41 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     return TRUE;
 }
 
+typedef enum{
+	MODE_ACP, MODE_UTF16, MODE_UTF8
+} CP_MODE;
+
+#define SWITCH_STREAM_MAX 8
+
+static DWORD g_dwIndex;
+static CCaptionMain* g_sysList[SWITCH_STREAM_MAX];
+static char* g_pPoolList[SWITCH_STREAM_MAX];
+static DWORD g_dwPoolSizeList[SWITCH_STREAM_MAX];
+static CP_MODE g_charModeList[SWITCH_STREAM_MAX];
+
 static CCaptionMain* g_sys;
 static char* g_pPool;
 static DWORD g_dwPoolSize;
-static enum { MODE_ACP, MODE_UTF16, MODE_UTF8 } g_charMode;
+static CP_MODE g_charMode;
+
+DWORD WINAPI SwitchStreamCP(DWORD dwIndex)
+{
+	if( dwIndex >= SWITCH_STREAM_MAX ){
+		return FALSE;
+	}
+	g_sysList[g_dwIndex] = g_sys;
+	g_pPoolList[g_dwIndex] = g_pPool;
+	g_dwPoolSizeList[g_dwIndex] = g_dwPoolSize;
+	g_charModeList[g_dwIndex] = g_charMode;
+
+	g_sys = g_sysList[dwIndex];
+	g_pPool = g_pPoolList[dwIndex];
+	g_dwPoolSize = g_dwPoolSizeList[dwIndex];
+	g_charMode = g_charModeList[dwIndex];
+
+	g_dwIndex = dwIndex;
+	return TRUE;
+}
 
 //DLLの初期化
 //戻り値：エラーコード

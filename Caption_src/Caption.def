@@ -16,3 +16,4 @@ EXPORTS
 	GetDRCSPatternCP	@10
 	SetGaijiCP	@11
 	GetGaijiCP	@12
+	SwitchStreamCP	@13

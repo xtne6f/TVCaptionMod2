@@ -1,16 +1,19 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.5 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.6 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
-んによるCaption2Ass_PCR付属のCaption.dll改造版の改変点を選択的に取りこみ、表示ま
-わりを「字幕 Plugin For TVTest(20081216) 改変版(090627)」を参考にして作成した字
-幕プラグインです。字幕の中央表示をしたいがために作りました。
+ん・makiさんによるCaption2Ass_PCR付属のCaption.dll改造版の改変点を選択的に取りこ
+み、表示まわりを「字幕 Plugin For TVTest(20081216) 改変版(090627)」を参考にして
+作成した字幕プラグインです。字幕の中央表示をしたいがために作りました。
 
 ■動作環境
 ・Windows XP以降。ただしVistaは未確認
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
 ・通常版: Visual C++ 2005 SP1 再頒布可能パッケージ(TVTestが起動するなら入ってる)
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
+
+■以前のバージョンからの移行
+かならずTVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpとCaption.dllとを入れ、右クリック
@@ -20,7 +23,6 @@ TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
 ・縦書き (なかなか遭遇しないのでどう表示されるかもわからない)
-・文字スーパー
 ・点滅
 ・PNG形式の字幕
 
@@ -48,29 +50,25 @@ SettingsIndex
     # GaijiFaceName=
     # GaijiTableName=!typebank
     # Method=2
+    # ShowFlags=65535
+    # ShowFlagsSuper=65535
     # DelayTime=450
+    # DelayTimeSuper=0
     # TextColor=-1
     # BackColor=-1
-    # TextOpacity=-1
-    # BackOpacity=-1
-    # StrokeWidth=-6
-    # StrokeSmoothLevel=1
-    # Centering=0
-    # 
+    # ...
     # [Settings1]
     # FaceName=
     # GaijiFaceName=和田研中丸ゴシック2004ARIB
     # GaijiTableName=!std
     # Method=2
+    # ShowFlags=0
+    # ShowFlagsSuper=65535
     # DelayTime=450
+    # DelayTimeSuper=0
     # TextColor=255255000
     # BackColor=000000255
-    # TextOpacity=-1
-    # BackOpacity=20
-    # StrokeWidth=-6
-    # StrokeSmoothLevel=5
-    # Centering=1
-    # 
+    # ...
     # [Settings2]
     # ...
 FaceName
@@ -94,8 +92,16 @@ GaijiTableName
 Method
     字幕の表示方法
     # いまのところ通常ウィンドウ[=1]かレイヤードウィンドウ[=2]のみです。
-DelayTime
-    字幕を受け取ってから表示するまでの遅延時間をミリ秒で指定
+ShowFlags / ShowFlagsSuper
+    字幕/文字スーパーを表示するかどうかのフラグ
+    # 基本的に、すべて表示する[=65535]または表示しない[=0]のどちらかを指定してく
+    # ださい。
+    # [かなり上級者向け]
+    # この設定キーはARIB STD-B24のDMF(表示モード)と関係しています。たとえばDMFの
+    # 値が10(=受信時選択表示・記録再生時選択表示)の字幕/文字スーパーは、10ビット
+    # 目を立てる(=設定値に1024を加える)ことで表示されるようになります。
+DelayTime / DelayTimeSuper
+    字幕/文字スーパーを受け取ってから表示するまでの遅延時間をミリ秒で指定
     # [=0]から[=5000]まで
 TextColor / BackColor
     字幕文/背景枠の色
@@ -168,6 +174,15 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.6 (2012-06-02)
+・文字スーパーに対応(未検証)
+・字幕ウィンドウがなるべく前面に来ないようにした
+・TVTestが非表示状態(最小化起動を含む)のときに字幕が表示されてしまうのを修正
+  ・スレの指摘サンクスです
+・言語切り替えを改善
+  ・実質機能してなかったので修正
+  ・第2言語のない番組は第1言語の字幕/文字スーパーを表示するようにした
+  ・切り替え時にTVTestのログに出すようにした
 ver.0.5 (2012-05-28)
 ・外字用のフォントを別に指定できるようにした
 ・内蔵音再生(PRA)に対応(未検証)
