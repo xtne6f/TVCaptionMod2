@@ -10,6 +10,7 @@
 #pragma managed(push, off)
 #endif
 
+#ifdef CAPTION_EXPORTS
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
                        LPVOID lpReserved
@@ -17,6 +18,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 {
     return TRUE;
 }
+#endif
 
 typedef enum{
 	MODE_ACP, MODE_UTF16, MODE_UTF8

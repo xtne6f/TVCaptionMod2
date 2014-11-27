@@ -4,7 +4,6 @@
 // プラグインクラス
 class CTVCaption2 : public TVTest::CTVTestPlugin
 {
-    static const int OSD_LIST_MAX = 96;
     // 事前に作成しておくOSDの数(作成時にウィンドウが前面にくるので、気になるなら増やす)
     static const int OSD_PRE_CREATE_NUM = 12;
     static const int GAIJI_TABLE_SIZE = G_CELL_SIZE * 7;
@@ -66,7 +65,6 @@ private:
 
     // 設定
     TCHAR m_szIniPath[MAX_PATH];
-    TCHAR m_szCaptionDllPath[MAX_PATH];
     TCHAR m_szCaptureFolder[MAX_PATH];
     TCHAR m_szCaptureFileName[64];
     TCHAR m_szFaceName[LF_FACESIZE];
@@ -99,9 +97,7 @@ private:
     // 字幕描画
     HWND m_hwndPainting;
     HWND m_hwndContainer;
-    CPseudoOSD m_osdList[OSD_LIST_MAX];
-    int m_osdUsedCount;
-    std::vector<CPseudoOSD*> m_pOsdUsingList[STREAM_MAX];
+    std::vector<CPseudoOSD*> m_pOsdList[STREAM_MAX];
     int m_osdShowCount[STREAM_MAX];
     int m_osdPrepareCount[STREAM_MAX];
     bool m_fOsdClear[STREAM_MAX];

@@ -137,7 +137,7 @@ void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList)
 
 static int CALLBACK EnumAddFaceNameProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *, int FontType, LPARAM lParam)
 {
-    if (FontType == TRUETYPE_FONTTYPE && lpelfe->elfLogFont.lfFaceName[0] != TEXT('@')) {
+    if (lpelfe->elfLogFont.lfFaceName[0] != TEXT('@')) {
         ::SendMessage(reinterpret_cast<HWND>(lParam), CB_ADDSTRING, 0,
                       reinterpret_cast<LPARAM>(lpelfe->elfLogFont.lfFaceName));
     }

@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C++ Express 2010
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Caption", "Caption.vcxproj", "{60BC8339-018F-4AF1-A09C-EDAF70A007B7}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CaptionLib", "CaptionLib.vcxproj", "{671D1C97-C4DA-45B9-A9DC-C1925FE03603}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -12,13 +14,17 @@ Global
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Debug|Win32.ActiveCfg = Debug|Win32
-		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Debug|Win32.Build.0 = Debug|Win32
 		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Debug|x64.ActiveCfg = Debug|x64
-		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Debug|x64.Build.0 = Debug|x64
 		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Release|Win32.ActiveCfg = Release|Win32
-		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Release|Win32.Build.0 = Release|Win32
 		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Release|x64.ActiveCfg = Release|x64
-		{60BC8339-018F-4AF1-A09C-EDAF70A007B7}.Release|x64.Build.0 = Release|x64
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Debug|Win32.ActiveCfg = Debug|Win32
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Debug|Win32.Build.0 = Debug|Win32
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Debug|x64.ActiveCfg = Debug|x64
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Debug|x64.Build.0 = Debug|x64
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Release|Win32.ActiveCfg = Release|Win32
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Release|Win32.Build.0 = Release|Win32
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Release|x64.ActiveCfg = Release|x64
+		{671D1C97-C4DA-45B9-A9DC-C1925FE03603}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

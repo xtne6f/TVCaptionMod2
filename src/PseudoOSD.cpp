@@ -57,7 +57,6 @@ CPseudoOSD::CPseudoOSD()
 	: m_hwnd(NULL)
 	, m_crBackColor(RGB(16,0,16))
 	, m_crTextColor(RGB(0,255,128))
-	, m_hbm(NULL)
 	, m_TimerID(0)
 	, m_FlashingInterval(0)
 	, m_Opacity(80)
@@ -79,7 +78,6 @@ CPseudoOSD::CPseudoOSD()
 	m_Position.Left=0;
 	m_Position.Top=0;
 	m_Position.Height=0;
-	::SetRect(&m_ImagePaintRect,0,0,0,0);
 	m_ParentPosition.x=0;
 	m_ParentPosition.y=0;
 	m_RefCount++;
@@ -227,11 +225,11 @@ bool CPseudoOSD::IsVisible() const
 
 void CPseudoOSD::ClearText()
 {
-	if (m_hbm!=NULL) {
-		::DeleteObject(m_hbm);
-		m_hbm=NULL;
-	}
 	if (!m_StyleList.empty()) {
+		std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
+		for (; it!=m_StyleList.end(); ++it) {
+			if (it->hbm!=NULL) ::DeleteObject(it->hbm);
+		}
 		m_StyleList.clear();
 		SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	}
@@ -245,6 +243,16 @@ void CPseudoOSD::ClearText()
 bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf)
 {
 	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf));
+	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
+	return true;
+}
+
+
+// 画像を追加する
+// 受けとったビットマップはクラス側で破棄する
+bool CPseudoOSD::AddImage(HBITMAP hbm,int Width,const RECT &PaintRect)
+{
+	m_StyleList.push_back(STYLE_ELEM(hbm,Width,PaintRect));
 	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	return true;
 }
@@ -291,19 +299,6 @@ void CPseudoOSD::SetTextColor(COLORREF crText,COLORREF crBack)
 {
 	m_crTextColor=crText;
 	m_crBackColor=crBack;
-}
-
-
-bool CPseudoOSD::SetImage(HBITMAP hbm,int Width,const RECT &PaintRect)
-{
-	ClearText();
-	// 受けとったビットマップはクラス側で破棄する
-	m_hbm=hbm;
-	LOGFONT lf={0};
-	m_StyleList.push_back(STYLE_ELEM(TEXT(""),Width,lf));
-	m_ImagePaintRect=PaintRect;
-	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
-	return true;
 }
 
 
@@ -439,6 +434,19 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 	::SetTextAlign(hdc,oldTa);
 }
 
+void CPseudoOSD::DrawImageList(HDC hdc,int MultX,int MultY) const
+{
+	int x=0;
+	std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
+	for (; it!=m_StyleList.end(); ++it) {
+		if (it->hbm!=NULL) {
+			DrawUtil::DrawBitmap(hdc,(x+it->PaintRect.left)*MultX,it->PaintRect.top*MultY,
+			                     it->PaintRect.right*MultX,it->PaintRect.bottom*MultY,it->hbm);
+		}
+		x+=it->Width;
+	}
+}
+
 void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 {
 	RECT rc;
@@ -452,26 +460,13 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
 	if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,2,m_crTextColor);
 
-	if (m_hbm==NULL) {
-		COLORREF crOldTextColor;
-		int OldBkMode;
+	COLORREF crOldTextColor=::SetTextColor(hdc,m_crTextColor);
+	int OldBkMode=::SetBkMode(hdc,TRANSPARENT);
+	DrawTextList(hdc,1,1);
+	::SetBkMode(hdc,OldBkMode);
+	::SetTextColor(hdc,crOldTextColor);
 
-		crOldTextColor=::SetTextColor(hdc,m_crTextColor);
-		OldBkMode=::SetBkMode(hdc,TRANSPARENT);
-		DrawTextList(hdc,1,1);
-		::SetBkMode(hdc,OldBkMode);
-		::SetTextColor(hdc,crOldTextColor);
-	} else {
-		BITMAP bm;
-		::GetObject(m_hbm,sizeof(BITMAP),&bm);
-		RECT rcBitmap={0,0,bm.bmWidth,bm.bmHeight};
-		if (m_ImagePaintRect.right!=0 && m_ImagePaintRect.bottom!=0) {
-			DrawUtil::DrawBitmap(hdc,m_ImagePaintRect.left,m_ImagePaintRect.top,
-			                     m_ImagePaintRect.right,m_ImagePaintRect.bottom,m_hbm,&rcBitmap);
-		} else {
-			DrawUtil::DrawBitmap(hdc,0,0,rc.right,rc.bottom,m_hbm,&rcBitmap);
-		}
-	}
+	DrawImageList(hdc,1,1);
 }
 
 // OSDのビットマップイメージを生成する
@@ -575,14 +570,12 @@ static void ShrinkBitmapHalf(void *pBits,int Width,RECT Rect)
 }
 
 // 縦横4倍の2値画像をもとにアルファチャネルを構成する
-static void SetBitmapOpacity(BYTE* __restrict pBits,int Width,RECT Rect,const BYTE* __restrict pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
+static void SetBitmapOpacityQuarter(BYTE* __restrict pBits,int Width,RECT Rect,const BYTE* __restrict pBitsMono,BYTE Opacity)
 {
 	MAGIC_NUMBER(0x77867563);
 	if (Rect.left%2!=0) return;
 	static const int BitSum[16]={ 0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4 };
 
-	int level=BackOpacity;
-	int range=TextOpacity-BackOpacity;
 	int stride=(Width*4+31)/32*4;
 	for (int y=Rect.top;y<Rect.bottom;y++) {
 		int i=(y*Width+Rect.left)*4;
@@ -592,10 +585,10 @@ static void SetBitmapOpacity(BYTE* __restrict pBits,int Width,RECT Rect,const BY
 		int j3=(y*4+3)*stride+Rect.left/2;
 		int x=Rect.left/2;
 		for (;x<Rect.right/2;x++) {
-			pBits[i+3]=(BYTE)(level+(BitSum[pBitsMono[j0]>>4]+BitSum[pBitsMono[j1]>>4]+
-			                         BitSum[pBitsMono[j2]>>4]+BitSum[pBitsMono[j3]>>4])*range/16);
-			pBits[i+7]=(BYTE)(level+(BitSum[pBitsMono[j0]&15]+BitSum[pBitsMono[j1]&15]+
-			                         BitSum[pBitsMono[j2]&15]+BitSum[pBitsMono[j3]&15])*range/16);
+			pBits[i+3]=(BYTE)(pBits[i+3]+(BitSum[pBitsMono[j0]>>4]+BitSum[pBitsMono[j1]>>4]+
+			                              BitSum[pBitsMono[j2]>>4]+BitSum[pBitsMono[j3]>>4])*(Opacity-pBits[i+3])/16);
+			pBits[i+7]=(BYTE)(pBits[i+7]+(BitSum[pBitsMono[j0]&15]+BitSum[pBitsMono[j1]&15]+
+			                              BitSum[pBitsMono[j2]&15]+BitSum[pBitsMono[j3]&15])*(Opacity-pBits[i+7])/16);
 			i+=8;
 			j0++;
 			j1++;
@@ -603,20 +596,18 @@ static void SetBitmapOpacity(BYTE* __restrict pBits,int Width,RECT Rect,const BY
 			j3++;
 		}
 		if (x*2<Rect.right) {
-			pBits[i+3]=(BYTE)(level+(BitSum[pBitsMono[j0]>>4]+BitSum[pBitsMono[j1]>>4]+
-			                         BitSum[pBitsMono[j2]>>4]+BitSum[pBitsMono[j3]>>4])*range/16);
+			pBits[i+3]=(BYTE)(pBits[i+3]+(BitSum[pBitsMono[j0]>>4]+BitSum[pBitsMono[j1]>>4]+
+			                              BitSum[pBitsMono[j2]>>4]+BitSum[pBitsMono[j3]>>4])*(Opacity-pBits[i+3])/16);
 		}
 	}
 }
 
 // 縦横2倍の2値画像(ただし横方向は4倍画像の左半分使用)をもとにアルファチャネルを構成する
-static void SetBitmapOpacityHalf(BYTE* __restrict pBits,int Width,RECT Rect,const BYTE* __restrict pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
+static void SetBitmapOpacityHalf(BYTE* __restrict pBits,int Width,RECT Rect,const BYTE* __restrict pBitsMono,BYTE Opacity)
 {
 	MAGIC_NUMBER(0x37461855);
 	if (Rect.left%4!=0) return;
 
-	int level=BackOpacity;
-	int range=TextOpacity-BackOpacity;
 	int stride=(Width*4+31)/32*4;
 	for (int y=Rect.top;y<Rect.bottom;y++) {
 		int i=(y*Width+Rect.left)*4;
@@ -628,10 +619,10 @@ static void SetBitmapOpacityHalf(BYTE* __restrict pBits,int Width,RECT Rect,cons
 			BYTE n=(pBitsMono[j1]&0x55)+(pBitsMono[j1]>>1&0x55);
 			BYTE sum0=(m&0x33)+(n&0x33);
 			BYTE sum1=(m>>2&0x33)+(n>>2&0x33);
-			pBits[i+3]=(BYTE)(level+(sum1>>4)*range/4);
-			pBits[i+7]=(BYTE)(level+(sum0>>4)*range/4);
-			pBits[i+11]=(BYTE)(level+(sum1&15)*range/4);
-			pBits[i+15]=(BYTE)(level+(sum0&15)*range/4);
+			pBits[i+3]=(BYTE)(pBits[i+3]+(sum1>>4)*(Opacity-pBits[i+3])/4);
+			pBits[i+7]=(BYTE)(pBits[i+7]+(sum0>>4)*(Opacity-pBits[i+7])/4);
+			pBits[i+11]=(BYTE)(pBits[i+11]+(sum1&15)*(Opacity-pBits[i+11])/4);
+			pBits[i+15]=(BYTE)(pBits[i+15]+(sum0&15)*(Opacity-pBits[i+15])/4);
 			i+=16;
 			j0++;
 			j1++;
@@ -641,27 +632,39 @@ static void SetBitmapOpacityHalf(BYTE* __restrict pBits,int Width,RECT Rect,cons
 			BYTE n=(pBitsMono[j1]&0x55)+(pBitsMono[j1]>>1&0x55);
 			BYTE sum0=(m&0x33)+(n&0x33);
 			BYTE sum1=(m>>2&0x33)+(n>>2&0x33);
-			pBits[i+3]=(BYTE)(level+(sum1>>4)*range/4);
+			pBits[i+3]=(BYTE)(pBits[i+3]+(sum1>>4)*(Opacity-pBits[i+3])/4);
 			if (x*4+1<Rect.right)
-				pBits[i+7]=(BYTE)(level+(sum0>>4)*range/4);
+				pBits[i+7]=(BYTE)(pBits[i+7]+(sum0>>4)*(Opacity-pBits[i+7])/4);
 			if (x*4+2<Rect.right)
-				pBits[i+11]=(BYTE)(level+(sum1&15)*range/4);
+				pBits[i+11]=(BYTE)(pBits[i+11]+(sum1&15)*(Opacity-pBits[i+11])/4);
 		}
 	}
 }
 
 static void SetBitmapOpacity(int Mult, BYTE* __restrict pBits,int Width,const RECT& Rect,
-                             const BYTE* __restrict pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
+                             const BYTE* __restrict pBitsMono,BYTE Opacity)
 {
 	if (Mult==4) {
-		SetBitmapOpacity(pBits,Width,Rect,pBitsMono,TextOpacity,BackOpacity);
+		SetBitmapOpacityQuarter(pBits,Width,Rect,pBitsMono,Opacity);
 	} else if (Mult==2) {
-		SetBitmapOpacityHalf(pBits,Width,Rect,pBitsMono,TextOpacity,BackOpacity);
+		SetBitmapOpacityHalf(pBits,Width,Rect,pBitsMono,Opacity);
 	}
 }
 
-// crKeyな画素をアルファチャネルに写す
-static void LayBitmapToAlpha(void *pBits,int Width,RECT Rect,BYTE TextOpacity,COLORREF crKey)
+// アルファチャネルを初期化する
+static void ClearBitmapAlpha(void *pBits,int Width,RECT Rect,BYTE Opacity)
+{
+	for (int y=Rect.top;y<Rect.bottom;y++) {
+		DWORD *p=static_cast<DWORD*>(pBits)+y*Width+Rect.left;
+		for (int x=Rect.left;x<Rect.right;x++) {
+			*p=(Opacity<<24)|(*p&0x00FFFFFF);
+			p++;
+		}
+	}
+}
+
+// crKeyではない画素のアルファチャネルを置き換える
+static void LayBitmapToAlpha(void *pBits,int Width,RECT Rect,BYTE Opacity,COLORREF crKey)
 {
 	MAGIC_NUMBER(0x66735267);
 	DWORD dwKey=(GetRValue(crKey)<<16)|(GetGValue(crKey)<<8)|GetBValue(crKey);
@@ -669,7 +672,7 @@ static void LayBitmapToAlpha(void *pBits,int Width,RECT Rect,BYTE TextOpacity,CO
 		DWORD *p=static_cast<DWORD*>(pBits)+y*Width+Rect.left;
 		for (int x=Rect.left;x<Rect.right;x++) {
 			if ((*p&0x00FFFFFF)!=dwKey)
-				*p=(TextOpacity<<24)|(*p&0x00FFFFFF);
+				*p=(Opacity<<24)|(*p&0x00FFFFFF);
 			p++;
 		}
 	}
@@ -897,33 +900,30 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	rc.bottom=Height*VertMult;
 	DrawUtil::Fill(hdcSrc,&rc,m_crBackColor);
 	::ZeroMemory(m_pBitsMono,(AllocWidth*4+31)/32*4 * Height*MultMono);
-
-	bool fNeedToLay=false;
-	bool fNeedToDilate=false;
-	if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
-		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,2,m_crTextColor);
-		if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rc.right-1,VertMult,2*VertMult,m_crTextColor);
-		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
-		if (m_fHLBottom) DrawLine(hdcSrc,rc.right-1,rc.bottom-VertMult,1,rc.bottom-VertMult,2*VertMult,m_crTextColor);
-		fNeedToLay=true;
-	}
 	rc.bottom=Height;
 
-	if (!m_fHideText && m_hbm==NULL) {
-		COLORREF crOldTextColor;
-		int OldBkMode;
+	int rb=rc.bottom*VertMult;
+	int rr=rc.right;
+	if (m_fHLLeft) DrawLine(hdcSrc,1,rb-1,1,1,2,m_crTextColor);
+	if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rr-1,VertMult,2*VertMult,m_crTextColor);
+	if (m_fHLRight) DrawLine(hdcSrc,rr-1,1,rr-1,rb-1,2,m_crTextColor);
+	if (m_fHLBottom) DrawLine(hdcSrc,rr-1,rb-VertMult,1,rb-VertMult,2*VertMult,m_crTextColor);
 
-		crOldTextColor=::SetTextColor(hdcSrc,m_crTextColor);
-		OldBkMode=::SetBkMode(hdcSrc,TRANSPARENT);
+	rb=rc.bottom*MultMono;
+	rr=rc.right*MultMono;
+	if (m_fHLLeft) DrawLine(hdcMono,MultMono,rb-1,MultMono,1,2*MultMono,RGB(255,255,255));
+	if (m_fHLTop) DrawLine(hdcMono,1,MultMono,rr-1,MultMono,2*MultMono,RGB(255,255,255));
+	if (m_fHLRight) DrawLine(hdcMono,rr-MultMono,1,rr-MultMono,rb-1,2*MultMono,RGB(255,255,255));
+	if (m_fHLBottom) DrawLine(hdcMono,rr-1,rb-MultMono,1,rb-MultMono,2*MultMono,RGB(255,255,255));
+
+	if (!m_fHideText) {
+		COLORREF crOldTextColor=::SetTextColor(hdcSrc,m_crTextColor);
+		int OldBkMode=::SetBkMode(hdcSrc,TRANSPARENT);
 		DrawTextList(hdcSrc,1,VertMult);
 		::SetBkMode(hdcSrc,OldBkMode);
 		::SetTextColor(hdcSrc,crOldTextColor);
 
-		if (m_fStrokeByDilate) {
-			fNeedToLay=true;
-			fNeedToDilate=true;
-		}
-		else {
+		if (!m_fStrokeByDilate) {
 			// 縁取りを描画
 			HPEN hpen=(HPEN)::CreatePen(PS_SOLID,m_StrokeWidth<=0?0:(m_StrokeWidth*2*MultMono/72+2*MultMono),RGB(255,255,255));
 			if (hpen!=NULL) {
@@ -943,18 +943,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 				::DeletePen(hpen);
 			}
 		}
-	} else if (!m_fHideText) {
-		BITMAP bm;
-		::GetObject(m_hbm,sizeof(BITMAP),&bm);
-		RECT rcBitmap={0,0,bm.bmWidth,bm.bmHeight};
-		if (m_ImagePaintRect.right!=0 && m_ImagePaintRect.bottom!=0) {
-			DrawUtil::DrawBitmap(hdcSrc,m_ImagePaintRect.left,m_ImagePaintRect.top*VertMult,
-			                     m_ImagePaintRect.right,m_ImagePaintRect.bottom*VertMult,m_hbm,&rcBitmap);
-		} else {
-			DrawUtil::DrawBitmap(hdcSrc,0,0,Width,Height*VertMult,m_hbm,&rcBitmap);
-		}
-		fNeedToLay=true;
-		fNeedToDilate=true;
+		DrawImageList(hdcSrc,1,VertMult);
 	}
 	::GdiFlush();
 
@@ -964,11 +953,25 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	} else if (VertMult==2) {
 		ShrinkBitmapHalf(m_pBits,AllocWidth,rc);
 	}
-	// アルファチャネル操作
-	SetBitmapOpacity(MultMono,(BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,
-	                 m_fHideText?0:(BYTE)(m_Opacity*255/100),m_fHideText?0:(BYTE)(m_BackOpacity*255/100));
-	if (fNeedToLay) {
+	ClearBitmapAlpha((BYTE*)m_pBits,AllocWidth,rc,m_fHideText?0:(BYTE)(m_BackOpacity*255/100));
+
+	// 膨張処理による縁取り
+	bool fNeedToDilate=false;
+	if (m_fStrokeByDilate) {
 		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
+		fNeedToDilate=true;
+	} else {
+		// 膨張処理のために画像部分だけアルファチャネルに写す
+		RECT rcImage={0,rc.top,0,rc.bottom};
+		std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
+		for (; it!=m_StyleList.end(); ++it) {
+			rcImage.left=rcImage.right;
+			rcImage.right+=it->Width;
+			if (it->hbm!=NULL) {
+				LayBitmapToAlpha(m_pBits,AllocWidth,rcImage,(BYTE)(m_Opacity*255/100),m_crBackColor);
+				fNeedToDilate=true;
+			}
+		}
 	}
 	// 囲い部分は処理しない
 	RECT rcInner=rc;
@@ -981,7 +984,8 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 			DilateAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_Opacity*255/100));
 		}
 	}
-	SmoothAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
+	SetBitmapOpacity(MultMono,(BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,(BYTE)(m_Opacity*255/100));
+	SmoothAlpha(m_pBits,AllocWidth,rcInner,m_fHideText?0:(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
 
 	if (hdcCompose && fKeepAlpha) {
 		for (int i=0; i<Height; i++) {

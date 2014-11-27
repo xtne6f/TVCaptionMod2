@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.6r2 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.7
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -10,20 +10,17 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・Windows XP以降。ただしVistaと7は未確認
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
   # 動作テスト環境:
-  # ・Windows 8(x64):  TVTest0.8.0(x86), TVTest0.8.0(x64), TVH264_0.5.2(x86公式)
+  # ・Windows 8(x64):  TVTest0.8.1(x64), TVH264_0.5.2(x86公式)
   # ・Windows XP(x86): TVTest0.7.23(x86公式)
-・通常版: Visual C++ 2005 SP1 再頒布可能パッケージ(TVTestが起動するなら入ってる)
-・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
+・Visual C++ 2010 SP1 再頒布可能パッケージ (x86/x64)
 
 ■以前のバージョンからの移行
-(ver.1.6からの移行)
-Caption.dllを以前のものと置きかえてください(ver.1.6r2はCaption.dllの更新のみ)。
-(ver.1.5以前からの移行)
-TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
+TVCaptionMod2.tvtpを以前のものと置きかえてください。Caption.dllは不要になりまし
+た。再頒布可能パッケージが2005→2010になったので注意してください。
 
 ■使い方
-TVTestのプラグインフォルダにTVCaptionMod2.tvtpとCaption.dllとを入れ、右クリック
-メニューからプラグインを有効にして、字幕のある番組で字幕が表示されればOKです。
+TVTestのプラグインフォルダにTVCaptionMod2.tvtpを入れ、右クリックメニューからプラ
+グインを有効にして、字幕のある番組で字幕が表示されればOKです。
 TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 
 プラグイン設定は 右クリックメニュー→設定→プラグイン→TVCaptionMod2 から行いま
@@ -39,19 +36,22 @@ TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 
 設定の「内蔵音再生する」を有効にする場合、プラグインフォルダに"TVCaptionMod2"と
 いうフォルダをつくり、そこに適当な"00.wav"～"15.wav"を置いてください(「設定ファ
-イルについて」RomSoundListを参照)。自分は遭遇したことないですが緊急地震速報の文
-字スーパー等で活用されるようです。
+イルについて」RomSoundListを参照)。緊急地震速報の文字スーパー等で活用されます。
 
 字幕表示時の負荷により他プラグインのオンスクリーン表示がカクつく場合は「垂直方向
-アンチエイリアスしない」の項目を999ドットあたりにしてみてください(「設定ファイル
-について」VertAntiAliasingを参照)。
+アンチエイリアスしない」の項目を999ドットにしてみてください(「設定ファイルについ
+て」VertAntiAliasingを参照)。
 
 ■おまけ
 高水準漢字とARIB記号が収録されている丸ゴのフリーフォントは(多分)和田研ぐらいだと
-思いますが、割とクセのあるフォントなのでRounded M+と混ぜたものを作ってみました:
-Rounded M+ 1m for ARIB: http://www1.axfc.net/uploader/so/2722053
+思いますが、割とクセのあるフォントなのでRounded M+と混ぜたものを作ってみました。
 外字テーブル名は和田研フォントと同じです。"j"などの下部を表示できるようにやや上
 付きなので文字位置補正のY方向を5ぐらいに設定すると丁度いいです。
+rounded-mplus-1m-arib-20131205.zip
+http://www1.axfc.net/uploader/search.pl?md5=515426ac97c31be34a1ec0210e2ed64e
+rounded-mplus-1m-arib-20121219.zip
+http://www1.axfc.net/uploader/search.pl?md5=a62e691abf379ff1cf777519b65d3f5f
+(1年ぐらいで流れるっぽいので入り用なら再頒布してください)
 
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
@@ -73,10 +73,6 @@ EnOsdCompositor
 Version
     設定ファイルのバージョン
     # デフォルト値を出力するために使います。特にユーザがいじる必要はありません。
-CaptionDll
-    "Caption.dll"の場所を絶対パスかTVTestフォルダからの相対パスで指定
-    # デフォルトは[=Plugins\Caption.dll]または[=H264Plugins\Caption.dll]
-    # 同時に利用する他のプラグインが使うファイルと同じものを指定してはいけない
 CaptureFolder
     キー割り当て「字幕付き画像の保存」の保存先フォルダを絶対パスで指定
     # たとえば[=C:\CapFolder]とすると、そのフォルダに画像を保存します。
@@ -92,7 +88,6 @@ SettingsIndex
     # [Settings]
     # EnOsdCompositor=0
     # Version=1
-    # CaptionDll=Plugins\Caption.dll
     # CaptureFolder=
     # CaptureFileName=Capture
     # SettingsIndex=1
@@ -237,9 +232,9 @@ RomSoundList
     # ・内蔵音18     プラグイン無効時
 
 ■ソースについて
-Caption.dllのソースコードはodaruさんのもの、またはCaption2Ass_PCR付属のものとな
-るべく差分をとれるように改変してます(WinMergeなどつかうとよいかも)。
-TVCaptionMod2.tvtpのほうは基本的にスクラッチです。
+Caption.dll(現CaptionLib.lib)のソースコードはodaruさんのもの、または
+Caption2Ass_PCR付属のものとなるべく差分をとれるように改変してます(WinMergeなどつ
+かうとよいかも)。TVCaptionMod2.tvtpのほうは基本的にスクラッチです。
 
 TSファイルの解析のために、tsselect-0.1.8(
 http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改変利用してい
@@ -266,6 +261,13 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.7 (2013-12-06)
+・x86/x64ビルド環境をVC++2010Expressに統一
+・Caption.dllを静的リンク
+・OpenTypeフォント等が一覧に表示されないのを修正
+・DRCS出現時のレンダリングをより正確にした
+・(万が一)非常に複雑な字幕が送られても描画しきれるようにした
+・おまけフォントの更新とDRCS追加
 ver.1.6r2 (2013-06-06)
 ・ARIB8CharDecode.cppのデフォルトマクロ文の誤りを修正
 ・ついでにCaption.dllのビルドオプションを微調整
