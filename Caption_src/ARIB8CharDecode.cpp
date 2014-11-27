@@ -125,17 +125,26 @@ CARIB8CharDecode::~CARIB8CharDecode(void)
 //STD-B24で規定される初期化動作をおこなう
 BOOL CARIB8CharDecode::InitCaption(void)
 {
-	m_G0.iMF = MF_JIS_KANJI1;
-	m_G0.iMode = MF_MODE_G;
-	m_G0.iByte = 2;
+	if( m_wSWFMode==14 ){
+		m_G0.iMF = MF_DRCS_1;
+		m_G0.iMode = MF_MODE_DRCS;
+		m_G0.iByte = 1;
 
+		m_G2.iMF = MF_JIS_KANJI1;
+		m_G2.iMode = MF_MODE_G;
+		m_G2.iByte = 2;
+	}else{
+		m_G0.iMF = MF_JIS_KANJI1;
+		m_G0.iMode = MF_MODE_G;
+		m_G0.iByte = 2;
+
+		m_G2.iMF = MF_HIRA;
+		m_G2.iMode = MF_MODE_G;
+		m_G2.iByte = 1;
+	}
 	m_G1.iMF = MF_ASCII;
 	m_G1.iMode = MF_MODE_G;
 	m_G1.iByte = 1;
-
-	m_G2.iMF = MF_HIRA;
-	m_G2.iMode = MF_MODE_G;
-	m_G2.iByte = 1;
 
 	m_G3.iMF = MF_MACRO;
 	m_G3.iMode = MF_MODE_DRCS;
@@ -164,6 +173,8 @@ BOOL CARIB8CharDecode::InitCaption(void)
 		//960x540横
 		m_wClientW = 960;
 		m_wClientH = 540;
+		m_wCharW = 36;
+		m_wCharH = 36;
 		m_wCharHInterval = 4;
 		m_wCharVInterval = 24;
 		break;
@@ -171,6 +182,8 @@ BOOL CARIB8CharDecode::InitCaption(void)
 		//960x540縦
 		m_wClientW = 960;
 		m_wClientH = 540;
+		m_wCharW = 36;
+		m_wCharH = 36;
 		m_wCharHInterval = 12;
 		m_wCharVInterval = 24;
 		break;
@@ -178,6 +191,8 @@ BOOL CARIB8CharDecode::InitCaption(void)
 		//720x480横
 		m_wClientW = 720;
 		m_wClientH = 480;
+		m_wCharW = 36;
+		m_wCharH = 36;
 		m_wCharHInterval = 4;
 		m_wCharVInterval = 16;
 		break;
@@ -185,8 +200,20 @@ BOOL CARIB8CharDecode::InitCaption(void)
 		//720x480縦
 		m_wClientW = 720;
 		m_wClientH = 480;
+		m_wCharW = 36;
+		m_wCharH = 36;
 		m_wCharHInterval = 8;
 		m_wCharVInterval = 24;
+		break;
+	case 14:
+		//Cプロファイル
+		//表示領域320x180、表示区画20x24で固定
+		m_wClientW = 320;
+		m_wClientH = 180;
+		m_wCharW = 18;
+		m_wCharH = 18;
+		m_wCharHInterval = 2;
+		m_wCharVInterval = 6;
 		break;
 	default:
 		return FALSE;
@@ -196,8 +223,6 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_wPosStartX = m_wPosX = m_wClientX;
 	m_wPosY = m_wClientY + GetLineDirSize() - 1;
 	m_bPosInit = FALSE;
-	m_wCharW = 36;
-	m_wCharH = 36;
 	m_dwWaitTime = 0;
 
 	// mark10als
@@ -1415,7 +1440,8 @@ WORD CARIB8CharDecode::GetLineDirSize(void) const
 	return wSize==0 ? 1 : wSize;
 }
 
-#define GET_PIXEL(b,x) ( ((b)[(x)/4]>>((3-(x)%4)*2)) & 0x3 )
+#define GET_PIXEL_1(b,x) ( ((b)[(x)/8]>>(7-(x)%8)) & 0x1 )
+#define GET_PIXEL_2(b,x) ( ((b)[(x)/4]>>((3-(x)%4)*2)) & 0x3 )
 
 BOOL CARIB8CharDecode::DRCSHeaderparse( const BYTE* pbSrc, DWORD dwSrcSize, vector<DRCS_PATTERN>* pDRCList, BOOL bDRCS_0 )
 {
@@ -1439,29 +1465,33 @@ BOOL CARIB8CharDecode::DRCSHeaderparse( const BYTE* pbSrc, DWORD dwSrcSize, vect
 			}
 			BYTE bMode = pbSrc[dwRead] & 0x0F;
 			BYTE bDepth = pbSrc[dwRead+1];
+			BYTE bPixPerByte = bDepth==0 ? 8 : 4;
 			BYTE bWidth = pbSrc[dwRead+2];
 			BYTE bHeight = pbSrc[dwRead+3];
-			if( bMode != 1 || bDepth != 2 || bWidth > DRCS_SIZE_MAX || bHeight > DRCS_SIZE_MAX ){
+			if( !(bMode==0 && bDepth==0 || bMode==1 && bDepth==2) || bWidth>DRCS_SIZE_MAX || bHeight>DRCS_SIZE_MAX ){
 				//未サポート(運用規定外)
 				return FALSE;
 			}
 			dwRead += 4;
-			if( dwSrcSize < dwRead + (bHeight*bWidth+3)/4 ){
+			if( dwSrcSize < dwRead + (bHeight*bWidth+bPixPerByte-1) / bPixPerByte ){
 				return FALSE;
 			}
 			//ここで新規追加
 			pDRCList->resize(pDRCList->size() + 1);
 			DRCS_PATTERN &drcs = pDRCList->back();
 			drcs.wDRCCode = wDRCCode;
+			drcs.wGradation = bDepth + 2;
 
 			DWORD dwSizeImage = 0;
 			//ビットマップの仕様により左下から走査
 			for( int y=bHeight-1; y>=0; y-- ){
 				for( int x=0; x<bWidth; x++ ){
+					int nPix = bDepth==0 ? GET_PIXEL_1(pbSrc+dwRead, y*bWidth+x) * 3 :
+					                       GET_PIXEL_2(pbSrc+dwRead, y*bWidth+x);
 					if( x%2==0 ){
-						drcs.bBitmap[dwSizeImage++] = GET_PIXEL(pbSrc+dwRead, y*bWidth+x) << 4;
+						drcs.bBitmap[dwSizeImage++] = (BYTE)(nPix<<4);
 					}else{
-						drcs.bBitmap[dwSizeImage-1] |= GET_PIXEL(pbSrc+dwRead, y*bWidth+x);
+						drcs.bBitmap[dwSizeImage-1] |= (BYTE)nPix;
 					}
 				}
 				//ビットマップの仕様によりストライドを4バイト境界にする
@@ -1477,7 +1507,7 @@ BOOL CARIB8CharDecode::DRCSHeaderparse( const BYTE* pbSrc, DWORD dwSrcSize, vect
 			bmiHeader.biSizeImage = dwSizeImage;
 			drcs.bmiHeader = bmiHeader;
 
-			dwRead += (bHeight*bWidth+3)/4;
+			dwRead += (bHeight*bWidth+bPixPerByte-1) / bPixPerByte;
 		}
 	}
 	return TRUE;

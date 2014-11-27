@@ -58,7 +58,9 @@ typedef struct _LANG_TAG_INFO_DLL{
 typedef struct _DRCS_PATTERN_DLL{
 	DWORD dwDRCCode;
 	DWORD dwUCS;
-	DWORD dwReserved[2]; //zero cleared
+	WORD wGradation;
+	WORD wReserved; //zero cleared
+	DWORD dwReserved; //zero cleared
 	BITMAPINFOHEADER bmiHeader;
 	const BYTE* pbBitmap;
 }DRCS_PATTERN_DLL;

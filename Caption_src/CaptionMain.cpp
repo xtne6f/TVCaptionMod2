@@ -201,7 +201,7 @@ DWORD CCaptionMain::ParseListData()
 	return ERR_INVALID_PACKET;
 }
 
-DWORD CCaptionMain::ParseCaption(BYTE* pbBuff, DWORD dwSize)
+DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 {
 	if( pbBuff == NULL || dwSize < 3 ){
 		return ERR_INVALID_PACKET;
@@ -261,6 +261,7 @@ DWORD CCaptionMain::ParseCaption(BYTE* pbBuff, DWORD dwSize)
 		m_CaptionList[ucID] = m_CaptionList[0];
 		m_DRCList[ucID] = m_DRCList[0];
 		m_DRCMap[ucID] = m_DRCMap[0];
+		//未定義の表示書式(0b1111)はCプロファイル(14)とみなす
 		dwRet = ParseCaptionData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_CaptionList[ucID],
 		                         &m_DRCList[ucID], &m_DRCMap[ucID], m_LangTagList[ucID-1].ucFormat-1);
 		if( dwRet == TRUE ){
@@ -280,7 +281,7 @@ DWORD CCaptionMain::ParseCaption(BYTE* pbBuff, DWORD dwSize)
 }
 
 
-DWORD CCaptionMain::ParseCaptionManagementData(BYTE* pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
+DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
                                                vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap)
 {
 	if( pbBuff == NULL || dwSize < 2 ){
@@ -333,8 +334,9 @@ DWORD CCaptionMain::ParseCaptionManagementData(BYTE* pbBuff, DWORD dwSize, vecto
 		Item.ucTCS = (pbBuff[dwPos]&0x0C)>>2;
 		Item.ucRollupMode = pbBuff[dwPos]&0x03;
 		dwPos++;
-
-		m_LangTagList[Item.ucLangTag] = Item;
+		if( Item.ucLangTag < LANG_TAG_MAX ){
+			m_LangTagList[Item.ucLangTag] = Item;
+		}
 	}
 	if( dwSize < dwPos+3 ){
 		return ERR_INVALID_PACKET;
@@ -353,7 +355,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(BYTE* pbBuff, DWORD dwSize, vecto
 	return dwRet;
 }
 
-DWORD CCaptionMain::ParseCaptionData(BYTE* pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
+DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
                                      vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode)
 {
 	if( pbBuff == NULL || dwSize < 4 ){
@@ -400,7 +402,7 @@ DWORD CCaptionMain::ParseCaptionData(BYTE* pbBuff, DWORD dwSize, vector<CAPTION_
 	return dwRet;
 }
 
-DWORD CCaptionMain::ParseUnitData(BYTE* pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList,
+DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList,
                                   vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode)
 {
 	if( pbBuff == NULL || dwSize < 5 || pdwReadSize == NULL ){
@@ -453,9 +455,20 @@ DWORD CCaptionMain::ParseUnitData(BYTE* pbBuff, DWORD dwSize, DWORD* pdwReadSize
 
 DWORD CCaptionMain::GetTagInfo(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount)
 {
-	if( ppList == NULL || pdwListCount == NULL ){
+	if( ppList == NULL ){
 		return FALSE;
 	}
+	if( pdwListCount == NULL ){
+		//Cプロファイルの既定の字幕管理データを流し込む
+		static const BYTE bDefaultMD[] = {
+			0x80,0xFF,0xF0,0x00,0x00,0x00,0x00,0x0A,0x3F,0x01,
+			0x1A,0x6A,0x70,0x6E,0xF0,0x00,0x00,0x00,0xF2,0x0D,
+		};
+		m_ucDgiGroup = 0xFF;
+		ParseCaption(bDefaultMD, sizeof(bDefaultMD));
+		//言語数は必ず1になる
+	}
+
 	DWORD j = 0;
 	for( size_t i=0; i<LANG_TAG_MAX; i++ ){
 		if( m_LangTagList[i].ucLangTag == i ){
@@ -463,7 +476,9 @@ DWORD CCaptionMain::GetTagInfo(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount)
 		}
 	}
 	if( j > 0 ){
-		*pdwListCount = j;
+		if( pdwListCount != NULL ){
+			*pdwListCount = j;
+		}
 		*ppList = m_LangTagDllList;
 		return TRUE;
 	}
@@ -499,41 +514,44 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 		}
 
 		DWORD dwCapCharPoolCount = 0;
-		for( int i=0; i<(int)List.size(); i++ ){
-			m_pCapList[i].dwListCount = (DWORD)List[i].CharList.size();
-			m_pCapList[i].pstCharList = m_pCapCharPool + dwCapCharPoolCount;
-			dwCapCharPoolCount += (DWORD)List[i].CharList.size();
+		vector<CAPTION_DATA>::const_iterator it = List.begin();
+		CAPTION_DATA_DLL *pCap = m_pCapList;
+		for( ; it != List.end(); ++it,++pCap ){
+			pCap->dwListCount = (DWORD)it->CharList.size();
+			pCap->pstCharList = m_pCapCharPool + dwCapCharPoolCount;
+			dwCapCharPoolCount += (DWORD)it->CharList.size();
 
-			for( int j=0; j<(int)List[i].CharList.size(); j++ ){
-				m_pCapList[i].pstCharList[j].pszDecode = List[i].CharList[j].strDecode.c_str();
-
-				m_pCapList[i].pstCharList[j].wCharSizeMode = (DWORD)List[i].CharList[j].emCharSizeMode;
-				m_pCapList[i].pstCharList[j].stCharColor = List[i].CharList[j].stCharColor;
-				m_pCapList[i].pstCharList[j].stBackColor = List[i].CharList[j].stBackColor;
-				m_pCapList[i].pstCharList[j].stRasterColor = List[i].CharList[j].stRasterColor;
-				m_pCapList[i].pstCharList[j].bUnderLine = List[i].CharList[j].bUnderLine;
-				m_pCapList[i].pstCharList[j].bShadow = List[i].CharList[j].bShadow;
-				m_pCapList[i].pstCharList[j].bBold = List[i].CharList[j].bBold;
-				m_pCapList[i].pstCharList[j].bItalic = List[i].CharList[j].bItalic;
-				m_pCapList[i].pstCharList[j].bFlushMode = List[i].CharList[j].bFlushMode;
-				m_pCapList[i].pstCharList[j].wCharW = List[i].CharList[j].wCharW;
-				m_pCapList[i].pstCharList[j].wCharH = List[i].CharList[j].wCharH;
-				m_pCapList[i].pstCharList[j].wCharHInterval = List[i].CharList[j].wCharHInterval;
-				m_pCapList[i].pstCharList[j].wCharVInterval = List[i].CharList[j].wCharVInterval;
-				m_pCapList[i].pstCharList[j].bHLC = List[i].CharList[j].bHLC;
-				m_pCapList[i].pstCharList[j].wAlignment = 0;
+			vector<CAPTION_CHAR_DATA>::const_iterator jt = it->CharList.begin();
+			CAPTION_CHAR_DATA_DLL *pCapChar = pCap->pstCharList;
+			for( ; jt != it->CharList.end(); ++jt,++pCapChar ){
+				pCapChar->pszDecode = jt->strDecode.c_str();
+				pCapChar->wCharSizeMode = (DWORD)jt->emCharSizeMode;
+				pCapChar->stCharColor = jt->stCharColor;
+				pCapChar->stBackColor = jt->stBackColor;
+				pCapChar->stRasterColor = jt->stRasterColor;
+				pCapChar->bUnderLine = jt->bUnderLine;
+				pCapChar->bShadow = jt->bShadow;
+				pCapChar->bBold = jt->bBold;
+				pCapChar->bItalic = jt->bItalic;
+				pCapChar->bFlushMode = jt->bFlushMode;
+				pCapChar->wCharW = jt->wCharW;
+				pCapChar->wCharH = jt->wCharH;
+				pCapChar->wCharHInterval = jt->wCharHInterval;
+				pCapChar->wCharVInterval = jt->wCharVInterval;
+				pCapChar->bHLC = jt->bHLC;
+				pCapChar->wAlignment = 0;
 			}
 
-			m_pCapList[i].bClear=List[i].bClear;
-			m_pCapList[i].wSWFMode = List[i].wSWFMode;
-			m_pCapList[i].wClientX = List[i].wClientX;
-			m_pCapList[i].wClientY = List[i].wClientY;
-			m_pCapList[i].wClientW = List[i].wClientW;
-			m_pCapList[i].wClientH = List[i].wClientH;
-			m_pCapList[i].wPosX = List[i].wPosX;
-			m_pCapList[i].wPosY = List[i].wPosY;
-			m_pCapList[i].dwWaitTime = List[i].dwWaitTime;
-			m_pCapList[i].wAlignment = 0;
+			pCap->bClear = it->bClear;
+			pCap->wSWFMode = it->wSWFMode;
+			pCap->wClientX = it->wClientX;
+			pCap->wClientY = it->wClientY;
+			pCap->wClientW = it->wClientW;
+			pCap->wClientH = it->wClientH;
+			pCap->wPosX = it->wPosX;
+			pCap->wPosY = it->wPosY;
+			pCap->dwWaitTime = it->dwWaitTime;
+			pCap->wAlignment = 0;
 		}
 		*pdwListCount = (DWORD)List.size();
 		*ppList = m_pCapList;
@@ -562,16 +580,18 @@ BOOL CCaptionMain::GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** pp
 		}
 
 		DWORD dwCount = 0;
-		for( size_t i=0; i<List.size(); i++ ){
+		vector<DRCS_PATTERN>::const_iterator it = List.begin();
+		for( ; it != List.end(); ++it ){
 			//UCSにマップされていない=字幕文に一度も現れていない
-			wchar_t wc = m_DRCMap[ucLangTag+1].GetUCS(List[i].wDRCCode);
+			wchar_t wc = m_DRCMap[ucLangTag+1].GetUCS(it->wDRCCode);
 			if( wc != L'\0' ){
-				m_pDRCList[dwCount].dwDRCCode = List[i].wDRCCode;
+				m_pDRCList[dwCount].dwDRCCode = it->wDRCCode;
 				m_pDRCList[dwCount].dwUCS = wc;
-				m_pDRCList[dwCount].dwReserved[0] = 0;
-				m_pDRCList[dwCount].dwReserved[1] = 0;
-				m_pDRCList[dwCount].bmiHeader = List[i].bmiHeader;
-				m_pDRCList[dwCount].pbBitmap = List[i].bBitmap;
+				m_pDRCList[dwCount].wGradation = it->wGradation;
+				m_pDRCList[dwCount].wReserved = 0;
+				m_pDRCList[dwCount].dwReserved = 0;
+				m_pDRCList[dwCount].bmiHeader = it->bmiHeader;
+				m_pDRCList[dwCount].pbBitmap = it->bBitmap;
 				dwCount++;
 			}
 		}

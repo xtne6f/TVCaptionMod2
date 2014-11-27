@@ -112,8 +112,9 @@ typedef struct _CAPTION_DATA{
 
 struct DRCS_PATTERN{
 	WORD wDRCCode;
+	WORD wGradation;
 	BITMAPINFOHEADER bmiHeader;
-	BYTE bBitmap[(DRCS_SIZE_MAX/2 + 3) / 4 * 4 * DRCS_SIZE_MAX];
+	BYTE bBitmap[(DRCS_SIZE_MAX*4+31)/32*4 * DRCS_SIZE_MAX];
 	DRCS_PATTERN() {}
 };
 

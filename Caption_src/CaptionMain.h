@@ -74,8 +74,8 @@ protected:
 
 protected:
 	DWORD ParseListData();
-	DWORD ParseCaption(BYTE* pbBuff, DWORD dwSize);
-	DWORD ParseCaptionManagementData(BYTE* pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap);
-	DWORD ParseCaptionData(BYTE* pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode);
-	DWORD ParseUnitData(BYTE* pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode);
+	DWORD ParseCaption(LPCBYTE pbBuff, DWORD dwSize);
+	DWORD ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap);
+	DWORD ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode);
+	DWORD ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode);
 };

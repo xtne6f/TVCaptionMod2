@@ -35,6 +35,8 @@ private:
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
     void ProcessPacket(BYTE *pPacket);
 
+    bool m_fTVH264;
+
     // 設定
     TCHAR m_szIniPath[MAX_PATH];
     TCHAR m_szCaptionDllPath[MAX_PATH];

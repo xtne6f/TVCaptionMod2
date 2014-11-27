@@ -46,6 +46,10 @@ DWORD WINAPI ClearCP();
 //以下の関数で返されるバッファはつぎにAddTSPacketCP、UnInitializeCP、ClearCPのいずれかを呼ぶまで有効
 
 //字幕情報取得
+//<Cプロファイル拡張>
+//  pdwListCount==NULLのとき、既定の字幕管理データを取得済みにする
+//  必須ではないが、ワンセグ字幕での初期化のレスポンスが向上する
+//  TRUEを返したときppListには必ず1つの言語タグが格納される
 //戻り値：エラーコード
 //ERR_NOT_INIT:初期化されていない, FALSE:失敗, TRUE:成功(*pdwListCount>=1)
 __declspec(dllexport)

@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-05-20
+// 最終更新: 2012-05-24
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -26,7 +26,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.3;based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.4; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 2;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -46,7 +46,8 @@ static const TVTest::CommandInfo COMMAND_LIST[] = {
 };
 
 CTVCaption2::CTVCaption2()
-    : m_settingsIndex(0)
+    : m_fTVH264(false)
+    , m_settingsIndex(0)
     , m_paintingMethod(0)
     , m_delayTime(0)
     , m_fEnTextColor(false)
@@ -121,6 +122,9 @@ bool CTVCaption2::Initialize()
 
     if (!::GetModuleFileName(g_hinstDLL, m_szIniPath, _countof(m_szIniPath)) ||
         !::PathRenameExtension(m_szIniPath, TEXT(".ini"))) return false;
+
+    TVTest::HostInfo hostInfo;
+    m_fTVH264 = m_pApp->GetHostInfo(&hostInfo) && !::lstrcmp(hostInfo.pszAppName, TEXT("TVH264"));
 
     // コマンドを登録
     m_pApp->RegisterCommand(COMMAND_LIST, _countof(COMMAND_LIST));
@@ -334,7 +338,8 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
 // 設定の読み込み
 void CTVCaption2::LoadSettings()
 {
-    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptionDll"), TEXT("Plugins\\Caption.dll"),
+    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptionDll"),
+                              m_fTVH264 ? TEXT("H264Plugins\\Caption.dll") : TEXT("Plugins\\Caption.dll"),
                               m_szCaptionDllPath, _countof(m_szCaptionDllPath), m_szIniPath);
     m_settingsIndex = GetPrivateProfileSignedInt(TEXT("Settings"), TEXT("SettingsIndex"), 0, m_szIniPath);
 
@@ -538,9 +543,8 @@ CPseudoOSD &CTVCaption2::CreateOsd(HWND hwndContainer, int charHeight, int nomal
     osd.SetTextColor(m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB),
                      m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
 
-    int textOpacity = style.stCharColor.ucAlpha==0 ? 0 :
-                      m_textOpacity>=0 ? min(m_textOpacity,100) : style.stCharColor.ucAlpha*100/255;
-    int backOpacity = style.stBackColor.ucAlpha==0 ? 0 :
+    int textOpacity = m_textOpacity>=0 ? min(m_textOpacity,100) : style.stCharColor.ucAlpha*100/255;
+    int backOpacity = !m_fTVH264 && style.stBackColor.ucAlpha==0 ? 0 :
                       m_backOpacity>=0 ? min(m_backOpacity,100) : style.stBackColor.ucAlpha*100/255;
     osd.SetOpacity(textOpacity, backOpacity);
 
@@ -624,7 +628,13 @@ void CTVCaption2::ShowCaptionData(const CAPTION_DATA_DLL &caption, const DRCS_PA
     double scaleY = 1.0;
     int offsetX = rc.left;
     int offsetY = rc.top;
-    if (caption.wSWFMode==9 || caption.wSWFMode==10) {
+    if (caption.wSWFMode==14) {
+        // Cプロファイル
+        scaleX = (double)(rc.right-rc.left) / (320+20/2);
+        scaleY = (double)(rc.bottom-rc.top) / 180;
+        offsetY += (int)((180-24*3)*scaleY);
+    }
+    else if (caption.wSWFMode==9 || caption.wSWFMode==10) {
         scaleX = (double)(rc.right-rc.left) / 720;
         scaleY = (double)(rc.bottom-rc.top) / 480;
     }
@@ -825,6 +835,16 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             pThis->HideOsds();
             pThis->m_fEnCaptionPts = false;
             pThis->m_capCount = 0;
+            pThis->m_pfnClearCP();
+            pThis->m_lang1.ucLangTag = 0xFF;
+            pThis->m_lang2.ucLangTag = 0xFF;
+            if (pThis->m_fTVH264) {
+                // 既定の字幕管理データを取得済みにする
+                LANG_TAG_INFO_DLL *pLangList;
+                if (pThis->m_pfnGetTagInfoCP(&pLangList, NULL) == TRUE) {
+                    pThis->m_lang1 = pLangList[0];
+                }
+            }
             CBlockLock lock(&pThis->m_streamLock);
             pThis->m_packetQueueFront = pThis->m_packetQueueRear;
         }
