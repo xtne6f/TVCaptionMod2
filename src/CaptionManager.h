@@ -9,7 +9,7 @@ public:
     void SetCaptionDll(const CCaptionDll *pCaptionDll, DWORD dwIndexToUse, bool fProfileC=false);
     void Clear();
     void AddPacket(LPCBYTE pPacket);
-    bool Analyze(DWORD currentPcr);
+    void Analyze(DWORD currentPcr);
     const CAPTION_DATA_DLL *PopCaption(DWORD currentPcr, bool fIgnorePts=false);
     bool IsSuperimpose() const { return m_fSuperimpose; }
     bool IsEmpty() const { return m_capCount == 0; }
@@ -32,6 +32,7 @@ private:
     DWORD m_capCount;
     DWORD m_drcsCount;
     LANG_TAG_INFO_DLL m_lang1, m_lang2;
+    bool m_fEnLastTagInfoPcr;
     DWORD m_lastTagInfoPcr;
     BYTE m_queue[PACKET_QUEUE_SIZE][188];
     int m_queueFront;

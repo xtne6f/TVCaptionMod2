@@ -34,7 +34,7 @@ private:
     void SaveSettings() const;
     void SwitchSettings();
     static LRESULT CALLBACK EventCallback(UINT Event, LPARAM lParam1, LPARAM lParam2, void *pClientData);
-    void OnCapture();
+    void OnCapture(bool fSaveToFile);
     static BOOL CALLBACK WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData);
     void HideOsds(STREAM_INDEX index);
     void DestroyOsds();
@@ -51,6 +51,8 @@ private:
     // 設定
     TCHAR m_szIniPath[MAX_PATH];
     TCHAR m_szCaptionDllPath[MAX_PATH];
+    TCHAR m_szCaptureFolder[MAX_PATH];
+    TCHAR m_szCaptureFileName[64];
     TCHAR m_szFaceName[LF_FACESIZE];
     TCHAR m_szGaijiFaceName[LF_FACESIZE];
     TCHAR m_szGaijiTableName[LF_FACESIZE];

@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-07-16
+// 最終更新: 2012-07-19
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,8 +27,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.9r4; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 6;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.0; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 7;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 enum {
@@ -40,12 +40,14 @@ enum {
     ID_COMMAND_SWITCH_LANG,
     ID_COMMAND_SWITCH_SETTING,
     ID_COMMAND_CAPTURE,
+    ID_COMMAND_SAVE,
 };
 
 static const TVTest::CommandInfo COMMAND_LIST[] = {
     {ID_COMMAND_SWITCH_LANG, L"SwitchLang", L"字幕言語切り替え"},
     {ID_COMMAND_SWITCH_SETTING, L"SwitchSetting", L"表示設定切り替え"},
     {ID_COMMAND_CAPTURE, L"Capture", L"字幕付き画像のコピー"},
+    {ID_COMMAND_SAVE, L"Save", L"字幕付き画像の保存"},
 };
 
 CTVCaption2::CTVCaption2()
@@ -79,6 +81,8 @@ CTVCaption2::CTVCaption2()
 {
     m_szIniPath[0] = 0;
     m_szCaptionDllPath[0] = 0;
+    m_szCaptureFolder[0] = 0;
+    m_szCaptureFileName[0] = 0;
     m_szFaceName[0] = 0;
     m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
@@ -356,6 +360,10 @@ void CTVCaption2::LoadSettings()
     ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptionDll"),
                               m_fTVH264 ? TEXT("H264Plugins\\Caption.dll") : TEXT("Plugins\\Caption.dll"),
                               m_szCaptionDllPath, _countof(m_szCaptionDllPath), m_szIniPath);
+    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptureFolder"), TEXT(""),
+                              m_szCaptureFolder, _countof(m_szCaptureFolder), m_szIniPath);
+    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptureFileName"), TEXT("Capture"),
+                              m_szCaptureFileName, _countof(m_szCaptureFileName), m_szIniPath);
     m_settingsIndex = GetPrivateProfileSignedInt(TEXT("Settings"), TEXT("SettingsIndex"), 0, m_szIniPath);
 
     // ここからはセクション固有
@@ -400,6 +408,8 @@ void CTVCaption2::SaveSettings() const
 {
     WritePrivateProfileInt(TEXT("Settings"), TEXT("Version"), INFO_VERSION, m_szIniPath);
     ::WritePrivateProfileString(TEXT("Settings"), TEXT("CaptionDll"), m_szCaptionDllPath, m_szIniPath);
+    ::WritePrivateProfileString(TEXT("Settings"), TEXT("CaptureFolder"), m_szCaptureFolder, m_szIniPath);
+    ::WritePrivateProfileString(TEXT("Settings"), TEXT("CaptureFileName"), m_szCaptureFileName, m_szIniPath);
     WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_szIniPath);
 
     // ここからはセクション固有
@@ -555,7 +565,10 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                 PlayRomSound(pThis->m_szRomSoundList, 16);
                 break;
             case ID_COMMAND_CAPTURE:
-                pThis->OnCapture();
+                pThis->OnCapture(false);
+                break;
+            case ID_COMMAND_SAVE:
+                pThis->OnCapture(true);
                 break;
             }
         }
@@ -565,33 +578,80 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
 }
 
 
-void CTVCaption2::OnCapture()
+void CTVCaption2::OnCapture(bool fSaveToFile)
 {
     void *pPackDib = m_pApp->CaptureImage();
     if (!pPackDib) return;
 
     BITMAPINFOHEADER *pBih = static_cast<BITMAPINFOHEADER*>(pPackDib);
-    if (pBih->biWidth > 0 && pBih->biHeight > 0) {
+    if (pBih->biWidth>0 && pBih->biHeight>0 && (pBih->biBitCount==24 || pBih->biBitCount==32)) {
+        // 常に24bitビットマップにする
+        BITMAPINFOHEADER bih = *pBih;
+        bih.biBitCount = 24;
         void *pBits;
-        HBITMAP hbm = ::CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(pBih), DIB_RGB_COLORS, &pBits, NULL, 0);
+        HBITMAP hbm = ::CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&bih), DIB_RGB_COLORS, &pBits, NULL, 0);
         if (hbm) {
             BYTE *pBitmap = static_cast<BYTE*>(pPackDib) + sizeof(BITMAPINFOHEADER);
-            ::SetDIBits(NULL, hbm, 0, pBih->biHeight, pBitmap, reinterpret_cast<BITMAPINFO*>(pBih), DIB_RGB_COLORS);
+            if (pBih->biBitCount == 24) {
+                ::SetDIBits(NULL, hbm, 0, pBih->biHeight, pBitmap, reinterpret_cast<BITMAPINFO*>(pBih), DIB_RGB_COLORS);
+            }
+            else {
+                // 32-24bit変換
+                for (int y=0; y<bih.biHeight; ++y) {
+                    BYTE *pDest = static_cast<BYTE*>(pBits) + (bih.biWidth*3+3) / 4 * 4 * y;
+                    BYTE *pSrc = pBitmap + bih.biWidth * 4 * y;
+                    for (int x=0; x<bih.biWidth; ++x) {
+                        ::memcpy(&pDest[3 * x], &pSrc[4 * x], 3);
+                    }
+                }
+            }
 
-            // ビットマップに表示中のOSDを合成
             HWND hwndContainer = FindVideoContainer();
             RECT rc;
             if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
+                TVTest::VideoInfo vi;
+                if (m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
+                    BITMAPINFOHEADER bihRes = bih;
+                    if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
+                        // 描画ウィンドウが動画よりもワイド
+                        bihRes.biWidth = rc.bottom * vi.XAspect / vi.YAspect;
+                        bihRes.biHeight = rc.bottom;
+                    }
+                    else {
+                        bihRes.biWidth = rc.right;
+                        bihRes.biHeight = rc.right * vi.YAspect / vi.XAspect;
+                    }
+                    // キャプチャ画像が表示中の動画サイズと異なるときは動画サイズのビットマップに変換する
+                    if (bih.biWidth < bihRes.biWidth-1 || bihRes.biWidth+1 < bih.biWidth ||
+                        bih.biHeight < bihRes.biHeight-1 || bihRes.biHeight+1 < bih.biHeight)
+                    {
+                        void *pBitsRes;
+                        HBITMAP hbmRes = ::CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&bihRes), DIB_RGB_COLORS, &pBitsRes, NULL, 0);
+                        if (hbmRes) {
+                            HDC hdc = ::CreateCompatibleDC(NULL);
+                            HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbmRes));
+                            DrawUtil::DrawBitmap(hdc, 0, 0, bihRes.biWidth, bihRes.biHeight, hbm);
+                            ::SelectObject(hdc, hbmOld);
+                            ::DeleteDC(hdc);
+                            ::DeleteObject(hbm);
+                            hbm = hbmRes;
+                            bih = bihRes;
+                            pBits = pBitsRes;
+                        }
+                    }
+                }
+
+                // ビットマップに表示中のOSDを合成
                 // コンテナ中央に動画が表示されていることを仮定
                 int offsetLeft, offsetTop;
-                if (pBih->biWidth * rc.bottom < rc.right * pBih->biHeight) {
+                if (bih.biWidth * rc.bottom < rc.right * bih.biHeight) {
                     // 描画ウィンドウが動画よりもワイド
-                    offsetLeft = (rc.right - rc.bottom * pBih->biWidth / pBih->biHeight) / 2;
+                    offsetLeft = (rc.right - rc.bottom * bih.biWidth / bih.biHeight) / 2;
                     offsetTop = 0;
                 }
                 else {
                     offsetLeft = 0;
-                    offsetTop = (rc.bottom - rc.right * pBih->biHeight / pBih->biWidth) / 2;
+                    offsetTop = (rc.bottom - rc.right * bih.biHeight / bih.biWidth) / 2;
                 }
                 HDC hdc = ::CreateCompatibleDC(NULL);
                 HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbm));
@@ -606,16 +666,47 @@ void CTVCaption2::OnCapture()
                 ::DeleteDC(hdc);
             }
 
-            // クリップボードにコピー
-            if (::OpenClipboard(m_hwndPainting)) {
+            ::GdiFlush();
+            int sizeImage = (bih.biWidth*3+3) / 4 * 4 * bih.biHeight;
+            if (fSaveToFile) {
+                // ファイルに保存
+                if (::PathIsDirectory(m_szCaptureFolder)) {
+                    TCHAR fileName[_countof(m_szCaptureFileName) + 64];
+                    SYSTEMTIME st;
+                    ::GetLocalTime(&st);
+                    ::wsprintf(fileName, TEXT("%s%d%02d%02d-%02d%02d%02d"),
+                               m_szCaptureFileName, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                    TCHAR path[MAX_PATH + 16];
+                    if (::PathCombine(path, m_szCaptureFolder, fileName)) {
+                        int len = ::lstrlen(path);
+                        ::lstrcpy(path+len, TEXT(".bmp"));
+                        for (int i = 1; i <= 10 && ::PathFileExists(path); ++i) {
+                            ::wsprintf(path+len, TEXT("-%d.bmp"), i);
+                        }
+                        // ファイルがなければ書きこむ
+                        HANDLE hFile = ::CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+                        if (hFile != INVALID_HANDLE_VALUE) {
+                            BITMAPFILEHEADER bmfHeader = {0};
+                            bmfHeader.bfType = 0x4D42;
+                            bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(bih);
+                            bmfHeader.bfSize = bmfHeader.bfOffBits + sizeImage;
+                            DWORD dwWritten;
+                            ::WriteFile(hFile, &bmfHeader, sizeof(bmfHeader), &dwWritten, NULL);
+                            ::WriteFile(hFile, &bih, sizeof(bih), &dwWritten, NULL);
+                            ::WriteFile(hFile, pBits, sizeImage, &dwWritten, NULL);
+                            ::CloseHandle(hFile);
+                        }
+                    }
+                }
+            }
+            else if (::OpenClipboard(m_hwndPainting)) {
+                // クリップボードにコピー
                 if (::EmptyClipboard()) {
-                    int sizeImage = (pBih->biWidth * pBih->biBitCount + 31) / 32 * 4 * pBih->biHeight;
                     HGLOBAL hg = ::GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPINFOHEADER) + sizeImage);
                     if (hg) {
                         BYTE *pClip = reinterpret_cast<BYTE*>(::GlobalLock(hg));
                         if (pClip) {
-                            ::memcpy(pClip, pBih, sizeof(BITMAPINFOHEADER));
-                            ::GdiFlush();
+                            ::memcpy(pClip, &bih, sizeof(BITMAPINFOHEADER));
                             ::memcpy(pClip + sizeof(BITMAPINFOHEADER), pBits, sizeImage);
                             ::GlobalUnlock(hg);
                             if (!::SetClipboardData(CF_DIB, hg)) ::GlobalFree(hg);
@@ -732,6 +823,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
     osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
+    osd.SetFlashingInterval(style.bFlushMode==1 ? 500 : style.bFlushMode==2 ? -500 : 0);
     osd.Create(hwndContainer, m_paintingMethod==2 ? true : false);
     return osd;
 }
@@ -842,10 +934,28 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         GetCharSize(&charW, &charH, &dirW, &dirH, charData);
         int charScaleW = (int)(charW * scaleX);
         int charScaleH = (int)(charH * scaleY);
+        int charNormalScaleW = (int)(charData.wCharW * scaleX);
         int charNormalScaleH = (int)(charData.wCharH * scaleY);
 
         LPCTSTR pszShow = pszCarry ? pszCarry : charData.pszDecode;
         pszCarry = NULL;
+
+        TCHAR szHalf[256];
+        szHalf[0] = 0;
+        if (charData.wCharSizeMode == CP_STR_MEDIUM) {
+            // 可能なら一部の約物を半角で描画する
+            static LPCTSTR S_LIST = TEXT("　。、・");
+            static LPCTSTR R_LIST = TEXT(" ｡､･");
+            for (int j = 0; pszShow[j] && j < _countof(szHalf)-1; ) {
+                LPCTSTR p = ::StrChr(S_LIST, pszShow[j]);
+                if (!p) {
+                    szHalf[0] = 0;
+                    break;
+                }
+                szHalf[j++] = R_LIST[p-S_LIST];
+                szHalf[j] = 0;
+            }
+        }
 
         // 文字列にDRCSか外字が含まれるか調べる
         const DRCS_PATTERN_DLL *pDrcs = NULL;
@@ -918,6 +1028,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 charData.bUnderLine == nextCharData.bUnderLine &&
                 charData.bBold == nextCharData.bBold &&
                 charData.bItalic == nextCharData.bItalic &&
+                charData.bFlushMode == nextCharData.bFlushMode &&
                 charData.bHLC == nextCharData.bHLC &&
                 charData.stCharColor == nextCharData.stCharColor &&
                 charData.stBackColor == nextCharData.stBackColor)
@@ -928,8 +1039,8 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
 
         // 文字列を描画
         if (pOsdCarry) {
-            AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
-                       charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
+            AddOsdText(pOsdCarry, szHalf[0]?szHalf:pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
+                       szHalf[0]?-charNormalScaleW:charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
             if (!fSameStyle) {
                 pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
@@ -940,8 +1051,8 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
-                AddOsdText(&osd, pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
+                AddOsdText(&osd, szHalf[0]?szHalf:pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
+                           szHalf[0]?-charNormalScaleW:charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
                 if (fSameStyle) {
                     pOsdCarry = &osd;
                 }
@@ -1049,7 +1160,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
                     pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod == 2);
                 }
             }
-            pThis->m_fNeedtoShow = true;
+            pThis->m_fNeedtoShow = pThis->m_pApp->GetPreview();
         }
         return 0;
     case WM_DESTROY:
@@ -1105,12 +1216,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
         CBlockLock lock(&m_streamLock);
         if (pCaptionManager->IsEmpty()) {
             // 次の字幕文を取得する
-            bool fDebug = pCaptionManager->Analyze(m_pcr);
-#ifdef _DEBUG
-            if (pCaptionManager->IsSuperimpose() && (fDebug || !pCaptionManager->IsEmpty())) {
-                PlayRomSound(m_szRomSoundList, 16);
-            }
-#endif
+            pCaptionManager->Analyze(m_pcr);
             if (pCaptionManager->IsEmpty()) {
                 return;
             }
@@ -1198,7 +1304,13 @@ static void GetPidsFromVideoPmt(int *pPcrPid, int *pCaption1Pid, int *pCaption2P
         int privPid[2] = {-1, -1};
         for (int j = 0; j < pPmt->pid_count; ++j) {
             if (pPmt->stream_type[j] == PES_PRIVATE_DATA) {
-                privPid[privPid[0]>=0?1:0] = pPmt->pid[j];
+                int ct = pPmt->component_tag[j];
+                if (ct == 0x30 || ct == 0x87) {
+                    privPid[0] = pPmt->pid[j];
+                }
+                else if (ct == 0x38 || ct == 0x88) {
+                    privPid[1] = pPmt->pid[j];
+                }
             }
             else if (pPmt->pid[j] == videoPid) {
                 fVideoPmt = true;

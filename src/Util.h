@@ -66,6 +66,7 @@ typedef struct {
     int             pid_count;
     unsigned char   stream_type[256];
     unsigned short  pid[256]; // PESの一部に限定
+    unsigned char   component_tag[256];
     PSI             psi;
 } PMT;
 

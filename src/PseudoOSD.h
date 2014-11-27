@@ -29,7 +29,8 @@ class CPseudoOSD
 		}
 	} m_Position;
 	UINT_PTR m_TimerID;
-	int m_AnimationCount;
+	bool m_fHideText;
+	int m_FlashingInterval;
 	int m_Opacity;
 	int m_BackOpacity;
 	int m_StrokeWidth;
@@ -68,8 +69,8 @@ public:
 	~CPseudoOSD();
 	bool Create(HWND hwndParent,bool fLayeredWindow=false);
 	bool Destroy();
-	bool PrepareWindow(DWORD Time=0,bool fAnimation=false);
-	bool Show(DWORD Time=0,bool fAnimation=false);
+	bool PrepareWindow();
+	bool Show();
 	bool Hide();
 	bool IsVisible() const;
 	void ClearText();
@@ -82,6 +83,7 @@ public:
 	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
 	void SetVerticalAntiAliasing(bool fVertAntiAliasing);
+	void SetFlashingInterval(int Interval);
 	void OnParentMove();
 	void Compose(HDC hdc,int Left,int Top);
 private:

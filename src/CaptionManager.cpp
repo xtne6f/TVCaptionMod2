@@ -18,6 +18,7 @@ CCaptionManager::CCaptionManager()
     , m_pDrcsList(NULL)
     , m_capCount(0)
     , m_drcsCount(0)
+    , m_fEnLastTagInfoPcr(false)
     , m_lastTagInfoPcr(0)
     , m_queueFront(0)
     , m_queueRear(0)
@@ -42,6 +43,7 @@ void CCaptionManager::Clear()
     m_drcsCount = 0;
     m_lang1.ucLangTag = 0xFF;
     m_lang2.ucLangTag = 0xFF;
+    m_fEnLastTagInfoPcr = false;
     m_queueFront = m_queueRear;
     if (m_pCaptionDll) {
         m_pCaptionDll->Clear(m_dwIndex);
@@ -64,14 +66,14 @@ void CCaptionManager::AddPacket(LPCBYTE pPacket)
 // キューにある字幕ストリームから次の字幕文を取得する
 // キューが空になるか字幕文を得る(m_capCount!=0)と返る
 // PopCaption()やGetDrcsList()で返されたバッファは無効になる
-bool CCaptionManager::Analyze(DWORD currentPcr)
+void CCaptionManager::Analyze(DWORD currentPcr)
 {
-    if (!m_pCaptionDll) return false;
+    if (!m_pCaptionDll) return;
     m_capCount = 0;
     m_drcsCount = 0;
 
     // "字幕管理データを3分以上未受信の場合は選局時の初期化動作を行う"
-    if (m_lang1.ucLangTag != 0xFF &&
+    if (m_fEnLastTagInfoPcr &&
         (MSB(currentPcr - m_lastTagInfoPcr) || currentPcr - m_lastTagInfoPcr >= 180000 * PCR_PER_MSEC))
     {
         DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): Clear\n"));
@@ -139,22 +141,18 @@ bool CCaptionManager::Analyze(DWORD currentPcr)
                 if (langCount >= 2) m_lang2 = pLangList[1];
             }
             m_lastTagInfoPcr = currentPcr;
+            m_fEnLastTagInfoPcr = true;
         }
         else if (ret == CP_NO_ERR_TAG_INFO) {
             m_lastTagInfoPcr = currentPcr;
+            m_fEnLastTagInfoPcr = true;
         }
         else if (ret != TRUE && ret != CP_ERR_NEED_NEXT_PACKET &&
                  (ret < CP_NO_ERR_CAPTION_1 || CP_NO_ERR_CAPTION_8 < ret))
         {
             DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): Error packet!\n"));
         }
-#ifdef _DEBUG
-        if (ret != CP_CHANGE_VERSION && ret != TRUE && ret != CP_ERR_NEED_NEXT_PACKET && ret != CP_NO_ERR_TAG_INFO) {
-            return true;
-        }
-#endif
     }
-    return false;
 }
 
 // 表示タイミングに達した字幕本文を1つだけとり出す

@@ -23,13 +23,7 @@ static DWORD g_dwMagic;
 #endif
 
 // タイマーの識別子
-#define TIMER_ID_HIDE		1
-#define TIMER_ID_ANIMATION	2
-
-#define ANIMATION_FRAMES	4	// アニメーションの段階数
-#define ANIMATION_INTERVAL	50	// アニメーションの間隔
-
-
+#define TIMER_ID_FLASHING	1
 
 
 const LPCTSTR CPseudoOSD::m_pszWindowClass=APP_NAME TEXT(" Pseudo OSD");
@@ -80,7 +74,8 @@ CPseudoOSD::CPseudoOSD()
 	, m_crTextColor(RGB(0,255,128))
 	, m_hbm(NULL)
 	, m_TimerID(0)
-	, m_AnimationCount(0)
+	, m_fHideText(false)
+	, m_FlashingInterval(0)
 	, m_Opacity(80)
 	, m_BackOpacity(50)
 	, m_StrokeWidth(0)
@@ -164,68 +159,34 @@ bool CPseudoOSD::Destroy()
 
 
 // ウィンドウの描画作業を完了する
-bool CPseudoOSD::PrepareWindow(DWORD Time,bool fAnimation)
+bool CPseudoOSD::PrepareWindow()
 {
 	if (m_hwnd==NULL)
 		return false;
 
+	m_fHideText=m_FlashingInterval<0;
 	m_fWindowPrepared=true;
 	if (m_fLayeredWindow) {
-		if (Time>0) {
-			POINT pt;
-
-			pt.x=m_Position.Left;
-			pt.y=m_Position.Top;
-			::ClientToScreen(m_hwndParent,&pt);
-			m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_HIDE,Time,NULL);
-			if (fAnimation) {
-				m_AnimationCount=0;
-				::SetWindowPos(m_hwnd,NULL,pt.x,pt.y,
-							   m_Position.GetEntireWidth()/ANIMATION_FRAMES,m_Position.Height,
-							   SWP_NOZORDER | SWP_NOACTIVATE);
-				m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_ANIMATION,ANIMATION_INTERVAL,NULL);
-			} else {
-				::SetWindowPos(m_hwnd,NULL,pt.x,pt.y,
-							   m_Position.GetEntireWidth(),m_Position.Height,
-							   SWP_NOZORDER | SWP_NOACTIVATE);
-			}
-		} else if ((m_TimerID&TIMER_ID_HIDE)!=0) {
-			::KillTimer(m_hwnd,TIMER_ID_HIDE);
-			m_TimerID&=~TIMER_ID_HIDE;
-		}
 		UpdateLayeredWindow();
 		return true;
-	}
-
-	if (Time>0) {
-		m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_HIDE,Time,NULL);
-		if (fAnimation) {
-			m_AnimationCount=0;
-			::MoveWindow(m_hwnd,m_Position.Left,m_Position.Top,
-						 m_Position.GetEntireWidth()/ANIMATION_FRAMES,m_Position.Height,
-						 TRUE);
-			m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_ANIMATION,ANIMATION_INTERVAL,NULL);
-		} else {
-			::MoveWindow(m_hwnd,m_Position.Left,m_Position.Top,
-						 m_Position.GetEntireWidth(),m_Position.Height,TRUE);
-		}
-	} else if ((m_TimerID&TIMER_ID_HIDE)!=0) {
-		::KillTimer(m_hwnd,TIMER_ID_HIDE);
-		m_TimerID&=~TIMER_ID_HIDE;
 	}
 	return true;
 }
 
 
-bool CPseudoOSD::Show(DWORD Time,bool fAnimation)
+bool CPseudoOSD::Show()
 {
 	if (!m_fWindowPrepared)
-		PrepareWindow(Time,fAnimation);
+		PrepareWindow();
 	m_fWindowPrepared=false;
 
 	if (m_hwnd==NULL)
 		return false;
 
+	if (m_FlashingInterval!=0) {
+		m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_FLASHING,
+		                      m_FlashingInterval<0?-m_FlashingInterval:m_FlashingInterval,NULL);
+	}
 	if (m_fLayeredWindow) {
 		// 実際には親子関係じゃないので自力で可視になるか判断する必要がある
 		if (::IsWindowVisible(m_hwndParent)) {
@@ -257,6 +218,10 @@ bool CPseudoOSD::Hide()
 	::ShowWindow(m_hwnd,SW_HIDE);
 	ClearText();
 	SetImage(NULL,0);
+	if (m_TimerID&TIMER_ID_FLASHING) {
+		::KillTimer(m_hwnd,TIMER_ID_FLASHING);
+		m_TimerID&=~TIMER_ID_FLASHING;
+	}
 	return true;
 }
 
@@ -278,6 +243,8 @@ void CPseudoOSD::ClearText()
 }
 
 
+// テキストを追加する
+// lf.lfWidth<0のときは半角テキスト間隔で描画する
 bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf)
 {
 	SetImage(NULL,0);
@@ -420,6 +387,12 @@ void CPseudoOSD::SetVerticalAntiAliasing(bool fVertAntiAliasing)
 }
 
 
+void CPseudoOSD::SetFlashingInterval(int Interval)
+{
+	m_FlashingInterval=Interval;
+}
+
+
 void CPseudoOSD::OnParentMove()
 {
 	if (m_hwnd!=NULL && m_fLayeredWindow) {
@@ -477,11 +450,11 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 	for (; it!=m_Position.StyleList.end(); ++it) {
 		DrawUtil::CFont Font;
 		LOGFONT lf=it->lf;
-		lf.lfWidth*=MultX;
+		lf.lfWidth*=lf.lfWidth<0?-MultX:MultX;
 		lf.lfHeight*=MultY;
 		if (!it->Text.empty() && Font.Create(&lf)) {
 			HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
-			int intvX=it->Width/(int)it->Text.length() - it->lf.lfWidth*2;
+			int intvX=it->Width/(int)it->Text.length() - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
 			int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
 			TextOutMonospace(hdc,x+intvX/2,m_Position.Height-1-intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
 			::SelectObject(hdc,hfontOld);
@@ -497,6 +470,7 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 
 	::GetClientRect(m_hwnd,&rc);
 	DrawUtil::Fill(hdc,&rc,m_crBackColor);
+	if (m_fHideText) return;
 
 	if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,2,m_crTextColor);
 	if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,2,m_crTextColor);
@@ -847,7 +821,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 
 	bool fNeedToLay=false;
 	bool fNeedToDilate=false;
-	if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
+	if (!m_fHideText && (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom)) {
 		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,2,m_crTextColor);
 		if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rc.right-1,VertMult,2*VertMult,m_crTextColor);
 		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
@@ -856,7 +830,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	}
 	rc.bottom=Height;
 
-	if (!m_Position.StyleList.empty()) {
+	if (!m_fHideText && !m_Position.StyleList.empty()) {
 		COLORREF crOldTextColor;
 		int OldBkMode;
 
@@ -890,7 +864,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 				::DeletePen(hpen);
 			}
 		}
-	} else if (m_hbm!=NULL) {
+	} else if (!m_fHideText && m_hbm!=NULL) {
 		BITMAP bm;
 		::GetObject(m_hbm,sizeof(BITMAP),&bm);
 		RECT rcBitmap={0,0,bm.bmWidth,bm.bmHeight};
@@ -914,12 +888,18 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	if (fNeedToLay) {
 		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
 	}
+	// 囲い部分は処理しない
+	RECT rcInner=rc;
+	if (m_fHLLeft) rcInner.left+=2;
+	if (m_fHLTop) rcInner.top+=2;
+	if (m_fHLRight) rcInner.right-=2;
+	if (m_fHLBottom) rcInner.bottom-=2;
 	if (fNeedToDilate) {
 		for (int i=0; i<(m_StrokeWidth+36)/72; i++) {
-			DilateAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100));
+			DilateAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_Opacity*255/100));
 		}
 	}
-	SmoothAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
+	SmoothAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
 	PremultiplyBitmap(m_pBits,AllocWidth,rc);
 
 	if (hdcCompose) {
@@ -985,36 +965,13 @@ LRESULT CALLBACK CPseudoOSD::WndProc(HWND hwnd,UINT uMsg,
 			CPseudoOSD *pThis=GetThis(hwnd);
 
 			switch (wParam) {
-			case TIMER_ID_HIDE:
-				pThis->Hide();
-				::KillTimer(hwnd,TIMER_ID_HIDE);
-				pThis->m_TimerID&=~TIMER_ID_HIDE;
-				if ((pThis->m_TimerID&TIMER_ID_ANIMATION)!=0) {
-					::KillTimer(hwnd,TIMER_ID_ANIMATION);
-					pThis->m_TimerID&=~TIMER_ID_ANIMATION;
-				}
-				break;
-
-			case TIMER_ID_ANIMATION:
-				pThis->m_AnimationCount++;
+			case TIMER_ID_FLASHING:
+				pThis->m_fHideText=!pThis->m_fHideText;
 				if (pThis->m_fLayeredWindow) {
-					RECT rc;
-
-					::GetWindowRect(hwnd,&rc);
-					::SetWindowPos(hwnd,NULL,rc.left,rc.top,
-								   pThis->m_Position.GetEntireWidth()*(pThis->m_AnimationCount+1)/ANIMATION_FRAMES,
-								   pThis->m_Position.Height,
-								   SWP_NOZORDER | SWP_NOACTIVATE);
+					if (::IsWindowVisible(hwnd))
+						pThis->UpdateLayeredWindow();
 				} else {
-					::MoveWindow(hwnd,pThis->m_Position.Left,pThis->m_Position.Top,
-								 pThis->m_Position.GetEntireWidth()*(pThis->m_AnimationCount+1)/ANIMATION_FRAMES,
-								 pThis->m_Position.Height,
-								 TRUE);
-				}
-				::UpdateWindow(hwnd);
-				if (pThis->m_AnimationCount+1==ANIMATION_FRAMES) {
-					::KillTimer(hwnd,TIMER_ID_ANIMATION);
-					pThis->m_TimerID&=~TIMER_ID_ANIMATION;
+					::InvalidateRect(hwnd,NULL,FALSE);
 				}
 				break;
 			}
@@ -1055,7 +1012,7 @@ LRESULT CALLBACK CPseudoOSD::WndProc(HWND hwnd,UINT uMsg,
 	case WM_DESTROY:
 		{
 			CPseudoOSD *pThis=GetThis(hwnd);
-
+			pThis->m_TimerID=0;
 			pThis->m_hwnd=NULL;
 		}
 		return 0;

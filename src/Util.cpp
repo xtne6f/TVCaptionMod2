@@ -136,7 +136,7 @@ void extract_pat(PAT *pat, const unsigned char *payload, int payload_size, int u
         // 受信済みPMTを調べ、必要ならば新規に生成する
         memset(pmt_exists, 0, sizeof(pmt_exists));
         pos = 3 + 5;
-        while (pos < 3 + pat->psi.section_length - 4) {
+        while (pos + 3 < 3 + pat->psi.section_length - 4/*CRC32*/) {
             program_number = (table[pos]<<8) | (table[pos+1]);
             if (program_number != 0) {
                 pid = ((table[pos+2]&0x1f)<<8) | table[pos+3];
@@ -171,12 +171,13 @@ void extract_pat(PAT *pat, const unsigned char *payload, int payload_size, int u
     }
 }
 
-// 参考: ITU-T H.222.0 Sec.2.4.4.8
+// 参考: ITU-T H.222.0 Sec.2.4.4.8 および ARIB TR-B14 第二分冊第四編第3部
 void extract_pmt(PMT *pmt, const unsigned char *payload, int payload_size, int unit_start, int counter)
 {
     int program_info_length;
     int es_info_length;
     int stream_type;
+    int info_pos;
     int pos;
     const unsigned char *table;
 
@@ -197,16 +198,25 @@ void extract_pmt(PMT *pmt, const unsigned char *payload, int payload_size, int u
 
         pmt->pid_count = 0;
         pos = 3 + 9 + program_info_length;
-        while (pos < 3 + pmt->psi.section_length - 5) {
+        while (pos + 4 < 3 + pmt->psi.section_length - 4/*CRC32*/) {
             stream_type = table[pos];
-            if (stream_type == H_262_VIDEO ||
-                stream_type == PES_PRIVATE_DATA ||
-                stream_type == AVC_VIDEO)
-            {
-                pmt->stream_type[pmt->pid_count] = (unsigned char)stream_type;
-                pmt->pid[pmt->pid_count++] = (table[pos+1]&0x1f)<<8 | table[pos+2];
-            }
             es_info_length = (table[pos+3]&0x03)<<8 | table[pos+4];
+            if ((stream_type == H_262_VIDEO ||
+                 stream_type == PES_PRIVATE_DATA ||
+                 stream_type == AVC_VIDEO) &&
+                pos + 5 + es_info_length <= 3 + pmt->psi.section_length - 4/*CRC32*/)
+            {
+                // ストリーム識別記述子を探す(運用規定と異なり必ずしも先頭に配置されない)
+                for (info_pos = 0; info_pos + 2 < es_info_length; ) {
+                    if (table[pos+5+info_pos] == 0x52) {
+                        pmt->stream_type[pmt->pid_count] = (unsigned char)stream_type;
+                        pmt->pid[pmt->pid_count] = (table[pos+1]&0x1f)<<8 | table[pos+2];
+                        pmt->component_tag[pmt->pid_count++] = table[pos+5+info_pos+2];
+                        break;
+                    }
+                    info_pos += 2 + table[pos+5+info_pos+1];
+                }
+            }
             pos += 5 + es_info_length;
         }
     }
