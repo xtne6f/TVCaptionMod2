@@ -83,7 +83,6 @@ static const TVTest::CommandInfo COMMAND_LIST[] = {
 
 CTVCaption2::CTVCaption2()
     : m_fTVH264(false)
-    , m_fSettingsDlgInitializing(false)
     , m_settingsIndex(0)
     , m_paintingMethod(0)
     , m_fIgnorePts(false)
@@ -1662,13 +1661,13 @@ INT_PTR CALLBACK CTVCaption2::SettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wPara
         ::SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
     }
     CTVCaption2 *pThis = reinterpret_cast<CTVCaption2*>(::GetWindowLongPtr(hDlg, GWLP_USERDATA));
-    return pThis->ProcessSettingsDlg(hDlg, uMsg, wParam, lParam);
+    return pThis ? pThis->ProcessSettingsDlg(hDlg, uMsg, wParam, lParam) : FALSE;
 }
 
 
 void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
 {
-    m_fSettingsDlgInitializing = true;
+    ::SetProp(hDlg, TEXT("Ini"), reinterpret_cast<HANDLE>(1));
 
     ::CheckDlgButton(hDlg, IDC_CHECK_OSD,
         ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_szIniPath) != 0 ? BST_CHECKED : BST_UNCHECKED);
@@ -1755,7 +1754,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::CheckDlgButton(hDlg, IDC_CHECK_CENTERING, m_fCentering ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, m_szRomSoundList[0] && m_szRomSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
 
-    m_fSettingsDlgInitializing = false;
+    ::RemoveProp(hDlg, TEXT("Ini"));
 }
 
 
@@ -1771,7 +1770,7 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     case WM_COMMAND:
         // 初期化中の無駄な再帰を省く
-        if (m_fSettingsDlgInitializing) {
+        if (::GetProp(hDlg, TEXT("Ini"))) {
             break;
         }
         switch (LOWORD(wParam)) {

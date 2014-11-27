@@ -64,7 +64,6 @@ private:
     INT_PTR ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     bool m_fTVH264;
-    bool m_fSettingsDlgInitializing;
 
     // 設定
     TCHAR m_szIniPath[MAX_PATH];
