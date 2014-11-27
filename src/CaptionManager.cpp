@@ -145,13 +145,13 @@ bool CCaptionManager::Analyze(DWORD currentPcr)
 #define MSB(x) ((x) & 0x80000000)
 
 // 表示タイミングに達した字幕本文を1つだけとり出す
-const CAPTION_DATA_DLL *CCaptionManager::PopCaption(DWORD currentPcr)
+const CAPTION_DATA_DLL *CCaptionManager::PopCaption(DWORD currentPcr, bool fIgnorePts)
 {
     if (m_capCount != 0) {
         CAPTION_DATA_DLL *pCaption = m_pCapList;
         // 文字スーパーは非同期PESなので字幕文取得時のPCRが表示タイミングの基準になる
-        if (m_fSuperimpose && MSB(m_pcr + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr) ||
-            !m_fSuperimpose && MSB(m_pts + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr))
+        if ((m_fSuperimpose || fIgnorePts) && MSB(m_pcr + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr) ||
+            !m_fSuperimpose && !fIgnorePts && MSB(m_pts + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr))
         {
             ++m_pCapList;
             --m_capCount;

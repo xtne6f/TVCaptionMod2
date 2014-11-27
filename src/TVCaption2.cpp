@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-06-01
+// 最終更新: 2012-06-08
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,8 +27,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.6; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 4;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.7; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 5;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 enum {
@@ -50,6 +50,7 @@ CTVCaption2::CTVCaption2()
     : m_fTVH264(false)
     , m_settingsIndex(0)
     , m_paintingMethod(0)
+    , m_fIgnorePts(false)
     , m_fEnTextColor(false)
     , m_fEnBackColor(false)
     , m_textColor(RGB(0,0,0))
@@ -337,6 +338,7 @@ void CTVCaption2::LoadSettings()
     m_showFlags[STREAM_SUPERIMPOSE] = GetPrivateProfileSignedInt(section, TEXT("ShowFlagsSuper"), 65535, m_szIniPath);
     m_delayTime[STREAM_CAPTION]     = GetPrivateProfileSignedInt(section, TEXT("DelayTime"), 450, m_szIniPath);
     m_delayTime[STREAM_SUPERIMPOSE] = GetPrivateProfileSignedInt(section, TEXT("DelayTimeSuper"), 0, m_szIniPath);
+    m_fIgnorePts        = GetPrivateProfileSignedInt(section, TEXT("IgnorePts"), 0, m_szIniPath) != 0;
     int textColor       = GetPrivateProfileSignedInt(section, TEXT("TextColor"), -1, m_szIniPath);
     int backColor       = GetPrivateProfileSignedInt(section, TEXT("BackColor"), -1, m_szIniPath);
     m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
@@ -347,7 +349,7 @@ void CTVCaption2::LoadSettings()
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
     m_fFixRatio         = GetPrivateProfileSignedInt(section, TEXT("FixRatio"), 1, m_szIniPath) != 0;
     ::GetPrivateProfileString(section, TEXT("RomSoundList"),
-                              TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk"),
+                              TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::"),
                               m_szRomSoundList, _countof(m_szRomSoundList), m_szIniPath);
 
     m_fEnTextColor = textColor >= 0;
@@ -378,6 +380,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("ShowFlagsSuper"), m_showFlags[STREAM_SUPERIMPOSE], m_szIniPath);
     WritePrivateProfileInt(section, TEXT("DelayTime"), m_delayTime[STREAM_CAPTION], m_szIniPath);
     WritePrivateProfileInt(section, TEXT("DelayTimeSuper"), m_delayTime[STREAM_SUPERIMPOSE], m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("IgnorePts"), m_fIgnorePts, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("TextColor"), !m_fEnTextColor ? -1 :
                            GetRValue(m_textColor)*1000000 + GetGValue(m_textColor)*1000 + GetBValue(m_textColor), m_szIniPath);
     WritePrivateProfileInt(section, TEXT("BackColor"), !m_fEnBackColor ? -1 :
@@ -425,12 +428,12 @@ static bool PlayRomSound(LPCTSTR list, int index)
 
     if (id[0]==TEXT('!')) {
         // 定義済みのサウンド
-        return ::PlaySound(id+1, NULL, SND_ASYNC|SND_NODEFAULT|SND_NOSTOP|SND_ALIAS) != FALSE;
+        return ::PlaySound(id+1, NULL, SND_ASYNC|SND_NODEFAULT|SND_ALIAS) != FALSE;
     }
     else if (id[0] && GetLongModuleFileName(g_hinstDLL, path, MAX_PATH)) {
         ::PathRemoveExtension(path);
         ::wsprintf(path + ::lstrlen(path), TEXT("\\%s.wav"), id);
-        return ::PlaySound(path, NULL, SND_ASYNC|SND_NODEFAULT|SND_NOSTOP|SND_FILENAME) != FALSE;
+        return ::PlaySound(path, NULL, SND_ASYNC|SND_NODEFAULT|SND_FILENAME) != FALSE;
     }
     return false;
 }
@@ -445,7 +448,11 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
     switch (Event) {
     case TVTest::EVENT_PLUGINENABLE:
         // プラグインの有効状態が変化した
-        return pThis->EnablePlugin(lParam1 != 0);
+        if (pThis->EnablePlugin(lParam1 != 0)) {
+            PlayRomSound(pThis->m_szRomSoundList, lParam1 != 0 ? 17 : 18);
+            return TRUE;
+        }
+        return 0;
     case TVTest::EVENT_FULLSCREENCHANGE:
         // 全画面表示状態が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
@@ -459,6 +466,8 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             }
         }
         break;
+    case TVTest::EVENT_SERVICECHANGE:
+        // サービスが変更された
     case TVTest::EVENT_SERVICEUPDATE:
         // サービスの構成が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
@@ -504,7 +513,6 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                     pThis->m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
                     ::memset(pThis->m_customGaijiTable, 0, sizeof(pThis->m_customGaijiTable));
                 }
-                ::PlaySound(NULL, NULL, 0);
                 PlayRomSound(pThis->m_szRomSoundList, 16);
                 break;
             }
@@ -971,14 +979,19 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
             // 字幕か文字スーパーのどちらかが取得できた
         }
         index = pCaptionManager->IsSuperimpose() ? STREAM_SUPERIMPOSE : STREAM_CAPTION;
-        pcr = m_pcr - static_cast<DWORD>(min(max(m_delayTime[index],0),5000) * PCR_PER_MSEC);
+        if (m_delayTime[index] < 0) {
+            pcr = m_pcr + static_cast<DWORD>(-max(m_delayTime[index],-5000) * PCR_PER_MSEC);
+        }
+        else {
+            pcr = m_pcr - static_cast<DWORD>(min(m_delayTime[index],5000) * PCR_PER_MSEC);
+        }
     }
 
     HWND hwndContainer = NULL;
     int lastShowCount = m_osdShowCount[index];
     for (;;) {
         // 表示タイミングに達した字幕本文を1つだけ取得する
-        const CAPTION_DATA_DLL *pCaption = pCaptionManager->PopCaption(pcr);
+        const CAPTION_DATA_DLL *pCaption = pCaptionManager->PopCaption(pcr, m_fIgnorePts);
         if (!pCaption) {
             break;
         }

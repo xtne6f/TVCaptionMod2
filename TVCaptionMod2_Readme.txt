@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.6 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.7 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,7 +13,10 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-かならずTVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
+(ver.0.6からの移行)
+TVCaptionMod2.tvtpを以前のものと置きかえてください。
+(ver.0.5以前からの移行)
+TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpとCaption.dllとを入れ、右クリック
@@ -54,6 +57,7 @@ SettingsIndex
     # ShowFlagsSuper=65535
     # DelayTime=450
     # DelayTimeSuper=0
+    # IgnorePts=0
     # TextColor=-1
     # BackColor=-1
     # ...
@@ -66,6 +70,7 @@ SettingsIndex
     # ShowFlagsSuper=65535
     # DelayTime=450
     # DelayTimeSuper=0
+    # IgnorePts=0
     # TextColor=255255000
     # BackColor=000000255
     # ...
@@ -102,7 +107,17 @@ ShowFlags / ShowFlagsSuper
     # 目を立てる(=設定値に1024を加える)ことで表示されるようになります。
 DelayTime / DelayTimeSuper
     字幕/文字スーパーを受け取ってから表示するまでの遅延時間をミリ秒で指定
-    # [=0]から[=5000]まで
+    # [=-5000]から[=5000]まで。
+    # 
+    # [上級者向け]
+    # 字幕については、PTS(Presentation Time Stamp)がPCR(Program Clock Reference)
+    # に同期した時点を基準[=0]とします。文字スーパー、もしくはIgnorePts[=1]のと
+    # きの字幕については、データを受け取った時点を基準とします(つまり[=0]未満に
+    # しても表示が早まることはない)。
+IgnorePts
+    PTSを無視する[=1]かどうか
+    # 番組のPTSが信用できないときに使います。
+    # とにかく即時に字幕を表示させたいときにも使えます(DelayTime[=0]にする)。
 TextColor / BackColor
     字幕文/背景枠の色
     # [=-1]のときは自動(TSに含まれる情報をそのまま使う)です。RGB値を10進数で表現
@@ -126,8 +141,8 @@ Centering
 FixRatio
     映像とウィンドウの比率がことなる場合に字幕の表示領域を調整する[=1]かどうか
 RomSoundList
-    内蔵音0～16のリストを':'区切りで指定
-    # フォーマット: [;]{内蔵音0}:{内蔵音1}: ... :{内蔵音16}
+    内蔵音0～18のリストを':'区切りで指定
+    # フォーマット: [;]{内蔵音0}:{内蔵音1}: ... :{内蔵音18}
     # 何も指定しないか';'でコメントアウトすると内蔵音再生しません。
     # 
     # {内蔵音0}～については、プラグインフォルダにプラグインと同名(通常は
@@ -143,7 +158,11 @@ RomSoundList
     # ・内蔵音5～12  ボタン操作音1～8
     # ・内蔵音13     アラート音
     # ・内蔵音14～15 未定義
-    # なお、内蔵音16は表示設定切り替えに割りあてています(再生テストに便利)
+    # 
+    # 独自定義の内蔵音(再生テストなどに便利):
+    # ・内蔵音16     表示設定切り替え
+    # ・内蔵音17     プラグイン有効時
+    # ・内蔵音18     プラグイン無効時
 
 ■ソースについて
 Caption.dllのソースコードはodaruさんのもの、またはCaption2Ass_PCR付属のものとな
@@ -174,6 +193,11 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.7 (2012-06-08)
+・スレ報告より以下3点を修正・追加
+  ・マルチ放送などでのサービス切り替え動作をチェックしてなかったのを修正
+  ・PTSが信用できないソースに対するフォローを追加 (設定キーIgnorePts)
+  ・プラグイン有効/無効時の内蔵音を追加
 ver.0.6 (2012-06-02)
 ・文字スーパーに対応(未検証)
 ・字幕ウィンドウがなるべく前面に来ないようにした

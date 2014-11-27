@@ -10,7 +10,7 @@ public:
     void Clear();
     void AddPacket(LPCBYTE pPacket);
     bool Analyze(DWORD currentPcr);
-    const CAPTION_DATA_DLL *PopCaption(DWORD currentPcr);
+    const CAPTION_DATA_DLL *PopCaption(DWORD currentPcr, bool fIgnorePts=false);
     bool IsSuperimpose() const { return m_fSuperimpose; }
     bool IsEmpty() const { return m_capCount == 0; }
     void GetDrcsList(const DRCS_PATTERN_DLL **ppList, DWORD *pCount) const { *ppList=m_pDrcsList; *pCount=m_drcsCount; }

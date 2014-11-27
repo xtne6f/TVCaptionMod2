@@ -54,6 +54,7 @@ private:
     int m_paintingMethod;
     int m_showFlags[STREAM_MAX];
     int m_delayTime[STREAM_MAX];
+    bool m_fIgnorePts;
     bool m_fEnTextColor;
     bool m_fEnBackColor;
     COLORREF m_textColor;
