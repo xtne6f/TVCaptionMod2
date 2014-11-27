@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-08-14
+// 最終更新: 2012-08-26
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -8,6 +8,7 @@
 #include "PseudoOSD.h"
 #include "Caption.h"
 #include "CaptionManager.h"
+#include "OsdCompositor.h"
 #define TVTEST_PLUGIN_CLASS_IMPLEMENT
 #define TVTEST_PLUGIN_VERSION TVTEST_PLUGIN_VERSION_(0,0,11)
 #include "TVTestPlugin.h"
@@ -27,7 +28,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.1; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.2; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 7;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -38,6 +39,7 @@ static const LPCTSTR HALF_R_LIST = TEXT(" ｡､･()｢｣");
 enum {
     TIMER_ID_DONE_MOVE,
     TIMER_ID_DONE_SIZE,
+    TIMER_ID_FLASHING_TEXTURE,
 };
 
 enum {
@@ -71,10 +73,10 @@ CTVCaption2::CTVCaption2()
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
     , m_fCentering(false)
-    , m_fFixRatio(false)
     , m_hwndPainting(NULL)
     , m_osdUsedCount(0)
     , m_fNeedtoShow(false)
+    , m_fFlashingFlipFlop(false)
     , m_pcr(0)
     , m_procCapTick(0)
     , m_fResetPat(false)
@@ -134,6 +136,17 @@ bool CTVCaption2::Initialize()
     if (!GetLongModuleFileName(g_hinstDLL, m_szIniPath, _countof(m_szIniPath)) ||
         !::PathRenameExtension(m_szIniPath, TEXT(".ini"))) return false;
 
+    // 必要ならOsdCompositorを初期化(プラグインの有効無効とは独立)
+    UINT EnOsdCompositor = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 99, m_szIniPath);
+    if (EnOsdCompositor == 99) {
+        ::WritePrivateProfileString(TEXT("Settings"), TEXT("EnOsdCompositor"), TEXT("0"), m_szIniPath);
+    }
+    else if (EnOsdCompositor != 0) {
+        if (m_osdCompositor.Initialize()) {
+            m_pApp->AddLog(L"OsdCompositorを初期化しました。");
+        }
+    }
+
     TVTest::HostInfo hostInfo;
     m_fTVH264 = m_pApp->GetHostInfo(&hostInfo) && !::lstrcmp(hostInfo.pszAppName, TEXT("TVH264"));
 
@@ -150,6 +163,7 @@ bool CTVCaption2::Initialize()
 bool CTVCaption2::Finalize()
 {
     if (m_pApp->IsPluginEnabled()) EnablePlugin(false);
+    m_osdCompositor.Uninitialize();
     return true;
 }
 
@@ -399,7 +413,6 @@ void CTVCaption2::LoadSettings()
     m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
     m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
-    m_fFixRatio         = GetPrivateProfileSignedInt(section, TEXT("FixRatio"), 1, m_szIniPath) != 0;
     ::GetPrivateProfileString(section, TEXT("RomSoundList"),
                               TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::"),
                               m_szRomSoundList, _countof(m_szRomSoundList), m_szIniPath);
@@ -447,7 +460,6 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FixRatio"), m_fFixRatio, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
 }
 
@@ -517,7 +529,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             HWND hwndContainer = pThis->FindVideoContainer();
             if (hwndContainer) {
                 for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
-                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod == 2);
+                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
                 }
             }
         }
@@ -541,6 +553,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             else {
                 pThis->HideOsds(STREAM_CAPTION);
                 pThis->HideOsds(STREAM_SUPERIMPOSE);
+                pThis->DeleteTextures();
                 pThis->m_fNeedtoShow = false;
             }
         }
@@ -562,6 +575,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
             case ID_COMMAND_SWITCH_SETTING:
                 pThis->HideOsds(STREAM_CAPTION);
                 pThis->HideOsds(STREAM_SUPERIMPOSE);
+                pThis->DeleteTextures();
                 pThis->SwitchSettings();
                 if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName, &pThis->m_drcsStrMap,
                                                 pThis->m_szGaijiFaceName[0]?pThis->m_customGaijiTable:NULL))
@@ -761,6 +775,17 @@ void CTVCaption2::HideOsds(STREAM_INDEX index)
     }
 }
 
+void CTVCaption2::DeleteTextures()
+{
+    if (m_paintingMethod == 3) {
+        if (m_osdCompositor.DeleteTexture(0, 0)) {
+            m_osdCompositor.UpdateSurface();
+        }
+        // フラッシングタイマ終了
+        ::KillTimer(m_hwndPainting, TIMER_ID_FLASHING_TEXTURE);
+    }
+}
+
 void CTVCaption2::DestroyOsds()
 {
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
@@ -774,6 +799,7 @@ void CTVCaption2::DestroyOsds()
     m_osdUsingCount[STREAM_SUPERIMPOSE] = 0;
     m_osdShowCount[STREAM_CAPTION] = 0;
     m_osdShowCount[STREAM_SUPERIMPOSE] = 0;
+    DeleteTextures();
 }
 
 static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
@@ -831,8 +857,8 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
     osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
-    osd.SetFlashingInterval(style.bFlushMode==1 ? 500 : style.bFlushMode==2 ? -500 : 0);
-    osd.Create(hwndContainer, m_paintingMethod==2 ? true : false);
+    osd.SetFlashingInterval(style.bFlushMode==1 ? FLASHING_INTERVAL : style.bFlushMode==2 ? -FLASHING_INTERVAL : 0);
+    osd.Create(hwndContainer, m_paintingMethod==2 || m_paintingMethod==3);
     return osd;
 }
 
@@ -889,7 +915,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
 
     // 動画のアスペクト比を考慮して描画領域を調整
     TVTest::VideoInfo vi;
-    if (m_fFixRatio && m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
+    if (m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
         if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
             // 描画ウィンドウが動画よりもワイド
             int shrink = (rc.right - rc.bottom * vi.XAspect / vi.YAspect) / 2;
@@ -1048,7 +1074,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
                        charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
             if (!fSameStyle) {
-                pOsdCarry->PrepareWindow();
+                if (m_paintingMethod != 3) pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
             }
         }
@@ -1063,7 +1089,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     pOsdCarry = &osd;
                 }
                 else {
-                    osd.PrepareWindow();
+                    if (m_paintingMethod != 3) osd.PrepareWindow();
                 }
             }
         }
@@ -1114,7 +1140,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 RECT rc;
                 ::SetRect(&rc, (int)((dirW-charW)/2*scaleX), (int)((dirH-charH)/2*scaleY), charScaleW, charScaleH);
                 osd.SetImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), &rc);
-                osd.PrepareWindow();
+                if (m_paintingMethod != 3) osd.PrepareWindow();
                 posX += dirW;
             }
         }
@@ -1171,8 +1197,9 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             HWND hwndContainer = pThis->FindVideoContainer();
             if (hwndContainer) {
                 for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
-                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod == 2);
+                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
                 }
+                pThis->m_osdCompositor.SetContainerWindow(hwndContainer);
             }
             pThis->m_fNeedtoShow = pThis->m_pApp->GetPreview();
         }
@@ -1190,11 +1217,25 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             ::KillTimer(hwnd, TIMER_ID_DONE_SIZE);
             ::SendMessage(hwnd, WM_DONE_SIZE, 0, 0);
             return 0;
+        case TIMER_ID_FLASHING_TEXTURE:
+            {
+                bool fModified;
+                fModified = pThis->m_osdCompositor.ShowTexture(pThis->m_fFlashingFlipFlop, 0, STREAM_CAPTION + TXGROUP_FLASHING);
+                fModified = pThis->m_osdCompositor.ShowTexture(pThis->m_fFlashingFlipFlop, 0, STREAM_SUPERIMPOSE + TXGROUP_FLASHING) || fModified;
+                fModified = pThis->m_osdCompositor.ShowTexture(!pThis->m_fFlashingFlipFlop, 0, STREAM_CAPTION + TXGROUP_IFLASHING) || fModified;
+                fModified = pThis->m_osdCompositor.ShowTexture(!pThis->m_fFlashingFlipFlop, 0, STREAM_SUPERIMPOSE + TXGROUP_IFLASHING) || fModified;
+                if (fModified) {
+                    pThis->m_osdCompositor.UpdateSurface();
+                }
+                pThis->m_fFlashingFlipFlop = !pThis->m_fFlashingFlipFlop;
+            }
+            return 0;
         }
         break;
     case WM_RESET_CAPTION:
         pThis->HideOsds(STREAM_CAPTION);
         pThis->HideOsds(STREAM_SUPERIMPOSE);
+        pThis->DeleteTextures();
         {
             CBlockLock lock(&pThis->m_streamLock);
             pThis->m_caption1Manager.Clear();
@@ -1247,6 +1288,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
 
     HWND hwndContainer = NULL;
     int lastShowCount = m_osdShowCount[index];
+    bool fTextureModified = false;
     for (;;) {
         // 表示タイミングに達した字幕本文を1つだけ取得する
         const CAPTION_DATA_DLL *pCaption = pCaptionManager->PopCaption(pcr, m_fIgnorePts);
@@ -1257,6 +1299,15 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
         if (m_fNeedtoShow && pLangTag && ((m_showFlags[index]>>pLangTag->ucDMF)&1)) {
             if (pCaption->bClear) {
                 HideOsds(index);
+                if (m_paintingMethod == 3) {
+                    bool fDeleted;
+                    fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_NORMAL);
+                    fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_FLASHING) || fDeleted;
+                    fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_IFLASHING) || fDeleted;
+                    if (fDeleted) {
+                        fTextureModified = true;
+                    }
+                }
                 lastShowCount = 0;
             }
             else {
@@ -1272,7 +1323,43 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager)
     }
     // ちらつき防止のため表示処理をまとめる
     while (lastShowCount < m_osdShowCount[index]) {
-        m_pOsdUsingList[index][lastShowCount++]->Show();
+        if (m_paintingMethod == 3) {
+            HBITMAP hbm = m_pOsdUsingList[index][lastShowCount]->CreateBitmap();
+            if (hbm) {
+                int left, top;
+                m_pOsdUsingList[index][lastShowCount]->GetPosition(&left, &top, NULL, NULL);
+                RECT rc;
+                TVTest::VideoInfo vi;
+                if (::GetClientRect(hwndContainer, &rc) && m_pApp->GetVideoInfo(&vi) && vi.XAspect!=0 && vi.YAspect!=0) {
+                    // 疑似OSD系から逆変換
+                    if (vi.XAspect * rc.bottom < rc.right * vi.YAspect) {
+                        // 描画ウィンドウが動画よりもワイド
+                        left -= (rc.right - rc.bottom * vi.XAspect / vi.YAspect) / 2;
+                    }
+                    else {
+                        top -= (rc.bottom - rc.right * vi.YAspect / vi.XAspect) / 2;
+                    }
+                }
+                int intv = m_pOsdUsingList[index][lastShowCount]->GetFlashingInterval();
+                int group = intv > 0 ? TXGROUP_FLASHING : intv < 0 ? TXGROUP_IFLASHING : TXGROUP_NORMAL;
+                if (m_osdCompositor.AddTexture(hbm, left, top, group!=TXGROUP_IFLASHING, index + group) != 0) {
+                    fTextureModified = true;
+                    if (group != TXGROUP_NORMAL) {
+                        // フラッシングタイマ開始
+                        m_fFlashingFlipFlop = false;
+                        ::SetTimer(m_hwndPainting, TIMER_ID_FLASHING_TEXTURE, FLASHING_INTERVAL, NULL);
+                    }
+                }
+                ::DeleteObject(hbm);
+            }
+        }
+        else {
+            m_pOsdUsingList[index][lastShowCount]->Show();
+        }
+        ++lastShowCount;
+    }
+    if (fTextureModified) {
+        m_osdCompositor.UpdateSurface();
     }
 }
 

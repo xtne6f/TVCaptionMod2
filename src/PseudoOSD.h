@@ -48,7 +48,7 @@ class CPseudoOSD
 	void DrawTextList(HDC hdc,int MultX,int MultY) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
 	static bool AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth);
-	void UpdateLayeredWindow(HDC hdcCompose=NULL,void *pBitsCompose=NULL,int WidthCompose=0,int HeightCompose=0);
+	void UpdateLayeredWindow(HDC hdcCompose=NULL,void *pBitsCompose=NULL,int WidthCompose=0,int HeightCompose=0,bool fKeepAlpha=false);
 
 	static const LPCTSTR m_pszWindowClass;
 	static HINSTANCE m_hinst;
@@ -84,7 +84,9 @@ public:
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
 	void SetVerticalAntiAliasing(bool fVertAntiAliasing);
 	void SetFlashingInterval(int Interval);
+	int GetFlashingInterval() { return m_FlashingInterval; }
 	void OnParentMove();
+	HBITMAP CreateBitmap();
 	void Compose(HDC hdc,int Left,int Top);
 private:
 	CPseudoOSD(const CPseudoOSD &other);

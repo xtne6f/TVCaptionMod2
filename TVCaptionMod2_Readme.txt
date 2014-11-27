@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.1 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.2 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,6 +13,9 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
+(ver.1.1からの移行)
+TVCaptionMod2.tvtpを以前のものと置きかえてください。
+(ver.1.0以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。以下の外
 字テーブルのファイルにも変更があるので、必要なら置きかえてください:
 ・TVCaptionMod2_Gaiji_std.txt
@@ -31,7 +34,15 @@ TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
 ■設定ファイルについて
 設定ファイル"TVCaptionMod2.ini"は初回使用時プラグインフォルダに自動作成します。
 必要な場合はこれを直接編集してカスタマイズしてください。
-
+EnOsdCompositor
+    映像への字幕合成機能を有効にする[=1]かどうか
+    # レンダラはVMR9かEVRを利用し、さらに設定キーMethod[=3]としてください。
+    # TVTest設定→OSD表示→「映像と合成する」とおなじ方法で字幕を表示できるよう
+    # にします。たぶんつぎの場合に効果的です:
+    # ・TVTest本体のキャプチャ機能やTSMemoryでキャプをとりたい
+    # ・XPや非Aero環境での性能向上
+    # APIフックを利用した比較的リスキーな機能です。Aeroな環境では従来の設定キー
+    # Method[=2]を利用することを強くお勧めします。
 Version
     設定ファイルのバージョン
     # デフォルト値を出力するために使います。特にユーザがいじる必要はありません。
@@ -52,8 +63,11 @@ SettingsIndex
     # 切り替え)できます。つまり↓のような感じです:
     # 
     # [Settings]
+    # EnOsdCompositor=0
     # Version=1
     # CaptionDll=Plugins\Caption.dll
+    # CaptureFolder=
+    # CaptureFileName=Capture
     # SettingsIndex=1
     # FaceName=Windows TV ゴシック
     # GaijiFaceName=
@@ -110,7 +124,8 @@ GaijiTableName
     # 2文字や3文字の場合も表示は1文字幅に圧縮されることに注意してください。
 Method
     字幕の表示方法
-    # いまのところ通常ウィンドウ[=1]かレイヤードウィンドウ[=2]のみです。
+    # 通常ウィンドウ[=1]、レイヤードウィンドウ[=2]、もしくは映像と合成[=3](要
+    # EnOsdCompositor[=1])のいずれかを指定してください。
 ShowFlags / ShowFlagsSuper
     字幕/文字スーパーを表示するかどうかのフラグ
     # 基本的に、すべて表示する[=65535]または表示しない[=0]のどちらかを指定してく
@@ -161,8 +176,6 @@ StrokeByDilate
 Centering
     字幕を画面中央に表示する[=1]かどうか
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
-FixRatio
-    映像とウィンドウの比率がことなる場合に字幕の表示領域を調整する[=1]かどうか
 RomSoundList
     内蔵音0～18のリストを':'区切りで指定
     # フォーマット: [;]{内蔵音0}:{内蔵音1}: ... :{内蔵音18}
@@ -217,6 +230,10 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.2 (2012-08-26)
+・「字幕Plugin改変版(090627)」やTVTest本体のコードを参考に、映像への字幕合成機能
+  を追加(設定キーEnOsdCompositor)
+・設定キーFixRatioを廃止(今後は常に[=1]相当)
 ver.1.1 (2012-08-14)
 ・サロゲートペアに対応
   ・Windows TV ゴシックの通称「つちよし」などを表示できるようになった

@@ -517,6 +517,33 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	}
 }
 
+// OSDのビットマップイメージを生成する
+HBITMAP CPseudoOSD::CreateBitmap()
+{
+	int Width,Height;
+	GetPosition(NULL,NULL,&Width,&Height);
+	if (Width<1 || Height<1 || !m_fLayeredWindow) return NULL;
+
+	// ここだけbottom-upビットマップなので注意
+	void *pBits;
+	BITMAPINFO bmi={0};
+	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth=Width;
+	bmi.bmiHeader.biHeight=Height;
+	bmi.bmiHeader.biPlanes=1;
+	bmi.bmiHeader.biBitCount=32;
+	bmi.bmiHeader.biCompression=BI_RGB;
+	HBITMAP hbm=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&pBits,NULL,0);
+	if (hbm) {
+		HDC hdcTmp=::CreateCompatibleDC(NULL);
+		HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcTmp,hbm));
+		UpdateLayeredWindow(hdcTmp,pBits,Width,Height,true);
+		::SelectObject(hdcTmp,hbmOld);
+		::DeleteDC(hdcTmp);
+	}
+	return hbm;
+}
+
 // 表示中のOSDのイメージをhdcに合成する
 void CPseudoOSD::Compose(HDC hdc,int Left,int Top)
 {
@@ -802,7 +829,8 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAl
 }
 
 // hdcCompose!=NULLのとき、このデバイスコンテキストのpBitsCompose(32bitDIBビット値)に合成する
-void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int WidthCompose,int HeightCompose)
+// さらにfKeepAlpha==trueのとき、アルファ値つきで描画する
+void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int WidthCompose,int HeightCompose,bool fKeepAlpha)
 {
 	RECT rc;
 	if (hdcCompose) {
@@ -820,16 +848,15 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	if (!AllocateWorkBitmap(Width,Height*VertMult,Height*4,&AllocWidth))
 		return;
 
-	HDC hdc,hdcSrc,hdcMono;
+	HDC hdc,hdcSrc;
 	if (hdcCompose) {
 		hdc=NULL;
 		hdcSrc=::CreateCompatibleDC(hdcCompose);
-		hdcMono=::CreateCompatibleDC(hdcCompose);
 	} else {
 		hdc=::GetDC(m_hwnd);
 		hdcSrc=::CreateCompatibleDC(hdc);
-		hdcMono=::CreateCompatibleDC(hdc);
 	}
+	HDC hdcMono=::CreateCompatibleDC(hdcSrc);
 	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcSrc,m_hbmWork));
 	HBITMAP hbmMonoOld=static_cast<HBITMAP>(::SelectObject(hdcMono,m_hbmWorkMono));
 
@@ -919,11 +946,16 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		}
 	}
 	SmoothAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
-	PremultiplyBitmap(m_pBits,AllocWidth,rc);
 
-	if (hdcCompose) {
+	if (hdcCompose && fKeepAlpha) {
+		for (int i=0; i<Height; i++) {
+			::memcpy((BYTE*)pBitsCompose+(Height-i-1)*Width*4,(BYTE*)m_pBits+i*AllocWidth*4,Width*4);
+		}
+	} else if (hdcCompose) {
+		PremultiplyBitmap(m_pBits,AllocWidth,rc);
 		ComposeAlpha((BYTE*)pBitsCompose,Width,(BYTE*)m_pBits,AllocWidth,rc);
 	} else {
+		PremultiplyBitmap(m_pBits,AllocWidth,rc);
 		SIZE sz={Width,Height};
 		POINT ptSrc={0,0};
 		BLENDFUNCTION blend={AC_SRC_OVER,0,255,AC_SRC_ALPHA};

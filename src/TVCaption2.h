@@ -8,6 +8,10 @@ class CTVCaption2 : public TVTest::CTVTestPlugin
     // 事前に作成しておくOSDの数(作成時にウィンドウが前面にくるので、気になるなら増やす)
     static const int OSD_PRE_CREATE_NUM = 8;
     static const int GAIJI_TABLE_SIZE = G_CELL_SIZE * 7;
+    static const int FLASHING_INTERVAL = 500;
+    static const int TXGROUP_NORMAL = 1;
+    static const int TXGROUP_FLASHING = 3;
+    static const int TXGROUP_IFLASHING = 5;
     static const int STREAM_MAX = 2;
     enum STREAM_INDEX {
         STREAM_CAPTION,
@@ -37,6 +41,7 @@ private:
     void OnCapture(bool fSaveToFile);
     static BOOL CALLBACK WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData);
     void HideOsds(STREAM_INDEX index);
+    void DeleteTextures();
     void DestroyOsds();
     CPseudoOSD &CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount, HWND hwndContainer);
@@ -75,7 +80,6 @@ private:
     int m_strokeSmoothLevel;
     int m_strokeByDilate;
     bool m_fCentering;
-    bool m_fFixRatio;
     TCHAR m_szRomSoundList[32 * 20];
 
     // 字幕描画
@@ -86,6 +90,7 @@ private:
     int m_osdUsingCount[STREAM_MAX];
     int m_osdShowCount[STREAM_MAX];
     bool m_fNeedtoShow;
+    bool m_fFlashingFlipFlop;
 
     // 字幕解析
     CCaptionDll m_captionDll;
@@ -102,6 +107,9 @@ private:
     int m_pcrPid;
     int m_caption1Pid;
     int m_caption2Pid;
+
+    // レンダラで合成する(疑似でない)OSD
+    COsdCompositor m_osdCompositor;
 };
 
 #endif // INCLUDE_TV_CAPTION2_H

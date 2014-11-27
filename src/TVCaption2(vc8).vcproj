@@ -61,7 +61,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/PDBALTPATH:%_PDB% /OPT:NOWIN98"
-				AdditionalDependencies="Shlwapi.lib Winmm.lib"
+				AdditionalDependencies="Shlwapi.lib Winmm.lib imagehlp.lib strmiids.lib mfuuid.lib"
 				OutputFile="$(OutDir)\TVCaptionMod2.tvtp"
 				LinkIncremental="2"
 				ModuleDefinitionFile="Exports.def"
@@ -139,7 +139,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/PDBALTPATH:%_PDB% /OPT:NOWIN98"
-				AdditionalDependencies="Shlwapi.lib Winmm.lib"
+				AdditionalDependencies="Shlwapi.lib Winmm.lib imagehlp.lib strmiids.lib mfuuid.lib"
 				OutputFile="$(OutDir)\TVCaptionMod2.tvtp"
 				LinkIncremental="1"
 				ModuleDefinitionFile="Exports.def"
@@ -192,6 +192,18 @@
 				>
 			</File>
 			<File
+				RelativePath=".\OsdCompositor.cpp"
+				>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						Optimization="2"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
 				RelativePath=".\PseudoOSD.cpp"
 				>
 				<FileConfiguration
@@ -227,6 +239,10 @@
 			</File>
 			<File
 				RelativePath=".\GaijiTable_typebank.h"
+				>
+			</File>
+			<File
+				RelativePath=".\OsdCompositor.h"
 				>
 			</File>
 			<File
