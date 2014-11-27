@@ -211,7 +211,7 @@ protected:
 
 	vector<CAPTION_DATA>* m_pCaptionList;
 	CDRCMap* m_pDRCMap;
-	WCHAR m_GaijiTable[G_CELL_SIZE * 7];
+	WCHAR m_GaijiTable[G_CELL_SIZE * 7][2];
 protected:
 	BOOL InitCaption(void);
 	BOOL Analyze( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSize );

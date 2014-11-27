@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-07-19
+// 最終更新: 2012-08-14
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,9 +27,13 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.0; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.1; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 7;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
+
+//半角置換可能文字リスト
+static const LPCTSTR HALF_S_LIST = TEXT("　。、・（）「」");
+static const LPCTSTR HALF_R_LIST = TEXT(" ｡､･()｢｣");
 
 enum {
     TIMER_ID_DONE_MOVE,
@@ -220,7 +224,7 @@ int CTVCaption2::GetVideoPid()
 
 #define SKIP_CRLF(p) { if(*(p)==TEXT('\r')) ++(p); if(*(p)) ++(p); }
 
-bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR *pCustomTable)
+bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2])
 {
     if (!tableName[0]) return false;
     pDrcsStrMap->clear();
@@ -246,7 +250,7 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
         if (text) {
             // 1行目は外字テーブル
             int len = ::StrCSpn(text, TEXT("\r\n"));
-            DWORD tableSize = min(len, GAIJI_TABLE_SIZE);
+            DWORD tableSize = len;
             fRet = m_captionDll.SetGaiji(1, text, &tableSize);
 
             // あれば2行目からDRCS→文字列マップ
@@ -284,16 +288,20 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
 
     if (fRet && pCustomTable) {
         // 外字をプラグインで置換する場合
-        DWORD tableSize = GAIJI_TABLE_SIZE;
-        fRet = m_captionDll.GetGaiji(1, pCustomTable, &tableSize);
+        WCHAR gaijiTable[GAIJI_TABLE_SIZE * 2];
+        DWORD tableSize = GAIJI_TABLE_SIZE * 2;
+        fRet = m_captionDll.GetGaiji(1, gaijiTable, &tableSize);
         if (fRet) {
+            for (int i = 0, j = 0; i < GAIJI_TABLE_SIZE; ++i) {
+                pCustomTable[i][0] = gaijiTable[j++];
+                pCustomTable[i][1] = (pCustomTable[i][0] & 0xFC00) == 0xD800 ? gaijiTable[j++] : 0;
+            }
             // U+E000から線形マップ
-            WCHAR gaijiTable[GAIJI_TABLE_SIZE];
             WCHAR wc = 0xE000;
-            for (int i = 0; i < _countof(gaijiTable); ++i, ++wc) {
+            for (int i = 0; i < GAIJI_TABLE_SIZE; ++i, ++wc) {
                 gaijiTable[i] = wc;
             }
-            tableSize = _countof(gaijiTable);
+            tableSize = GAIJI_TABLE_SIZE;
             fRet = m_captionDll.SetGaiji(1, gaijiTable, &tableSize);
         }
     }
@@ -940,29 +948,14 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         LPCTSTR pszShow = pszCarry ? pszCarry : charData.pszDecode;
         pszCarry = NULL;
 
-        TCHAR szHalf[256];
-        szHalf[0] = 0;
-        if (charData.wCharSizeMode == CP_STR_MEDIUM) {
-            // 可能なら一部の約物を半角で描画する
-            static LPCTSTR S_LIST = TEXT("　。、・");
-            static LPCTSTR R_LIST = TEXT(" ｡､･");
-            for (int j = 0; pszShow[j] && j < _countof(szHalf)-1; ) {
-                LPCTSTR p = ::StrChr(S_LIST, pszShow[j]);
-                if (!p) {
-                    szHalf[0] = 0;
-                    break;
-                }
-                szHalf[j++] = R_LIST[p-S_LIST];
-                szHalf[j] = 0;
-            }
-        }
-
-        // 文字列にDRCSか外字が含まれるか調べる
+        // 文字列にDRCSか外字か半角置換可能文字が含まれるか調べる
         const DRCS_PATTERN_DLL *pDrcs = NULL;
         LPCTSTR pszDrcsStr = NULL;
         bool fSearchGaiji = m_szGaijiFaceName[0] != 0;
-        WCHAR wcGaiji = 0;
-        if (drcsCount != 0 || fSearchGaiji) {
+        WCHAR szGaiji[3] = {0};
+        bool fSearchHalf = charData.wCharSizeMode == CP_STR_MEDIUM;
+        WCHAR szHalf[2] = {0};
+        if (drcsCount != 0 || fSearchGaiji || fSearchHalf) {
             for (int j = 0; pszShow[j]; ++j) {
                 if (0xEC00 <= pszShow[j] && pszShow[j] <= 0xECFF) {
                     // DRCS
@@ -1000,8 +993,20 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 }
                 else if (fSearchGaiji && 0xE000 <= pszShow[j] && pszShow[j] < 0xE000+GAIJI_TABLE_SIZE) {
                     // 外字
-                    wcGaiji = m_customGaijiTable[pszShow[j] - 0xE000];
-                    if (wcGaiji) {
+                    szGaiji[0] = m_customGaijiTable[pszShow[j] - 0xE000][0];
+                    szGaiji[1] = m_customGaijiTable[pszShow[j] - 0xE000][1];
+                    szGaiji[2] = 0;
+                    if (szGaiji[0]) {
+                        pszCarry = &pszShow[j+1];
+                        break;
+                    }
+                }
+                else if (fSearchHalf) {
+                    LPCTSTR p = ::StrChr(HALF_S_LIST, pszShow[j]);
+                    if (p) {
+                        // 半角置換可能文字
+                        szHalf[0] = HALF_R_LIST[p-HALF_S_LIST];
+                        szHalf[1] = 0;
                         pszCarry = &pszShow[j+1];
                         break;
                     }
@@ -1015,7 +1020,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             // 繰り越す
             ::lstrcpyn(szTmp, pszShow, min(static_cast<int>(pszCarry - pszShow), _countof(szTmp)));
             pszShow = szTmp;
-            if ((pDrcs && pszDrcsStr) || wcGaiji) {
+            if ((pDrcs && pszDrcsStr) || szGaiji[0] || szHalf[0]) {
                 fSameStyle = true;
             }
         }
@@ -1038,21 +1043,22 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
 
         // 文字列を描画
+        int lenWos = StrlenWoLoSurrogate(pszShow);
         if (pOsdCarry) {
-            AddOsdText(pOsdCarry, szHalf[0]?szHalf:pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
-                       szHalf[0]?-charNormalScaleW:charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
+            AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
+                       charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
             if (!fSameStyle) {
                 pOsdCarry->PrepareWindow();
                 pOsdCarry = NULL;
             }
         }
         else {
-            if (fSameStyle || pszShow[0]) {
+            if (fSameStyle || lenWos > 0) {
                 CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
                 osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
-                AddOsdText(&osd, szHalf[0]?szHalf:pszShow, (int)((posX+dirW*::lstrlen(pszShow))*scaleX) - (int)(posX*scaleX),
-                           szHalf[0]?-charNormalScaleW:charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
+                AddOsdText(&osd, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
+                           charScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
                 if (fSameStyle) {
                     pOsdCarry = &osd;
                 }
@@ -1061,7 +1067,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 }
             }
         }
-        posX += dirW * ::lstrlen(pszShow);
+        posX += dirW * lenWos;
 
         if (pDrcs && !pszDrcsStr) {
             // DRCSを描画
@@ -1114,20 +1120,28 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
         else if (pDrcs && pszDrcsStr) {
             // DRCSを文字列で描画
-            if (pOsdCarry && pszDrcsStr[0]) {
+            int lenWos = StrlenWoLoSurrogate(pszDrcsStr);
+            if (pOsdCarry && lenWos > 0) {
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
                 AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW / ::lstrlen(pszDrcsStr) + 1,
+                           charScaleW / lenWos + 1,
                            charScaleH, m_fontSizeAdjust, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
             }
         }
-        else if (wcGaiji) {
+        else if (szGaiji[0]) {
             // 外字を描画
             if (pOsdCarry) {
-                TCHAR szGaiji[] = {wcGaiji, 0};
                 AddOsdText(pOsdCarry, szGaiji, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
                            charScaleW, charScaleH, m_fontSizeAdjust, m_szGaijiFaceName, charData);
+                posX += dirW;
+            }
+        }
+        else if (szHalf[0]) {
+            // 半角文字を描画
+            if (pOsdCarry) {
+                AddOsdText(pOsdCarry, szHalf, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
+                           -charNormalScaleW, charScaleH, m_fontSizeAdjust, m_szFaceName, charData);
                 posX += dirW;
             }
         }

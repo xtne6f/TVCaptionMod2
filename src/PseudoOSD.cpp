@@ -416,9 +416,18 @@ static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,i
 {
 	INT dx[1024];
 	cbCount=min(cbCount,lengthof(dx));
+	UINT cbCountWos=0;
 	for (UINT i=0; i<cbCount; i++) {
-		dx[i]=Width/(cbCount-i)*MultX;
-		Width-=Width/(cbCount-i);
+		if ((lpString[i] & 0xFC00) != 0xDC00) cbCountWos++;
+	}
+	for (UINT i=0; i<cbCount; i++) {
+		if ((lpString[i] & 0xFC00) != 0xDC00) {
+			dx[i]=Width/cbCountWos*MultX;
+			Width-=Width/cbCountWos;
+			cbCountWos--;
+		} else {
+			dx[i]=0;
+		}
 	}
 	return ::ExtTextOut(hdc,x*MultX,y*MultY,0,NULL,lpString,cbCount,dx);
 }
@@ -447,17 +456,26 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 	UINT oldTa=::SetTextAlign(hdc,TA_LEFT|TA_BOTTOM|TA_NOUPDATECP);
 	int x=0;
 	std::vector<CWindowStyle>::const_iterator it = m_Position.StyleList.begin();
+	LOGFONT lfLast={0};
+	DrawUtil::CFont Font;
 	for (; it!=m_Position.StyleList.end(); ++it) {
-		DrawUtil::CFont Font;
-		LOGFONT lf=it->lf;
-		lf.lfWidth*=lf.lfWidth<0?-MultX:MultX;
-		lf.lfHeight*=MultY;
-		if (!it->Text.empty() && Font.Create(&lf)) {
-			HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
-			int intvX=it->Width/(int)it->Text.length() - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
-			int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
-			TextOutMonospace(hdc,x+intvX/2,m_Position.Height-1-intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
-			::SelectObject(hdc,hfontOld);
+		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
+		if (lenWos > 0) {
+			LOGFONT lf=it->lf;
+			lf.lfWidth*=lf.lfWidth<0?-MultX:MultX;
+			lf.lfHeight*=MultY;
+			//フォントが変化するときだけ作る
+			if (!CompareLogFont(&lf,&lfLast)) {
+				Font.Create(&lf);
+				lfLast=lf;
+			}
+			if (Font.IsCreated()) {
+				HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
+				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
+				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
+				TextOutMonospace(hdc,x+intvX/2,m_Position.Height-1-intvY/2,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
+				::SelectObject(hdc,hfontOld);
+			}
 		}
 		x+=it->Width;
 	}
@@ -821,7 +839,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 
 	bool fNeedToLay=false;
 	bool fNeedToDilate=false;
-	if (!m_fHideText && (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom)) {
+	if (m_fHLLeft||m_fHLTop||m_fHLRight||m_fHLBottom) {
 		if (m_fHLLeft) DrawLine(hdcSrc,1,rc.bottom-1,1,1,2,m_crTextColor);
 		if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rc.right-1,VertMult,2*VertMult,m_crTextColor);
 		if (m_fHLRight) DrawLine(hdcSrc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
@@ -884,7 +902,8 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		ShrinkBitmap(m_pBits,AllocWidth,rc);
 	}
 	// アルファチャネル操作
-	SetBitmapOpacity((BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,(BYTE)(m_Opacity*255/100),(BYTE)(m_BackOpacity*255/100));
+	SetBitmapOpacity((BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,
+	                 m_fHideText?0:(BYTE)(m_Opacity*255/100),m_fHideText?0:(BYTE)(m_BackOpacity*255/100));
 	if (fNeedToLay) {
 		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
 	}

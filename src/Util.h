@@ -15,6 +15,7 @@ int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefaul
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
 WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
+int StrlenWoLoSurrogate(LPCTSTR str);
 
 #define APP_NAME TEXT("TVCaption2")
 

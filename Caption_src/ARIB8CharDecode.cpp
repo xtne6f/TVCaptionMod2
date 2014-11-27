@@ -826,26 +826,29 @@ void CARIB8CharDecode::AddGaijiToString( const BYTE bFirst, const BYTE bSecond )
 {
 	unsigned short usSrc = (unsigned short)(bFirst<<8) | bSecond;
 	unsigned short usRow;
+	const wchar_t *pszSrc;
 
 	// ARIB 追加漢字
 	if( (usRow=0x7521) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[5*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[5*G_CELL_SIZE + usSrc-usRow];
 	}else if( (usRow=0x7621) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[6*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[6*G_CELL_SIZE + usSrc-usRow];
 	// ARIB 追加記号
 	}else if( (usRow=0x7A21) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[0*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[0*G_CELL_SIZE + usSrc-usRow];
 	}else if( (usRow=0x7B21) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[1*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[1*G_CELL_SIZE + usSrc-usRow];
 	}else if( (usRow=0x7C21) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[2*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[2*G_CELL_SIZE + usSrc-usRow];
 	}else if( (usRow=0x7D21) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[3*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[3*G_CELL_SIZE + usSrc-usRow];
 	}else if( (usRow=0x7E21) <= usSrc && usSrc < usRow + G_CELL_SIZE ){
-		m_strDecode += m_GaijiTable[4*G_CELL_SIZE + usSrc-usRow];
+		pszSrc = m_GaijiTable[4*G_CELL_SIZE + usSrc-usRow];
 	}else{
-		m_strDecode += L'・';
+		pszSrc = L"・";
 	}
+	wchar_t szDest[3] = { pszSrc[0], pszSrc[1], L'\0' };
+	m_strDecode += szDest;
 
 	//文字列に置換するときは文字数を指定
 	ActivePositionForward(1);
@@ -1414,9 +1417,17 @@ BOOL CARIB8CharDecode::GetGaijiTable(WCHAR* pTable, DWORD* pdwTableSize) const
 	if( pTable==NULL || pdwTableSize==NULL ){
 		return FALSE;
 	}
-	DWORD dwCopyBytes = min(*pdwTableSize * sizeof(WCHAR), sizeof(m_GaijiTable));
-	memcpy(pTable, m_GaijiTable, dwCopyBytes);
-	*pdwTableSize = dwCopyBytes / sizeof(WCHAR);
+	DWORD dwSize = *pdwTableSize;
+	DWORD dwCopy = 0;
+	for( int i = 0; dwCopy < dwSize && i < _countof(m_GaijiTable); i++ ){
+		if( m_GaijiTable[i][0] ){
+			pTable[dwCopy++] = m_GaijiTable[i][0];
+			if( m_GaijiTable[i][1] && dwCopy < dwSize ){
+				pTable[dwCopy++] = m_GaijiTable[i][1];
+			}
+		}
+	}
+	*pdwTableSize = dwCopy;
 	return TRUE;
 }
 
@@ -1425,9 +1436,18 @@ BOOL CARIB8CharDecode::SetGaijiTable(const WCHAR* pTable, DWORD* pdwTableSize)
 	if( pTable==NULL || pdwTableSize==NULL ){
 		return FALSE;
 	}
-	DWORD dwCopyBytes = min(*pdwTableSize * sizeof(WCHAR), sizeof(m_GaijiTable));
-	memcpy(m_GaijiTable, pTable, dwCopyBytes);
-	*pdwTableSize = dwCopyBytes / sizeof(WCHAR);
+	DWORD dwSize = *pdwTableSize;
+	DWORD dwCopy = 0;
+	for( int i = 0; dwCopy < dwSize && i < _countof(m_GaijiTable); i++ ){
+		m_GaijiTable[i][0] = pTable[dwCopy++];
+		if( (m_GaijiTable[i][0] & 0xFC00) == 0xD800 && dwCopy < dwSize ){
+			//上位サロゲート
+			m_GaijiTable[i][1] = pTable[dwCopy++];
+		}else{
+			m_GaijiTable[i][1] = L'\0';
+		}
+	}
+	*pdwTableSize = dwCopy;
 	return TRUE;
 }
 

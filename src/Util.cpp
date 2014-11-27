@@ -62,6 +62,15 @@ WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
     return pRet;
 }
 
+int StrlenWoLoSurrogate(LPCTSTR str)
+{
+    int len = 0;
+    for (; *str; ++str) {
+        if ((*str & 0xFC00) != 0xDC00) ++len;
+    }
+    return len;
+}
+
 static void extract_psi(PSI *psi, const unsigned char *payload, int payload_size, int unit_start, int counter)
 {
     int pointer;

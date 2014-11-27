@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.0 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.1 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,10 +13,10 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.0.9r2～ver.0.9r4からの移行)
-TVCaptionMod2.tvtpを以前のものと置きかえてください。
-(ver.0.9以前からの移行)
-TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
+TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。以下の外
+字テーブルのファイルにも変更があるので、必要なら置きかえてください:
+・TVCaptionMod2_Gaiji_std.txt
+・TVCaptionMod2_Gaiji_typebank.txt
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpとCaption.dllとを入れ、右クリック
@@ -106,8 +106,8 @@ GaijiTableName
     # が気になる方は利用してください。記述方法は"gaiji.zip"のstdまたはtypebankの
     # ものを参考にしてください(2行目の[;DRCSMap]の';'をはずすと有効になります)。
     # ハッシュ値はTVTestで取得できます。
-    # 置換可能な文字列は3文字まで、サロゲートペアには未対応です。2文字や3文字の
-    # 場合も表示は1文字幅に圧縮されることに注意してください。
+    # 置換可能な文字列は3文字まで、サロゲートペアに対応しています【ver.1.1～】。
+    # 2文字や3文字の場合も表示は1文字幅に圧縮されることに注意してください。
 Method
     字幕の表示方法
     # いまのところ通常ウィンドウ[=1]かレイヤードウィンドウ[=2]のみです。
@@ -217,6 +217,12 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.1 (2012-08-14)
+・サロゲートペアに対応
+  ・Windows TV ゴシックの通称「つちよし」などを表示できるようになった
+  ・関連して外字テーブルのファイルを修正
+・約物の半角置換処理を改善
+・スレを参考にフラッシング制御(FLC)を背景も含めて明滅させるようにした
 ver.1.0 (2012-07-19)
 ・0.9→1.0だけど特に大きなバージョンアップではない
 ・フラッシング制御(FLC)に対応

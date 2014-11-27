@@ -28,7 +28,7 @@ private:
     HWND GetFullscreenWindow();
     HWND FindVideoContainer();
     int GetVideoPid();
-    bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR *pCustomTable);
+    bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2]);
     bool EnablePlugin(bool fEnable);
     void LoadSettings();
     void SaveSettings() const;
@@ -56,7 +56,7 @@ private:
     TCHAR m_szFaceName[LF_FACESIZE];
     TCHAR m_szGaijiFaceName[LF_FACESIZE];
     TCHAR m_szGaijiTableName[LF_FACESIZE];
-    WCHAR m_customGaijiTable[GAIJI_TABLE_SIZE];
+    WCHAR m_customGaijiTable[GAIJI_TABLE_SIZE][2];
     std::vector<DRCS_PAIR> m_drcsStrMap; 
     int m_settingsIndex;
     int m_paintingMethod;
