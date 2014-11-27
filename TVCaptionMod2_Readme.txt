@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.6 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.6r2 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -16,15 +16,15 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.1.1～ver.1.5からの移行)
-TVCaptionMod2.tvtpを以前のものと置きかえてください。
-(ver.1.0以前からの移行)
+(ver.1.6からの移行)
+Caption.dllを以前のものと置きかえてください(ver.1.6r2はCaption.dllの更新のみ)。
+(ver.1.5以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpとCaption.dllとを入れ、右クリック
 メニューからプラグインを有効にして、字幕のある番組で字幕が表示されればOKです。
-TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
+TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 
 プラグイン設定は 右クリックメニュー→設定→プラグイン→TVCaptionMod2 から行いま
 す。各設定について詳細は後述「設定ファイルについて」の対応する項目を参照してくだ
@@ -266,6 +266,9 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.6r2 (2013-06-06)
+・ARIB8CharDecode.cppのデフォルトマクロ文の誤りを修正
+・ついでにCaption.dllのビルドオプションを微調整
 ver.1.6 (2013-03-05)
 ・TVTestスレPart50>>57を参考にサイドカット表示を考慮
   ・ただし設定キーMethod[=1,2]のときのみ

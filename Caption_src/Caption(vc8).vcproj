@@ -61,6 +61,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/PDBALTPATH:%_PDB% /OPT:NOWIN98"
+				OutputFile="$(OutDir)\Caption.dll"
 				LinkIncremental="2"
 				ModuleDefinitionFile="Caption.def"
 				GenerateDebugInformation="true"
@@ -117,6 +118,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
+				Optimization="1"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;CAPTIONVC8_EXPORTS"
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
@@ -136,6 +138,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/PDBALTPATH:%_PDB% /OPT:NOWIN98"
+				OutputFile="$(OutDir)\Caption.dll"
 				LinkIncremental="1"
 				ModuleDefinitionFile="Caption.def"
 				GenerateDebugInformation="true"
