@@ -1,8 +1,8 @@
 ﻿#ifndef INCLUDE_CAPTION_H
 #define INCLUDE_CAPTION_H
 
-#include "../Caption/CaptionDef.h"
-#include "../Caption/Caption.h"
+#include "../Caption_src/CaptionDef.h"
+#include "../Caption_src/Caption.h"
 
 // 名前衝突的に危ういので接頭辞CP_を付けさせてもらう
 
