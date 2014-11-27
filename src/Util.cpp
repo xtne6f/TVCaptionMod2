@@ -31,6 +31,37 @@ DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
     return 0;
 }
 
+// BOM付きUTF-16テキストファイルを文字列として全て読む
+// 成功するとnewされた配列のポインタが返るので、必ずdeleteすること
+WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
+{
+    HANDLE hFile = ::CreateFile(fileName, GENERIC_READ, dwShareMode, NULL,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return NULL;
+
+    WCHAR bom;
+    DWORD readBytes;
+    DWORD fileBytes = ::GetFileSize(hFile, NULL);
+    if (fileBytes < sizeof(WCHAR) || READ_FILE_MAX_SIZE <= fileBytes ||
+        !::ReadFile(hFile, &bom, sizeof(WCHAR), &readBytes, NULL) ||
+        readBytes != sizeof(WCHAR) || bom != L'\xFEFF')
+    {
+        ::CloseHandle(hFile);
+        return NULL;
+    }
+
+    WCHAR *pRet = new WCHAR[fileBytes / sizeof(WCHAR) - 1 + 1];
+    if (!::ReadFile(hFile, pRet, fileBytes - sizeof(WCHAR), &readBytes, NULL)) {
+        delete [] pRet;
+        ::CloseHandle(hFile);
+        return NULL;
+    }
+    pRet[readBytes / sizeof(WCHAR)] = 0;
+
+    ::CloseHandle(hFile);
+    return pRet;
+}
+
 static void extract_psi(PSI *psi, const unsigned char *payload, int payload_size, int unit_start, int counter)
 {
     int pointer;

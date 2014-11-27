@@ -11,6 +11,13 @@ static char THIS_FILE[]=__FILE__;
 #define new DEBUG_NEW
 #endif
 
+#if 0 // アセンブリ検索用
+#define MAGIC_NUMBER(x) { g_dwMagic=(x); }
+static DWORD g_dwMagic;
+#else
+#define MAGIC_NUMBER
+#endif
+
 #ifndef lengthof
 #define lengthof _countof
 #endif
@@ -509,9 +516,45 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	}
 }
 
+// 表示中のOSDのイメージをhdcに合成する
+void CPseudoOSD::Compose(HDC hdc,int Left,int Top)
+{
+	if (hdc==NULL || !IsVisible()) return;
+	RECT rc;
+	::GetClientRect(m_hwnd,&rc);
+	if (rc.right<1 || rc.bottom<1) return;
+
+	// OSDのイメージを描画する一時ビットマップ
+	void *pBits;
+	BITMAPINFO bmi={0};
+	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth=rc.right;
+	bmi.bmiHeader.biHeight=-rc.bottom;
+	bmi.bmiHeader.biPlanes=1;
+	bmi.bmiHeader.biBitCount=32;
+	bmi.bmiHeader.biCompression=BI_RGB;
+	HBITMAP hbmTmp=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&pBits,NULL,0);
+	if (hbmTmp==NULL) return;
+
+	HDC hdcTmp=::CreateCompatibleDC(hdc);
+	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcTmp,hbmTmp));
+	if (m_fLayeredWindow) {
+		// アルファ合成のために背景をコピーしておく
+		::BitBlt(hdcTmp,0,0,rc.right,rc.bottom,hdc,Left,Top,SRCCOPY);
+		UpdateLayeredWindow(hdcTmp,pBits,rc.right,rc.bottom);
+	} else {
+		Draw(hdcTmp,rc);
+	}
+	::BitBlt(hdc,Left,Top,rc.right,rc.bottom,hdcTmp,0,0,SRCCOPY);
+	::SelectObject(hdcTmp,hbmOld);
+	::DeleteDC(hdcTmp);
+	::DeleteObject(hbmTmp);
+}
+
 // 縦横4倍の2値画像をもとにアルファチャネルを構成する
 static void SetBitmapOpacity(void *pBits,int Width,const RECT &Rect,const void *pBitsMono,BYTE TextOpacity,BYTE BackOpacity)
 {
+	MAGIC_NUMBER(0x77867563);
 	if (Rect.left%2!=0) return;
 	static const int BitSum[16]={ 0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4 };
 
@@ -543,18 +586,21 @@ static void SetBitmapOpacity(void *pBits,int Width,const RECT &Rect,const void *
 // crKeyな画素をアルファチャネルに写す
 static void LayBitmapToAlpha(void *pBits,int Width,const RECT &Rect,BYTE TextOpacity,COLORREF crKey)
 {
+	MAGIC_NUMBER(0x66735267);
+	DWORD dwKey=(GetRValue(crKey)<<16)|(GetGValue(crKey)<<8)|GetBValue(crKey);
 	for (int y=Rect.top;y<Rect.bottom;y++) {
-		BYTE *p=static_cast<BYTE*>(pBits)+(y*Width+Rect.left)*4;
+		DWORD *p=static_cast<DWORD*>(pBits)+y*Width+Rect.left;
 		for (int x=Rect.left;x<Rect.right;x++) {
-			if (RGB(p[2],p[1],p[0])!=crKey)
-				p[3]=TextOpacity;
-			p+=4;
+			if ((*p&0x00FFFFFF)!=dwKey)
+				*p=(TextOpacity<<24)|(*p&0x00FFFFFF);
+			p++;
 		}
 	}
 }
 
 static void PremultiplyBitmap(void *pBits,int Width,const RECT &Rect)
 {
+	MAGIC_NUMBER(0x67683625);
 	for (int y=Rect.top;y<Rect.bottom;y++) {
 		BYTE *p=static_cast<BYTE*>(pBits)+(y*Width+Rect.left)*4;
 		for (int x=Rect.left;x<Rect.right;x++) {
@@ -569,6 +615,7 @@ static void PremultiplyBitmap(void *pBits,int Width,const RECT &Rect)
 // Opacityなアルファチャネルを膨張させる
 static void DilateAlpha(void *pBits,int Width,const RECT &Rect,BYTE Opacity)
 {
+	MAGIC_NUMBER(0x94275645);
 	BYTE LastLine[1+8192];
 	if (Rect.right-Rect.left<=1 || 1+(Rect.right-Rect.left)>lengthof(LastLine)) return;
 
@@ -604,6 +651,7 @@ static void DilateAlpha(void *pBits,int Width,const RECT &Rect,BYTE Opacity)
 // アルファチャネルを平滑化する
 static void SmoothAlpha(void *pBits,int Width,const RECT &Rect,BYTE EdgeOpacity,int SmoothLevel)
 {
+	MAGIC_NUMBER(0x47673283);
 	static const BYTE Coefs[5][10]={
 		{1,5,1,5,25,5,1,5,1,49},
 		{1,4,1,4,16,4,1,4,1,36},
@@ -644,6 +692,24 @@ static void SmoothAlpha(void *pBits,int Width,const RECT &Rect,BYTE EdgeOpacity,
 		q[3]=(BYTE)((i[0]*c[0]+i[1]*c[1]+i[2]*c[2]+
 		             i[3]*c[3]+i[4]*c[4]+i[5]*c[5]+
 		             i[6]*c[6]+i[7]*c[7]+i[8]*c[8])/c[9]);
+	}
+}
+
+// アルファ合成する
+static void ComposeAlpha(void *pBitsDest,int WidthDest,const void *pBits,int Width,const RECT &Rect)
+{
+	MAGIC_NUMBER(0x36481956);
+	for (int y=Rect.top,yy=0;y<Rect.bottom;y++,yy++) {
+		const BYTE *p=static_cast<const BYTE*>(pBits)+(y*Width+Rect.left)*4;
+		BYTE *q=static_cast<BYTE*>(pBitsDest)+(yy*WidthDest)*4;
+		for (int x=Rect.left;x<Rect.right;x++) {
+			q[0]=((p[0]<<8) + (q[0]*(255-p[3])+255))>>8;
+			q[1]=((p[1]<<8) + (q[1]*(255-p[3])+255))>>8;
+			q[2]=((p[2]<<8) + (q[2]*(255-p[3])+255))>>8;
+			q[3]=0;
+			p+=4;
+			q+=4;
+		}
 	}
 }
 
@@ -709,14 +775,17 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *p
 	return true;
 }
 
-void CPseudoOSD::UpdateLayeredWindow()
+// hdcCompose!=NULLのとき、このデバイスコンテキストのpBitsCompose(32bitDIBビット値)に合成する
+void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int WidthCompose,int HeightCompose)
 {
 	RECT rc;
-	int Width,Height;
-
-	::GetWindowRect(m_hwnd,&rc);
-	Width=rc.right-rc.left;
-	Height=rc.bottom-rc.top;
+	if (hdcCompose) {
+		::SetRect(&rc,0,0,WidthCompose,HeightCompose);
+	} else {
+		::GetClientRect(m_hwnd,&rc);
+	}
+	int Width=rc.right;
+	int Height=rc.bottom;
 	if (Width<1 || Height<1)
 		return;
 
@@ -724,13 +793,19 @@ void CPseudoOSD::UpdateLayeredWindow()
 	if (!AllocateWorkBitmap(Width,Height,&AllocWidth,&AllocHeight))
 		return;
 
-	HDC hdc=::GetDC(m_hwnd);
-	HDC hdcSrc=::CreateCompatibleDC(hdc);
+	HDC hdc,hdcSrc,hdcMono;
+	if (hdcCompose) {
+		hdc=NULL;
+		hdcSrc=::CreateCompatibleDC(hdcCompose);
+		hdcMono=::CreateCompatibleDC(hdcCompose);
+	} else {
+		hdc=::GetDC(m_hwnd);
+		hdcSrc=::CreateCompatibleDC(hdc);
+		hdcMono=::CreateCompatibleDC(hdc);
+	}
 	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcSrc,m_hbmWork));
-	HDC hdcMono=::CreateCompatibleDC(hdc);
 	HBITMAP hbmMonoOld=static_cast<HBITMAP>(::SelectObject(hdcMono,m_hbmWorkMono));
 
-	::SetRect(&rc,0,0,Width,Height);
 	DrawUtil::Fill(hdcSrc,&rc,m_crBackColor);
 	::ZeroMemory(m_pBitsMono,(AllocWidth*4+31)/32*4 * Height*4);
 
@@ -806,17 +881,20 @@ void CPseudoOSD::UpdateLayeredWindow()
 	SmoothAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
 	PremultiplyBitmap(m_pBits,AllocWidth,rc);
 
-	SIZE sz={Width,Height};
-	POINT ptSrc={0,0};
-	BLENDFUNCTION blend={AC_SRC_OVER,0,255,AC_SRC_ALPHA};
-	::UpdateLayeredWindow(m_hwnd,hdc,NULL,&sz,hdcSrc,&ptSrc,0,&blend,ULW_ALPHA);
-
+	if (hdcCompose) {
+		ComposeAlpha(pBitsCompose,Width,m_pBits,AllocWidth,rc);
+	} else {
+		SIZE sz={Width,Height};
+		POINT ptSrc={0,0};
+		BLENDFUNCTION blend={AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+		::UpdateLayeredWindow(m_hwnd,hdc,NULL,&sz,hdcSrc,&ptSrc,0,&blend,ULW_ALPHA);
+	}
 	::SelectObject(hdcMono,hbmMonoOld);
 	::DeleteDC(hdcMono);
 
 	::SelectObject(hdcSrc,hbmOld);
 	::DeleteDC(hdcSrc);
-	::ReleaseDC(m_hwnd,hdc);
+	if (hdc) ::ReleaseDC(m_hwnd,hdc);
 }
 
 

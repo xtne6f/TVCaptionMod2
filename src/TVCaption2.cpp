@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-06-08
+// 最終更新: 2012-06-12
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,7 +27,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.7; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.8; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 5;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -39,11 +39,13 @@ enum {
 enum {
     ID_COMMAND_SWITCH_LANG,
     ID_COMMAND_SWITCH_SETTING,
+    ID_COMMAND_CAPTURE,
 };
 
 static const TVTest::CommandInfo COMMAND_LIST[] = {
     {ID_COMMAND_SWITCH_LANG, L"SwitchLang", L"字幕言語切り替え"},
     {ID_COMMAND_SWITCH_SETTING, L"SwitchSetting", L"表示設定切り替え"},
+    {ID_COMMAND_CAPTURE, L"Capture", L"字幕付き画像のコピー"},
 };
 
 CTVCaption2::CTVCaption2()
@@ -210,9 +212,12 @@ int CTVCaption2::GetVideoPid()
 }
 
 
-bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
+#define SKIP_CRLF(p) { if(*(p)==TEXT('\r')) ++(p); if(*(p)) ++(p); }
+
+bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR *pCustomTable)
 {
     if (!tableName[0]) return false;
+    pDrcsStrMap->clear();
 
     bool fRet = false;
     TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
@@ -231,17 +236,43 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable)
     else if (GetLongModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
         ::PathRemoveExtension(gaijiPath);
         ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), tableName);
-        HANDLE hFile = ::CreateFile(gaijiPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hFile != INVALID_HANDLE_VALUE) {
-            WCHAR gaijiTable[1/*BOM*/ + GAIJI_TABLE_SIZE];
-            DWORD readBytes;
-            if (::ReadFile(hFile, gaijiTable, sizeof(gaijiTable), &readBytes, NULL) &&
-                readBytes == sizeof(gaijiTable) && gaijiTable[0] == L'\xFEFF')
-            {
-                DWORD tableSize = _countof(gaijiTable) - 1;
-                fRet = m_captionDll.SetGaiji(1, gaijiTable + 1, &tableSize);
+        LPWSTR text = NewReadTextFileToEnd(gaijiPath, FILE_SHARE_READ);
+        if (text) {
+            // 1行目は外字テーブル
+            int len = ::StrCSpn(text, TEXT("\r\n"));
+            DWORD tableSize = min(len, GAIJI_TABLE_SIZE);
+            fRet = m_captionDll.SetGaiji(1, text, &tableSize);
+
+            // あれば2行目からDRCS→文字列マップ
+            LPCTSTR p = text + len;
+            SKIP_CRLF(p);
+            if (!::StrCmpNI(p, TEXT("[DRCSMap]"), 9)) {
+                p += ::StrCSpn(p, TEXT("\r\n"));
+                SKIP_CRLF(p);
+                while (*p && *p != TEXT('[')) {
+                    DRCS_PAIR pair;
+                    int i = 0;
+                    for (; i < 16 && *p && *(p+1); ++i, p+=2) {
+                        TCHAR hex[] = { TEXT('0'), TEXT('x'), *p, *(p+1), 0 };
+                        int ret;
+                        if (!::StrToIntEx(hex, STIF_SUPPORT_HEX, &ret)) break;
+                        pair.md5[i] = static_cast<BYTE>(ret);
+                    }
+                    int len = ::StrCSpn(p, TEXT("\r\n"));
+                    if (i == 16 && *p == TEXT('=')) {
+                        ::lstrcpyn(pair.str, p+1, min(len, _countof(pair.str)));
+                        pDrcsStrMap->push_back(pair);
+                        // 既ソートにしておく
+                        std::vector<DRCS_PAIR>::iterator it = pDrcsStrMap->end() - 1;
+                        for (; it != pDrcsStrMap->begin() && ::memcmp(it->md5, (it-1)->md5, 16) < 0; --it) {
+                            std::swap(*it, *(it-1));
+                        }
+                    }
+                    p += len;
+                    SKIP_CRLF(p);
+                }
             }
-            ::CloseHandle(hFile);
+            delete [] text;
         }
     }
 
@@ -275,8 +306,9 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
             SaveSettings();
         }
         if (m_captionDll.Initialize(m_szCaptionDllPath)) {
-            if (!ConfigureGaijiTable(m_szGaijiTableName, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
+            if (!ConfigureGaijiTable(m_szGaijiTableName, &m_drcsStrMap, m_szGaijiFaceName[0]?m_customGaijiTable:NULL)) {
                 m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
+                m_drcsStrMap.clear();
                 ::memset(m_customGaijiTable, 0, sizeof(m_customGaijiTable));
             }
             m_caption1Manager.SetCaptionDll(&m_captionDll, 0, m_fTVH264);
@@ -507,19 +539,90 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                 pThis->HideOsds(STREAM_CAPTION);
                 pThis->HideOsds(STREAM_SUPERIMPOSE);
                 pThis->SwitchSettings();
-                if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName,
+                if (!pThis->ConfigureGaijiTable(pThis->m_szGaijiTableName, &pThis->m_drcsStrMap,
                                                 pThis->m_szGaijiFaceName[0]?pThis->m_customGaijiTable:NULL))
                 {
                     pThis->m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
+                    pThis->m_drcsStrMap.clear();
                     ::memset(pThis->m_customGaijiTable, 0, sizeof(pThis->m_customGaijiTable));
                 }
                 PlayRomSound(pThis->m_szRomSoundList, 16);
+                break;
+            case ID_COMMAND_CAPTURE:
+                pThis->OnCapture();
                 break;
             }
         }
         return TRUE;
     }
     return 0;
+}
+
+
+void CTVCaption2::OnCapture()
+{
+    void *pPackDib = m_pApp->CaptureImage();
+    if (!pPackDib) return;
+
+    BITMAPINFOHEADER *pBih = static_cast<BITMAPINFOHEADER*>(pPackDib);
+    if (pBih->biWidth > 0 && pBih->biHeight > 0) {
+        void *pBits;
+        HBITMAP hbm = ::CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(pBih), DIB_RGB_COLORS, &pBits, NULL, 0);
+        if (hbm) {
+            BYTE *pBitmap = static_cast<BYTE*>(pPackDib) + sizeof(BITMAPINFOHEADER);
+            ::SetDIBits(NULL, hbm, 0, pBih->biHeight, pBitmap, reinterpret_cast<BITMAPINFO*>(pBih), DIB_RGB_COLORS);
+
+            // ビットマップに表示中のOSDを合成
+            HWND hwndContainer = FindVideoContainer();
+            RECT rc;
+            if (hwndContainer && ::GetClientRect(hwndContainer, &rc)) {
+                // コンテナ中央に動画が表示されていることを仮定
+                int offsetLeft, offsetTop;
+                if (pBih->biWidth * rc.bottom < rc.right * pBih->biHeight) {
+                    // 描画ウィンドウが動画よりもワイド
+                    offsetLeft = (rc.right - rc.bottom * pBih->biWidth / pBih->biHeight) / 2;
+                    offsetTop = 0;
+                }
+                else {
+                    offsetLeft = 0;
+                    offsetTop = (rc.bottom - rc.right * pBih->biHeight / pBih->biWidth) / 2;
+                }
+                HDC hdc = ::CreateCompatibleDC(NULL);
+                HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbm));
+                for (int i = 0; i < STREAM_MAX; ++i) {
+                    for (int j = 0; j < m_osdShowCount[i]; ++j) {
+                        int left, top;
+                        m_pOsdUsingList[i][j]->GetPosition(&left, &top, NULL, NULL);
+                        m_pOsdUsingList[i][j]->Compose(hdc, left-offsetLeft, top-offsetTop);
+                    }
+                }
+                ::SelectObject(hdc, hbmOld);
+                ::DeleteDC(hdc);
+            }
+
+            // クリップボードにコピー
+            if (::OpenClipboard(m_hwndPainting)) {
+                if (::EmptyClipboard()) {
+                    int sizeImage = (pBih->biWidth * pBih->biBitCount + 31) / 32 * 4 * pBih->biHeight;
+                    HGLOBAL hg = ::GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPINFOHEADER) + sizeImage);
+                    if (hg) {
+                        BYTE *pClip = reinterpret_cast<BYTE*>(::GlobalLock(hg));
+                        if (pClip) {
+                            ::memcpy(pClip, pBih, sizeof(BITMAPINFOHEADER));
+                            ::GdiFlush();
+                            ::memcpy(pClip + sizeof(BITMAPINFOHEADER), pBits, sizeImage);
+                            ::GlobalUnlock(hg);
+                            if (!::SetClipboardData(CF_DIB, hg)) ::GlobalFree(hg);
+                        }
+                        else ::GlobalFree(hg);
+                    }
+                }
+                ::CloseClipboard();
+            }
+            ::DeleteObject(hbm);
+        }
+    }
+    m_pApp->MemoryFree(pPackDib);
 }
 
 
@@ -739,6 +842,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
 
         // 文字列にDRCSか外字が含まれるか調べる
         const DRCS_PATTERN_DLL *pDrcs = NULL;
+        LPCTSTR pszDrcsStr = NULL;
         bool fSearchGaiji = m_szGaijiFaceName[0] != 0;
         WCHAR wcGaiji = 0;
         if (drcsCount != 0 || fSearchGaiji) {
@@ -756,6 +860,23 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                         }
                     }
                     if (pDrcs) {
+                        // もしあれば置きかえ可能な文字列を取得
+                        BYTE md5[16];
+                        if (!m_drcsStrMap.empty() && CalcMD5FromDRCSPattern(md5, pDrcs)) {
+                            // 2分探索
+                            int lo = 0;
+                            int hi = (int)m_drcsStrMap.size() - 1;
+                            do {
+                                int k = (lo + hi) / 2;
+                                int cmp = ::memcmp(m_drcsStrMap[k].md5, md5, 16);
+                                if (!cmp) {
+                                    pszDrcsStr = m_drcsStrMap[k].str;
+                                    break;
+                                }
+                                else if (cmp > 0) hi = k - 1;
+                                else lo = k + 1;
+                            } while (lo <= hi);
+                        }
                         pszCarry = &pszShow[j+1];
                         break;
                     }
@@ -777,7 +898,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             // 繰り越す
             ::lstrcpyn(szTmp, pszShow, min(static_cast<int>(pszCarry - pszShow), _countof(szTmp)));
             pszShow = szTmp;
-            if (wcGaiji) {
+            if ((pDrcs && pszDrcsStr) || wcGaiji) {
                 fSameStyle = true;
             }
         }
@@ -824,7 +945,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
         posX += dirW * ::lstrlen(pszShow);
 
-        if (pDrcs) {
+        if (pDrcs && !pszDrcsStr) {
             // DRCSを描画
             struct {
                 BITMAPINFOHEADER bmiHeader;
@@ -870,6 +991,16 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 ::SetRect(&rc, (int)((dirW-charW)/2*scaleX), (int)((dirH-charH)/2*scaleY), charScaleW, charScaleH);
                 osd.SetImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), &rc);
                 osd.PrepareWindow();
+                posX += dirW;
+            }
+        }
+        else if (pDrcs && pszDrcsStr) {
+            // DRCSを文字列で描画
+            if (pOsdCarry && pszDrcsStr[0]) {
+                // レイアウト維持のため、何文字であっても1文字幅に詰める
+                AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
+                           charScaleW / ::lstrlen(pszDrcsStr) + 1,
+                           charScaleH, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
             }
         }

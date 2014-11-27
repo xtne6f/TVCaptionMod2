@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.7 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.8 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,7 +13,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.0.6からの移行)
+(ver.0.6～ver.0.7からの移行)
 TVCaptionMod2.tvtpを以前のものと置きかえてください。
 (ver.0.5以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
@@ -94,6 +94,14 @@ GaijiTableName
     # てください。
     # 「Windows TV ゴシック/丸ゴシック/太丸ゴシック」についてはプラグインに組み
     # 込まれています。[=!typebank]と指定してください。
+    # 
+    # 上述のファイルに特定ハッシュ値のDRCS(Dynamic Redefinable Character Set)を
+    # 文字列に置換するリストを記述できます。たまに出現するドットの粗い文字や記号
+    # が気になる方は利用してください。記述方法は"gaiji.zip"のstdまたはtypebankの
+    # ものを参考にしてください(2行目の[;DRCSMap]の';'をはずすと有効になります)。
+    # ハッシュ値はTVTestで取得できます。
+    # 置換可能な文字列は3文字まで、サロゲートペアには未対応です。2文字や3文字の
+    # 場合も表示は1文字幅に圧縮されることに注意してください。
 Method
     字幕の表示方法
     # いまのところ通常ウィンドウ[=1]かレイヤードウィンドウ[=2]のみです。
@@ -193,6 +201,9 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.8 (2012-06-13)
+・字幕付きでクリップボードに画像コピーできるようにした
+・DRCSを文字列置換できるようにした(設定キーGaijiTableNameの説明を参照)
 ver.0.7 (2012-06-08)
 ・スレ報告より以下3点を修正・追加
   ・マルチ放送などでのサービス切り替え動作をチェックしてなかったのを修正

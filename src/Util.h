@@ -1,6 +1,9 @@
 ﻿#ifndef INCLUDE_UTIL_H
 #define INCLUDE_UTIL_H
 
+// NewReadTextFileToEnd()の最大ファイルサイズ
+#define READ_FILE_MAX_SIZE  (4096 * 1024)
+
 #ifdef _DEBUG
 #define DEBUG_OUT(x) ::OutputDebugString(x)
 #define DDEBUG_OUT
@@ -11,6 +14,7 @@
 int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName);
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
+WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
 
 #define APP_NAME TEXT("TVCaption2")
 

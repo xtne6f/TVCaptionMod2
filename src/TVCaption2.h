@@ -13,6 +13,10 @@ class CTVCaption2 : public TVTest::CTVTestPlugin
         STREAM_CAPTION,
         STREAM_SUPERIMPOSE,
     };
+    struct DRCS_PAIR {
+        BYTE md5[16];
+        TCHAR str[4];
+    };
 public:
     // CTVTestPlugin
     CTVCaption2();
@@ -24,12 +28,13 @@ private:
     HWND GetFullscreenWindow();
     HWND FindVideoContainer();
     int GetVideoPid();
-    bool ConfigureGaijiTable(LPCTSTR tableName, WCHAR *pCustomTable);
+    bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR *pCustomTable);
     bool EnablePlugin(bool fEnable);
     void LoadSettings();
     void SaveSettings() const;
     void SwitchSettings();
     static LRESULT CALLBACK EventCallback(UINT Event, LPARAM lParam1, LPARAM lParam2, void *pClientData);
+    void OnCapture();
     static BOOL CALLBACK WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData);
     void HideOsds(STREAM_INDEX index);
     void DestroyOsds();
@@ -50,6 +55,7 @@ private:
     TCHAR m_szGaijiFaceName[LF_FACESIZE];
     TCHAR m_szGaijiTableName[LF_FACESIZE];
     WCHAR m_customGaijiTable[GAIJI_TABLE_SIZE];
+    std::vector<DRCS_PAIR> m_drcsStrMap; 
     int m_settingsIndex;
     int m_paintingMethod;
     int m_showFlags[STREAM_MAX];

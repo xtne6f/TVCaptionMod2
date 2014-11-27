@@ -43,9 +43,10 @@ class CPseudoOSD
 	POINT m_ParentPosition;
 	bool m_fWindowPrepared;
 
+	void DrawTextList(HDC hdc,int Mult) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
 	static bool AllocateWorkBitmap(int Width,int Height,int *pAllocWidth,int *pAllocHeight);
-	void UpdateLayeredWindow();
+	void UpdateLayeredWindow(HDC hdcCompose=NULL,void *pBitsCompose=NULL,int WidthCompose=0,int HeightCompose=0);
 
 	static const LPCTSTR m_pszWindowClass;
 	static HINSTANCE m_hinst;
@@ -80,7 +81,7 @@ public:
 	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
 	void OnParentMove();
-	void DrawTextList(HDC hdc,int Mult) const;
+	void Compose(HDC hdc,int Left,int Top);
 private:
 	CPseudoOSD(const CPseudoOSD &other);
 	CPseudoOSD &operator=(const CPseudoOSD &other);

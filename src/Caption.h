@@ -91,7 +91,9 @@ typedef struct _LANG_TAG_INFO_DLL{
 typedef struct _DRCS_PATTERN_DLL{
 	DWORD dwDRCCode;
 	DWORD dwUCS;
-	DWORD dwReserved[2]; //zero cleared
+	WORD wGradation;
+	WORD wReserved; //zero cleared
+	DWORD dwReserved; //zero cleared
 	BITMAPINFOHEADER bmiHeader;
 	const BYTE* pbBitmap;
 }DRCS_PATTERN_DLL;
@@ -109,6 +111,8 @@ typedef DWORD (WINAPI GetCaptionDataCPW)(unsigned char ucLangTag, CAPTION_DATA_D
 typedef DWORD (WINAPI GetDRCSPatternCP)(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList, DWORD* pdwListCount);
 typedef DWORD (WINAPI SetGaijiCP)(DWORD dwCommand, const WCHAR* ppTable, DWORD* pdwTableSize);
 typedef DWORD (WINAPI GetGaijiCP)(DWORD dwCommand, WCHAR* ppTable, DWORD* pdwTableSize);
+
+BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern);
 
 // 2ストリーム(字幕+文字スーパーなど)をまとめて扱うラッパークラス
 
