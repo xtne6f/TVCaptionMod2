@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.3 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.4 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -19,7 +19,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ※以下の外字テーブルのファイルに変更があるので、必要なら置きかえてください:
 ・TVCaptionMod2_Gaiji_std.txt
 ・TVCaptionMod2_Gaiji_typebank.txt
-(ver.1.1～ver.1.2からの移行)
+(ver.1.1～ver.1.3からの移行)
 TVCaptionMod2.tvtpを以前のものと置きかえてください。
 (ver.1.0以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
@@ -35,6 +35,10 @@ TVCaptionMod2(x64).tvtpはx64版のTVTest利用者向けです。
 ゴシック2004ARIB」(外字テーブル名!std)や「Windows TV ゴシック」(!typebank)を導入
 ・設定しておくことをお勧めします。
 (参考)和田研フォント入手先: http://sourceforge.jp/projects/jis2004/
+また、これらのフォントを導入する場合、添付の"gaiji.zip"フォルダにある
+"TVCaptionMod2_Gaiji_std(typebank).txt"をプラグインフォルダに入れ、外字テーブル
+名を"std"や"typebank"にしておくと、ドットの粗い文字や記号の出現をかなり抑制でき
+ます(詳細は後述「設定ファイルについて」のGaijiTableNameの説明を参照)。
 
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
@@ -128,8 +132,7 @@ GaijiTableName
     # 上述のファイルに特定ハッシュ値のDRCS(Dynamic Redefinable Character Set)を
     # 文字列に置換するリストを記述できます。たまに出現するドットの粗い文字や記号
     # が気になる方は利用してください。記述方法は"gaiji.zip"のstdまたはtypebankの
-    # ものを参考にしてください(2行目の[;DRCSMap]の';'をはずすと有効になります)。
-    # ハッシュ値はTVTestで取得できます。
+    # ものを参考にしてください。ハッシュ値はTVTestで取得できます。
     # 置換可能な文字列は3文字まで、サロゲートペアに対応しています【ver.1.1～】。
     # 2文字や3文字の場合も表示は1文字幅に圧縮されることに注意してください。
 Method
@@ -170,11 +173,11 @@ VertAntiAliasing
     # ver.0.9r3以降のデフォルトは[=22] (StrokeByDilateと同じ値を推奨)
     # ClearTypeフォントの横線のジャギーが気になる場合に効果的です。
     # Method[=2,3]のときだけ効果があります。
-FontXAdjust / FontYAdjust
-    フォントのX方向/Y方向の位置を補正
+FontXAdjust / FontYAdjust / GaijiFontXAdjust / GaijiFontYAdjust
+    フォント/外字フォントのX方向/Y方向の位置を補正
     # 文字が左寄りや上付きになるようなときに使います。
-FontSizeAdjust
-    フォントの文字サイズを調整(単位はパーセント)
+FontSizeAdjust / GaijiFontSizeAdjust
+    フォント/外字フォントの文字サイズを調整(単位はパーセント)
     # たとえば[=90]とすると、通常にたいして線分比で90%の大きさになります。
 StrokeWidth
     字幕文の縁取りの幅
@@ -249,6 +252,11 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.4 (2012-11-25)
+・外字フォントの文字位置/サイズ補正をベースフォントと別に指定できるようにした
+・外字テーブルファイルを更新
+・設定キーが増えてきたのでiniをセクション単位読み込みに変更
+・若干の冗長コード削除
 ver.1.3 (2012-11-17)
 ・プラグイン設定ダイアログを追加
   ・一部の設定はiniを直接編集する必要あり

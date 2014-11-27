@@ -4,6 +4,42 @@
 #include <ShlObj.h>
 #include "Util.h"
 
+// GetPrivateProfileSection()で取得したバッファから、キーに対応する文字列を取得する
+void GetBufferedProfileString(LPCTSTR lpBuff, LPCTSTR lpKeyName, LPCTSTR lpDefault, LPTSTR lpReturnedString, DWORD nSize)
+{
+    int nKeyLen = ::lstrlen(lpKeyName);
+    if (nKeyLen <= 126) {
+        TCHAR szKey[128];
+        ::lstrcpy(szKey, lpKeyName);
+        ::lstrcpy(szKey + (nKeyLen++), TEXT("="));
+        while (*lpBuff) {
+            int nLen = ::lstrlen(lpBuff);
+            if (!::StrCmpNI(lpBuff, szKey, nKeyLen)) {
+                if ((lpBuff[nKeyLen] == TEXT('\'') || lpBuff[nKeyLen] == TEXT('"')) &&
+                    nLen >= nKeyLen + 2 && lpBuff[nKeyLen] == lpBuff[nLen - 1])
+                {
+                    ::lstrcpyn(lpReturnedString, lpBuff + nKeyLen + 1, min(nLen-nKeyLen-1, static_cast<int>(nSize)));
+                }
+                else {
+                    ::lstrcpyn(lpReturnedString, lpBuff + nKeyLen, nSize);
+                }
+                return;
+            }
+            lpBuff += nLen + 1;
+        }
+    }
+    ::lstrcpyn(lpReturnedString, lpDefault, nSize);
+}
+
+// GetPrivateProfileSection()で取得したバッファから、キーに対応する数値を取得する
+int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault)
+{
+    TCHAR szVal[32];
+    GetBufferedProfileString(lpBuff, lpKeyName, TEXT(""), szVal, _countof(szVal));
+    int nRet;
+    return ::StrToIntEx(szVal, STIF_DEFAULT, &nRet) ? nRet : nDefault;
+}
+
 // GetPrivateProfileInt()の負値対応版
 // 実際にはGetPrivateProfileInt()も負値を返すが、仕様ではない
 int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName)
@@ -486,160 +522,6 @@ bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
 	::SelectObject(hdcMemory,hbmOld);
 	::DeleteDC(hdcMemory);
 	return true;
-}
-
-// システムフォントを取得する
-bool GetSystemFont(FontType Type,LOGFONT *pLogFont)
-{
-	if (pLogFont==NULL)
-		return false;
-	if (Type==FONT_DEFAULT) {
-		return ::GetObject(::GetStockObject(DEFAULT_GUI_FONT),sizeof(LOGFONT),pLogFont)==sizeof(LOGFONT);
-	} else {
-		NONCLIENTMETRICS ncm;
-		LOGFONT *plf;
-		ncm.cbSize=CCSIZEOF_STRUCT(NONCLIENTMETRICS,lfMessageFont);
-		::SystemParametersInfo(SPI_GETNONCLIENTMETRICS,ncm.cbSize,&ncm,0);
-		switch (Type) {
-		case FONT_MESSAGE:		plf=&ncm.lfMessageFont;		break;
-		case FONT_MENU:			plf=&ncm.lfMenuFont;		break;
-		case FONT_CAPTION:		plf=&ncm.lfCaptionFont;		break;
-		case FONT_SMALLCAPTION:	plf=&ncm.lfSmCaptionFont;	break;
-		case FONT_STATUS:		plf=&ncm.lfStatusFont;		break;
-		default:
-			return false;
-		}
-		*pLogFont=*plf;
-	}
-	return true;
-}
-
-CFont::CFont()
-	: m_hfont(NULL)
-{
-}
-
-CFont::CFont(const CFont &Font)
-	: m_hfont(NULL)
-{
-	*this=Font;
-}
-
-CFont::CFont(const LOGFONT &Font)
-	: m_hfont(NULL)
-{
-	Create(&Font);
-}
-
-CFont::CFont(FontType Type)
-	: m_hfont(NULL)
-{
-	Create(Type);
-}
-
-CFont::~CFont()
-{
-	Destroy();
-}
-
-CFont &CFont::operator=(const CFont &Font)
-{
-	if (Font.m_hfont) {
-		LOGFONT lf;
-		Font.GetLogFont(&lf);
-		Create(&lf);
-	} else {
-		if (m_hfont)
-			::DeleteObject(m_hfont);
-		m_hfont=NULL;
-	}
-	return *this;
-}
-
-bool CFont::operator==(const CFont &Font) const
-{
-	if (m_hfont==NULL)
-		return Font.m_hfont==NULL;
-	if (Font.m_hfont==NULL)
-		return m_hfont==NULL;
-	LOGFONT lf1,lf2;
-	GetLogFont(&lf1);
-	Font.GetLogFont(&lf2);
-	return CompareLogFont(&lf1,&lf2);
-}
-
-bool CFont::operator!=(const CFont &Font) const
-{
-	return !(*this==Font);
-}
-
-bool CFont::Create(const LOGFONT *pLogFont)
-{
-	if (pLogFont==NULL)
-		return false;
-	HFONT hfont=::CreateFontIndirect(pLogFont);
-	if (hfont==NULL)
-		return false;
-	if (m_hfont)
-		::DeleteObject(m_hfont);
-	m_hfont=hfont;
-	return true;
-}
-
-bool CFont::Create(FontType Type)
-{
-	LOGFONT lf;
-
-	if (!GetSystemFont(Type,&lf))
-		return false;
-	return Create(&lf);
-}
-
-void CFont::Destroy()
-{
-	if (m_hfont) {
-		::DeleteObject(m_hfont);
-		m_hfont=NULL;
-	}
-}
-
-bool CFont::GetLogFont(LOGFONT *pLogFont) const
-{
-	if (m_hfont==NULL || pLogFont==NULL)
-		return false;
-	return ::GetObject(m_hfont,sizeof(LOGFONT),pLogFont)==sizeof(LOGFONT);
-}
-
-int CFont::GetHeight(bool fCell) const
-{
-	if (m_hfont==NULL)
-		return 0;
-
-	HDC hdc=::CreateCompatibleDC(NULL);
-	int Height;
-	if (hdc==NULL) {
-		LOGFONT lf;
-		if (!GetLogFont(&lf))
-			return 0;
-		Height=abs(lf.lfHeight);
-	} else {
-		Height=GetHeight(hdc,fCell);
-		::DeleteDC(hdc);
-	}
-	return Height;
-}
-
-int CFont::GetHeight(HDC hdc,bool fCell) const
-{
-	if (m_hfont==NULL || hdc==NULL)
-		return 0;
-	HGDIOBJ hOldFont=::SelectObject(hdc,m_hfont);
-	TEXTMETRIC tm;
-	::GetTextMetrics(hdc,&tm);
-	::SelectObject(hdc,hOldFont);
-	if (!fCell)
-		tm.tmHeight-=tm.tmInternalLeading;
-	return tm.tmHeight;
 }
 
 }	// namespace DrawUtil

@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-11-17
+// 最終更新: 2012-11-24
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -29,8 +29,8 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.3; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 8;
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.4; based on TVCaption081216 by odaru)");
+static const int INFO_VERSION = 9;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 // テスト字幕
@@ -90,9 +90,6 @@ CTVCaption2::CTVCaption2()
     , m_textOpacity(0)
     , m_backOpacity(0)
     , m_vertAntiAliasing(0)
-    , m_fontXAdjust(0)
-    , m_fontYAdjust(0)
-    , m_fontSizeAdjust(100)
     , m_strokeWidth(0)
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
@@ -119,6 +116,8 @@ CTVCaption2::CTVCaption2()
     m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
     m_szRomSoundList[0] = 0;
+    ::memset(&m_rcAdjust, 0, sizeof(m_rcAdjust));
+    ::memset(&m_rcGaijiAdjust, 0, sizeof(m_rcGaijiAdjust));
 
     for (int index = 0; index < STREAM_MAX; ++index) {
         m_showFlags[index] = 0;
@@ -400,45 +399,52 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
 // 設定の読み込み
 void CTVCaption2::LoadSettings()
 {
-    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptionDll"),
-                              m_fTVH264 ? TEXT("H264Plugins\\Caption.dll") : TEXT("Plugins\\Caption.dll"),
-                              m_szCaptionDllPath, _countof(m_szCaptionDllPath), m_szIniPath);
-    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptureFolder"), TEXT(""),
-                              m_szCaptureFolder, _countof(m_szCaptureFolder), m_szIniPath);
-    ::GetPrivateProfileString(TEXT("Settings"), TEXT("CaptureFileName"), TEXT("Capture"),
-                              m_szCaptureFileName, _countof(m_szCaptureFileName), m_szIniPath);
-    m_settingsIndex = GetPrivateProfileSignedInt(TEXT("Settings"), TEXT("SettingsIndex"), 0, m_szIniPath);
+    TCHAR buf[4096];
+    if (::GetPrivateProfileSection(TEXT("Settings"), buf, _countof(buf), m_szIniPath) >= _countof(buf) - 2) {
+        buf[0] = 0;
+    }
+    GetBufferedProfileString(buf, TEXT("CaptionDll"),
+                             m_fTVH264 ? TEXT("H264Plugins\\Caption.dll") : TEXT("Plugins\\Caption.dll"),
+                             m_szCaptionDllPath, _countof(m_szCaptionDllPath));
+    GetBufferedProfileString(buf, TEXT("CaptureFolder"), TEXT(""), m_szCaptureFolder, _countof(m_szCaptureFolder));
+    GetBufferedProfileString(buf, TEXT("CaptureFileName"), TEXT("Capture"), m_szCaptureFileName, _countof(m_szCaptureFileName));
+    m_settingsIndex = GetBufferedProfileInt(buf, TEXT("SettingsIndex"), 0);
 
     // ここからはセクション固有
-    TCHAR section[32];
-    ::lstrcpy(section, TEXT("Settings"));
     if (m_settingsIndex > 0) {
-        ::wsprintf(section + ::lstrlen(section), TEXT("%d"), m_settingsIndex);
+        TCHAR section[32];
+        ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
+        if (::GetPrivateProfileSection(section, buf, _countof(buf), m_szIniPath) >= _countof(buf) - 2) {
+            buf[0] = 0;
+        }
     }
-    ::GetPrivateProfileString(section, TEXT("FaceName"), TEXT(""), m_szFaceName, _countof(m_szFaceName), m_szIniPath);
-    ::GetPrivateProfileString(section, TEXT("GaijiFaceName"), TEXT(""), m_szGaijiFaceName, _countof(m_szGaijiFaceName), m_szIniPath);
-    ::GetPrivateProfileString(section, TEXT("GaijiTableName"), TEXT("!std"), m_szGaijiTableName, _countof(m_szGaijiTableName), m_szIniPath);
-    m_paintingMethod    = GetPrivateProfileSignedInt(section, TEXT("Method"), 2, m_szIniPath);
-    m_showFlags[STREAM_CAPTION]     = GetPrivateProfileSignedInt(section, TEXT("ShowFlags"), 65535, m_szIniPath);
-    m_showFlags[STREAM_SUPERIMPOSE] = GetPrivateProfileSignedInt(section, TEXT("ShowFlagsSuper"), 65535, m_szIniPath);
-    m_delayTime[STREAM_CAPTION]     = GetPrivateProfileSignedInt(section, TEXT("DelayTime"), 450, m_szIniPath);
-    m_delayTime[STREAM_SUPERIMPOSE] = GetPrivateProfileSignedInt(section, TEXT("DelayTimeSuper"), 0, m_szIniPath);
-    m_fIgnorePts        = GetPrivateProfileSignedInt(section, TEXT("IgnorePts"), 0, m_szIniPath) != 0;
-    int textColor       = GetPrivateProfileSignedInt(section, TEXT("TextColor"), -1, m_szIniPath);
-    int backColor       = GetPrivateProfileSignedInt(section, TEXT("BackColor"), -1, m_szIniPath);
-    m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
-    m_backOpacity       = GetPrivateProfileSignedInt(section, TEXT("BackOpacity"), -1, m_szIniPath);
-    m_vertAntiAliasing  = GetPrivateProfileSignedInt(section, TEXT("VertAntiAliasing"), 22, m_szIniPath);
-    m_fontXAdjust       = GetPrivateProfileSignedInt(section, TEXT("FontXAdjust"), 0, m_szIniPath);
-    m_fontYAdjust       = GetPrivateProfileSignedInt(section, TEXT("FontYAdjust"), 0, m_szIniPath);
-    m_fontSizeAdjust    = GetPrivateProfileSignedInt(section, TEXT("FontSizeAdjust"), 100, m_szIniPath);
-    m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -5, m_szIniPath);
-    m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
-    m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
-    m_paddingWidth      = GetPrivateProfileSignedInt(section, TEXT("PaddingWidth"), 0, m_szIniPath);
-    m_fIgnoreSmall      = GetPrivateProfileSignedInt(section, TEXT("IgnoreSmall"), 0, m_szIniPath) != 0;
-    m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
-    ::GetPrivateProfileString(section, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList), m_szIniPath);
+    GetBufferedProfileString(buf, TEXT("FaceName"), TEXT(""), m_szFaceName, _countof(m_szFaceName));
+    GetBufferedProfileString(buf, TEXT("GaijiFaceName"), TEXT(""), m_szGaijiFaceName, _countof(m_szGaijiFaceName));
+    GetBufferedProfileString(buf, TEXT("GaijiTableName"), TEXT("!std"), m_szGaijiTableName, _countof(m_szGaijiTableName));
+    m_paintingMethod    = GetBufferedProfileInt(buf, TEXT("Method"), 2);
+    m_showFlags[STREAM_CAPTION]     = GetBufferedProfileInt(buf, TEXT("ShowFlags"), 65535);
+    m_showFlags[STREAM_SUPERIMPOSE] = GetBufferedProfileInt(buf, TEXT("ShowFlagsSuper"), 65535);
+    m_delayTime[STREAM_CAPTION]     = GetBufferedProfileInt(buf, TEXT("DelayTime"), 450);
+    m_delayTime[STREAM_SUPERIMPOSE] = GetBufferedProfileInt(buf, TEXT("DelayTimeSuper"), 0);
+    m_fIgnorePts        = GetBufferedProfileInt(buf, TEXT("IgnorePts"), 0) != 0;
+    int textColor       = GetBufferedProfileInt(buf, TEXT("TextColor"), -1);
+    int backColor       = GetBufferedProfileInt(buf, TEXT("BackColor"), -1);
+    m_textOpacity       = GetBufferedProfileInt(buf, TEXT("TextOpacity"), -1);
+    m_backOpacity       = GetBufferedProfileInt(buf, TEXT("BackOpacity"), -1);
+    m_vertAntiAliasing  = GetBufferedProfileInt(buf, TEXT("VertAntiAliasing"), 22);
+    m_rcAdjust.left     = GetBufferedProfileInt(buf, TEXT("FontXAdjust"), 0);
+    m_rcAdjust.top      = GetBufferedProfileInt(buf, TEXT("FontYAdjust"), 0);
+    m_rcAdjust.right = m_rcAdjust.bottom = GetBufferedProfileInt(buf, TEXT("FontSizeAdjust"), 100);
+    m_rcGaijiAdjust.left = GetBufferedProfileInt(buf, TEXT("GaijiFontXAdjust"), 0);
+    m_rcGaijiAdjust.top = GetBufferedProfileInt(buf, TEXT("GaijiFontYAdjust"), 0);
+    m_rcGaijiAdjust.right = m_rcGaijiAdjust.bottom = GetBufferedProfileInt(buf, TEXT("GaijiFontSizeAdjust"), 100);
+    m_strokeWidth       = GetBufferedProfileInt(buf, TEXT("StrokeWidth"), -5);
+    m_strokeSmoothLevel = GetBufferedProfileInt(buf, TEXT("StrokeSmoothLevel"), 1);
+    m_strokeByDilate    = GetBufferedProfileInt(buf, TEXT("StrokeByDilate"), 22);
+    m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
+    m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
+    m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
+    GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList));
 
     m_fEnTextColor = textColor >= 0;
     m_textColor = RGB(textColor/1000000%1000, textColor/1000%1000, textColor%1000);
@@ -478,9 +484,12 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("TextOpacity"), m_textOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_vertAntiAliasing, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontXAdjust"), m_fontXAdjust, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontYAdjust"), m_fontYAdjust, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_fontSizeAdjust, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontXAdjust"), m_rcAdjust.left, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontYAdjust"), m_rcAdjust.top, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_rcAdjust.right, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("GaijiFontXAdjust"), m_rcGaijiAdjust.left, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("GaijiFontYAdjust"), m_rcGaijiAdjust.top, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("GaijiFontSizeAdjust"), m_rcGaijiAdjust.right, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
@@ -1026,7 +1035,6 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         offsetX += (rc.right-rc.left) / 6;
     }
 
-    RECT rcFontAdjust = { m_fontXAdjust, m_fontYAdjust, m_fontSizeAdjust, m_fontSizeAdjust };
     bool fDoneAntiPadding = false;
     int posX = caption.wPosX;
     int posY = caption.wPosY;
@@ -1146,11 +1154,11 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         int lenWos = StrlenWoLoSurrogate(pszShow);
         if (pOsdCarry) {
             AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
-                       charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                       charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
             if (!fDrawSymbol && !fSameStyle) {
                 if (paddingW > 0) {
                     AddOsdText(pOsdCarry, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
-                               charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                               charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
                     posX += paddingW;
                 }
                 if (m_paintingMethod != 3) pOsdCarry->PrepareWindow();
@@ -1168,18 +1176,18 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
                 if (paddingW > 0) {
                     AddOsdText(&osd, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
-                               charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                               charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
                     posX += paddingW;
                 }
                 AddOsdText(&osd, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                           charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
                 if (fDrawSymbol || fSameStyle) {
                     pOsdCarry = &osd;
                 }
                 else {
                     if (paddingW > 0) {
                         AddOsdText(&osd, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
-                                   charScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                                   charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
                         posX += paddingW;
                     }
                     if (m_paintingMethod != 3) osd.PrepareWindow();
@@ -1247,8 +1255,9 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             if (pOsdCarry && lenWos > 0) {
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
                 AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW / lenWos + 1,
-                           charScaleH, rcFontAdjust, m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
+                           charScaleW / lenWos + 1, charScaleH,
+                           m_szGaijiFaceName[0] ? m_rcGaijiAdjust : m_rcAdjust,
+                           m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1256,7 +1265,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             // 外字を描画
             if (pOsdCarry) {
                 AddOsdText(pOsdCarry, szGaiji, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, rcFontAdjust, m_szGaijiFaceName, charData);
+                           charScaleW, charScaleH, m_rcGaijiAdjust, m_szGaijiFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1264,7 +1273,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             // 半角文字を描画
             if (pOsdCarry) {
                 AddOsdText(pOsdCarry, szHalf, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           -charNormalScaleW, charScaleH, rcFontAdjust, m_szFaceName, charData);
+                           -charNormalScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1719,9 +1728,9 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::EnableWindow(::GetDlgItem(hDlg, IDC_EDIT_BACKOPA), m_backOpacity >= 0);
     ::SetDlgItemInt(hDlg, IDC_EDIT_BACKOPA, max(m_backOpacity, 0), FALSE);
 
-    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, m_fontXAdjust, TRUE);
-    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, m_fontYAdjust, TRUE);
-    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, m_fontSizeAdjust, FALSE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, m_rcAdjust.left, TRUE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, m_rcAdjust.top, TRUE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, m_rcAdjust.right, FALSE);
 
     ::CheckDlgButton(hDlg, IDC_CHECK_STROKE_WIDTH, m_strokeWidth < 0 ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_STROKE_WIDTH, m_strokeWidth < 0 ? -m_strokeWidth : m_strokeWidth, FALSE);
@@ -1904,19 +1913,19 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             break;
         case IDC_EDIT_ADJUST_X:
             if (HIWORD(wParam) == EN_CHANGE) {
-                m_fontXAdjust = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, NULL, TRUE);
+                m_rcAdjust.left = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_X, NULL, TRUE);
                 fSave = fReDisp = true;
             }
             break;
         case IDC_EDIT_ADJUST_Y:
             if (HIWORD(wParam) == EN_CHANGE) {
-                m_fontYAdjust = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, NULL, TRUE);
+                m_rcAdjust.top = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_Y, NULL, TRUE);
                 fSave = fReDisp = true;
             }
             break;
         case IDC_EDIT_ADJUST_SIZE:
             if (HIWORD(wParam) == EN_CHANGE) {
-                m_fontSizeAdjust = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, NULL, FALSE);
+                m_rcAdjust.right = m_rcAdjust.bottom = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, NULL, FALSE);
                 fSave = fReDisp = true;
             }
             break;

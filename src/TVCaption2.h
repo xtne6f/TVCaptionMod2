@@ -84,9 +84,8 @@ private:
     int m_textOpacity;
     int m_backOpacity;
     int m_vertAntiAliasing;
-    int m_fontXAdjust;
-    int m_fontYAdjust;
-    int m_fontSizeAdjust;
+    RECT m_rcAdjust;
+    RECT m_rcGaijiAdjust;
     int m_strokeWidth;
     int m_strokeSmoothLevel;
     int m_strokeByDilate;

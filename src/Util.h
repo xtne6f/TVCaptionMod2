@@ -11,6 +11,8 @@
 #define DEBUG_OUT(x)
 #endif
 
+void GetBufferedProfileString(LPCTSTR lpBuff, LPCTSTR lpKeyName, LPCTSTR lpDefault, LPTSTR lpReturnedString, DWORD nSize);
+int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault);
 int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName);
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
@@ -142,42 +144,6 @@ namespace DrawUtil {
 bool Fill(HDC hdc,const RECT *pRect,COLORREF Color);
 bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
 				HBITMAP hbm,const RECT *pSrcRect=NULL,BYTE Opacity=255);
-
-enum FontType {
-	FONT_DEFAULT,
-	FONT_MESSAGE,
-	FONT_MENU,
-	FONT_CAPTION,
-	FONT_SMALLCAPTION,
-	FONT_STATUS
-};
-
-bool GetSystemFont(FontType Type,LOGFONT *pLogFont);
-
-class CFont {
-	HFONT m_hfont;
-public:
-	CFont();
-	CFont(const CFont &Font);
-	CFont(const LOGFONT &Font);
-	CFont(FontType Type);
-	~CFont();
-	CFont &operator=(const CFont &Font);
-	bool operator==(const CFont &Font) const;
-	bool operator!=(const CFont &Font) const;
-	bool Create(const LOGFONT *pLogFont);
-	bool Create(FontType Type);
-	bool IsCreated() const { return m_hfont!=NULL; }
-	void Destroy();
-	bool GetLogFont(LOGFONT *pLogFont) const;
-	HFONT GetHandle() const { return m_hfont; }
-	int GetHeight(bool fCell=true) const;
-	int GetHeight(HDC hdc,bool fCell=true) const;
-};
-
-inline HFONT SelectObject(HDC hdc,const CFont &Font) {
-	return static_cast<HFONT>(::SelectObject(hdc,Font.GetHandle()));
-}
 
 }	// namespace DrawUtil
 

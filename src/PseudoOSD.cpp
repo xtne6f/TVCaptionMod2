@@ -459,7 +459,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 	int x=0;
 	std::vector<CWindowStyle>::const_iterator it = m_Position.StyleList.begin();
 	LOGFONT lfLast={0};
-	DrawUtil::CFont Font;
+	HFONT hfont=NULL;
 	for (; it!=m_Position.StyleList.end(); ++it) {
 		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
 		if (lenWos > 0) {
@@ -472,11 +472,12 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 			lf.lfOrientation=0;
 			//フォントが変化するときだけ作る
 			if (!CompareLogFont(&lf,&lfLast)) {
-				Font.Create(&lf);
+				if (hfont) ::DeleteObject(hfont);
+				hfont=::CreateFontIndirect(&lf);
 				lfLast=lf;
 			}
-			if (Font.IsCreated()) {
-				HFONT hfontOld=DrawUtil::SelectObject(hdc,Font);
+			if (hfont) {
+				HGDIOBJ hfontOld=::SelectObject(hdc,hfont);
 				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
 				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight);
 				TextOutMonospace(hdc,x+intvX/2+adjustX,m_Position.Height-1-intvY/2+adjustY,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
@@ -485,6 +486,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 		}
 		x+=it->Width;
 	}
+	if (hfont) ::DeleteObject(hfont);
 	::SetTextAlign(hdc,oldTa);
 }
 
