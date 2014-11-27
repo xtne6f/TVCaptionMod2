@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.9r3 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.9r4 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,7 +13,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.0.9r2からの移行)
+(ver.0.9r2～ver.0.9r3からの移行)
 TVCaptionMod2.tvtpを以前のものと置きかえてください。
 (ver.0.9以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
@@ -135,7 +135,8 @@ TextOpacity / BackOpacity
     # [=-1]のときは自動(TSに含まれる情報をそのまま使う)です。0%[=0]～100%[=100]
     # で指定してください。
 VertAntiAliasing
-    フォントの垂直方向アンチエイリアスを行う[=1]かどうか
+    フォントの垂直方向アンチエイリアスを行うフォント高さ(画素数)の下限
+    # ver.0.9r3以降のデフォルトは[=22] (StrokeByDilateと同じ値を推奨)
     # ClearTypeフォントの横線のジャギーが気になる場合に効果的です。
     # Method[=2]のときだけ効果があります。
 FontSizeAdjust
@@ -149,6 +150,7 @@ StrokeSmoothLevel
     縁取りをなだらかに透過させる度合い
 StrokeByDilate
     膨張アルゴリズムで縁取るフォント高さ(画素数)の上限
+    # デフォルトは[=22]
     # 画面を小さくしたときに縁取りが汚くなる場合は値を上下させてみてください。
 Centering
     字幕を画面中央に表示する[=1]かどうか
@@ -209,6 +211,10 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.9r4 (2012-07-16)
+・CM明けなどに字幕が表示されない可能性を排除(できたかもしれない)
+・文字サイズ小のときは垂直方向アンチエイリアスを切れるようにした
+  ・設定キーVertAntiAliasingとStrokeByDilateのデフォルト値に変更があるので注意
 ver.0.9r3 (2012-07-04)
 ・通常フォントと外字フォントの(上端ではなく)下端を揃えるようにしてみた
   ・この修正でメイリオなどのレディングの大きいフォントは下付き→上付きになるが、

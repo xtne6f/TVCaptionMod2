@@ -67,7 +67,7 @@ private:
     COLORREF m_backColor;
     int m_textOpacity;
     int m_backOpacity;
-    bool m_fVertAntiAliasing;
+    int m_vertAntiAliasing;
     int m_fontSizeAdjust;
     int m_strokeWidth;
     int m_strokeSmoothLevel;

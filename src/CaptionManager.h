@@ -32,6 +32,7 @@ private:
     DWORD m_capCount;
     DWORD m_drcsCount;
     LANG_TAG_INFO_DLL m_lang1, m_lang2;
+    DWORD m_lastTagInfoPcr;
     BYTE m_queue[PACKET_QUEUE_SIZE][188];
     int m_queueFront;
     int m_queueRear;

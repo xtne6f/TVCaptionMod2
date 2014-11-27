@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-06-28
+// 最終更新: 2012-07-16
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,7 +27,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.9r3; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.0.9r4; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 6;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -59,7 +59,7 @@ CTVCaption2::CTVCaption2()
     , m_backColor(RGB(0,0,0))
     , m_textOpacity(0)
     , m_backOpacity(0)
-    , m_fVertAntiAliasing(false)
+    , m_vertAntiAliasing(0)
     , m_fontSizeAdjust(100)
     , m_strokeWidth(0)
     , m_strokeSmoothLevel(0)
@@ -377,11 +377,11 @@ void CTVCaption2::LoadSettings()
     int backColor       = GetPrivateProfileSignedInt(section, TEXT("BackColor"), -1, m_szIniPath);
     m_textOpacity       = GetPrivateProfileSignedInt(section, TEXT("TextOpacity"), -1, m_szIniPath);
     m_backOpacity       = GetPrivateProfileSignedInt(section, TEXT("BackOpacity"), -1, m_szIniPath);
-    m_fVertAntiAliasing = GetPrivateProfileSignedInt(section, TEXT("VertAntiAliasing"), 1, m_szIniPath) != 0;
+    m_vertAntiAliasing  = GetPrivateProfileSignedInt(section, TEXT("VertAntiAliasing"), 22, m_szIniPath);
     m_fontSizeAdjust    = GetPrivateProfileSignedInt(section, TEXT("FontSizeAdjust"), 100, m_szIniPath);
     m_strokeWidth       = GetPrivateProfileSignedInt(section, TEXT("StrokeWidth"), -5, m_szIniPath);
     m_strokeSmoothLevel = GetPrivateProfileSignedInt(section, TEXT("StrokeSmoothLevel"), 1, m_szIniPath);
-    m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 10, m_szIniPath);
+    m_strokeByDilate    = GetPrivateProfileSignedInt(section, TEXT("StrokeByDilate"), 22, m_szIniPath);
     m_fCentering        = GetPrivateProfileSignedInt(section, TEXT("Centering"), 0, m_szIniPath) != 0;
     m_fFixRatio         = GetPrivateProfileSignedInt(section, TEXT("FixRatio"), 1, m_szIniPath) != 0;
     ::GetPrivateProfileString(section, TEXT("RomSoundList"),
@@ -423,7 +423,7 @@ void CTVCaption2::SaveSettings() const
                            GetRValue(m_backColor)*1000000 + GetGValue(m_backColor)*1000 + GetBValue(m_backColor), m_szIniPath);
     WritePrivateProfileInt(section, TEXT("TextOpacity"), m_textOpacity, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_fVertAntiAliasing, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_vertAntiAliasing, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_fontSizeAdjust, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
@@ -731,7 +731,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
     osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*nomalHeight,1) : m_strokeWidth*72,
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
-    osd.SetVerticalAntiAliasing(m_fVertAntiAliasing);
+    osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
     osd.Create(hwndContainer, m_paintingMethod==2 ? true : false);
     return osd;
 }
@@ -1189,6 +1189,34 @@ BOOL CALLBACK CTVCaption2::StreamCallback(BYTE *pData, void *pClientData)
 }
 
 
+static void GetPidsFromVideoPmt(int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
+{
+    for (int i = 0; i < pPat->pid_count; ++i) {
+        const PMT *pPmt = pPat->pmt[i];
+        // このPMTに映像PIDが含まれるか調べる
+        bool fVideoPmt = false;
+        int privPid[2] = {-1, -1};
+        for (int j = 0; j < pPmt->pid_count; ++j) {
+            if (pPmt->stream_type[j] == PES_PRIVATE_DATA) {
+                privPid[privPid[0]>=0?1:0] = pPmt->pid[j];
+            }
+            else if (pPmt->pid[j] == videoPid) {
+                fVideoPmt = true;
+            }
+        }
+        if (fVideoPmt) {
+            *pPcrPid = pPmt->pcr_pid;
+            *pCaption1Pid = privPid[0];
+            *pCaption2Pid = privPid[1];
+            return;
+        }
+    }
+    *pPcrPid = -1;
+    *pCaption1Pid = -1;
+    *pCaption2Pid = -1;
+}
+
+
 void CTVCaption2::ProcessPacket(BYTE *pPacket)
 {
     if (m_fResetPat) {
@@ -1253,6 +1281,7 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
             extract_pat(&m_pat, pPayload, payloadSize,
                         header.payload_unit_start_indicator,
                         header.continuity_counter);
+            GetPidsFromVideoPmt(&m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
             return;
         }
         // PATリストにあるPMT監視
@@ -1262,23 +1291,7 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
                 extract_pmt(pPmt, pPayload, payloadSize,
                             header.payload_unit_start_indicator,
                             header.continuity_counter);
-
-                // このPMTに現在再生中の映像PIDが含まれるか調べる
-                bool fVideoPmt = false;
-                int privPid[2] = {-1, -1};
-                for (int j = 0; j < pPmt->pid_count; ++j) {
-                    if (pPmt->stream_type[j] == PES_PRIVATE_DATA) {
-                        privPid[privPid[0]>=0?1:0] = pPmt->pid[j];
-                    }
-                    else if (pPmt->pid[j] == m_videoPid) {
-                        fVideoPmt = true;
-                    }
-                }
-                if (fVideoPmt) {
-                    m_pcrPid = pPmt->pcr_pid;
-                    m_caption1Pid = privPid[0];
-                    m_caption2Pid = privPid[1];
-                }
+                GetPidsFromVideoPmt(&m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
                 return;
             }
         }
