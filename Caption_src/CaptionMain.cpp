@@ -427,24 +427,17 @@ DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSi
 	if( dwSize < 5+uiUnitSize ){
 		return FALSE;
 	}
-// copy from mod1さんの改造版より
-	if( pbBuff[1] == 0x30 || pbBuff[1] == 0x31 ){
-		//DRCS処理
-		//by mod1
-		
-		if( uiUnitSize > 0 ){
-			if( CARIB8CharDecode::DRCSHeaderparse(pbBuff+5, uiUnitSize, pDRCList, pbBuff[1]==0x31?TRUE:FALSE ) == FALSE ){
-				::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported DRCS!\n"));
-				//return FALSE;
+	if( pbBuff[1] != 0x20 ){
+		//字幕文(本文)以外
+		if( pbBuff[1] == 0x30 || pbBuff[1] == 0x31 ){
+			//DRCS処理
+			if( uiUnitSize > 0 ){
+				if( CARIB8CharDecode::DRCSHeaderparse(pbBuff+5, uiUnitSize, pDRCList, pbBuff[1]==0x31?TRUE:FALSE ) == FALSE ){
+					::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported DRCS!\n"));
+					//return FALSE;
+				}
 			}
 		}
-		
-		*pdwReadSize = uiUnitSize + 5;
-		return TRUE;
-
-	}else if( pbBuff[1] != 0x20 ){
-		//字幕文(本文)以外は未サポート
-
 		// odaru modified.
 		//*pdwReadSize = dwSize;
 		*pdwReadSize = uiUnitSize + 5;

@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.0.9 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.0.9r2 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -13,9 +13,9 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ・x64版:  Visual C++ 2010 SP1 再頒布可能パッケージ (x64)
 
 ■以前のバージョンからの移行
-(ver.0.6～ver.0.8からの移行)
-TVCaptionMod2.tvtpを以前のものと置きかえてください。
-(ver.0.5以前からの移行)
+(ver.0.9からの移行)
+Caption.dllを以前のものと置きかえてください。
+(ver.0.8以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
 
 ■使い方
@@ -208,6 +208,11 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.0.9r2 (2012-07-01)
+・Caption.dll 0111改造版の公開停止要望があったとの書き込みをうけ、関連するコード
+  (10行ぐらい)を変更
+  ・変更点はdiff_09_09r2.txtを参照
+  ・機能変更はなし
 ver.0.9 (2012-06-29)
 ・垂直方向アンチエイリアスを利かせてみた(設定キーVertAntiAliasing)
 ・文字サイズを微調整できるようにした(設定キーFontSizeAdjust)
