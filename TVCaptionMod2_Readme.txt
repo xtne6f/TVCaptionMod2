@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.4 + Caption.dll改造版の改造版
+﻿TVTest TVCaptionMod2 Plugin ver.1.4r2 + Caption.dll改造版の改造版
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -19,7 +19,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ※以下の外字テーブルのファイルに変更があるので、必要なら置きかえてください:
 ・TVCaptionMod2_Gaiji_std.txt
 ・TVCaptionMod2_Gaiji_typebank.txt
-(ver.1.1～ver.1.3からの移行)
+(ver.1.1～ver.1.4からの移行)
 TVCaptionMod2.tvtpを以前のものと置きかえてください。
 (ver.1.0以前からの移行)
 TVCaptionMod2.tvtpとCaption.dllの両方を以前のものと置きかえてください。
@@ -252,6 +252,8 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.4r2 (2012-11-26)
+・両端の余白を増やしたとき、字幕背景に隙間や重なりができる場合があったのを修正
 ver.1.4 (2012-11-25)
 ・外字フォントの文字位置/サイズ補正をベースフォントと別に指定できるようにした
 ・外字テーブルファイルを更新

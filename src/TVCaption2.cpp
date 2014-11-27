@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-11-24
+// 最終更新: 2012-11-26
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -29,7 +29,7 @@
 #define WM_DONE_SIZE            (WM_APP + 3)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.4; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.4r2; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 9;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -1155,6 +1155,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         if (pOsdCarry) {
             AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
                        charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+            posX += dirW * lenWos;
             if (!fDrawSymbol && !fSameStyle) {
                 if (paddingW > 0) {
                     AddOsdText(pOsdCarry, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
@@ -1181,6 +1182,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 }
                 AddOsdText(&osd, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
                            charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+                posX += dirW * lenWos;
                 if (fDrawSymbol || fSameStyle) {
                     pOsdCarry = &osd;
                 }
@@ -1194,7 +1196,6 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 }
             }
         }
-        posX += dirW * lenWos;
 
         if (pDrcs && !pszDrcsStr) {
             // DRCSを描画
