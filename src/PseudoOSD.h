@@ -8,28 +8,17 @@ class CPseudoOSD
 	COLORREF m_crBackColor;
 	COLORREF m_crTextColor;
 	HBITMAP m_hbm;
-
-	class CWindowStyle {
-	public:
+	struct STYLE_ELEM {
 		std::basic_string<TCHAR> Text;
 		int Width;
 		LOGFONT lf;
-		CWindowStyle(LPCTSTR pszText,int Width_,const LOGFONT &lf_) : Text(pszText),Width(Width_),lf(lf_) {}
+		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_) : Text(pszText),Width(Width_),lf(lf_) {}
 	};
-	class CWindowPosition {
-	public:
-		int Left,Top,Height,ImageWidth;
-		std::vector<CWindowStyle> StyleList;
-		CWindowPosition() : Left(0),Top(0),Height(0),ImageWidth(0) {}
-		int GetEntireWidth() const {
-			int w=ImageWidth;
-			std::vector<CWindowStyle>::const_iterator it = StyleList.begin();
-			for (; it!=StyleList.end(); ++it) w+=it->Width;
-			return w;
-		}
+	std::vector<STYLE_ELEM> m_StyleList;
+	struct {
+		int Left,Top,Height;
 	} m_Position;
 	UINT_PTR m_TimerID;
-	bool m_fHideText;
 	int m_FlashingInterval;
 	int m_Opacity;
 	int m_BackOpacity;
@@ -39,12 +28,14 @@ class CPseudoOSD
 	bool m_fHLLeft,m_fHLTop,m_fHLRight,m_fHLBottom;
 	bool m_fVertAntiAliasing;
 	RECT m_ImagePaintRect;
+	bool m_fHideText;
+	bool m_fWindowPrepared;
 	bool m_fLayeredWindow;
 	HWND m_hwndParent;
 	HWND m_hwndOwner;
 	POINT m_ParentPosition;
-	bool m_fWindowPrepared;
 
+	static int GetEntireWidth(const std::vector<STYLE_ELEM> &List);
 	void DrawTextList(HDC hdc,int MultX,int MultY) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
 	static bool AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth);
@@ -62,7 +53,6 @@ class CPseudoOSD
 
 public:
 	static bool Initialize(HINSTANCE hinst);
-	static bool IsPseudoOSD(HWND hwnd);
 	static void FreeWorkBitmap();
 
 	CPseudoOSD();
@@ -78,7 +68,7 @@ public:
 	bool SetPosition(int Left,int Top,int Height);
 	void GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
 	void SetTextColor(COLORREF crText,COLORREF crBack);
-	bool SetImage(HBITMAP hbm,int Width,const RECT *pPaintRect=NULL);
+	bool SetImage(HBITMAP hbm,int Width,const RECT &PaintRect);
 	bool SetOpacity(int Opacity,int BackOpacity=50);
 	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);

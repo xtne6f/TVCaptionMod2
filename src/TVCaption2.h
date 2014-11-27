@@ -4,9 +4,9 @@
 // プラグインクラス
 class CTVCaption2 : public TVTest::CTVTestPlugin
 {
-    static const int OSD_LIST_MAX = 64;
+    static const int OSD_LIST_MAX = 96;
     // 事前に作成しておくOSDの数(作成時にウィンドウが前面にくるので、気になるなら増やす)
-    static const int OSD_PRE_CREATE_NUM = 8;
+    static const int OSD_PRE_CREATE_NUM = 12;
     static const int GAIJI_TABLE_SIZE = G_CELL_SIZE * 7;
     static const int FLASHING_INTERVAL = 500;
     static const int TXGROUP_NORMAL = 1;
@@ -31,7 +31,7 @@ public:
 private:
     HWND GetFullscreenWindow();
     HWND FindVideoContainer();
-    bool GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect);
+    bool GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect = NULL, RECT *pExVideoRect = NULL);
     int GetVideoPid();
     bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2]);
     bool EnablePlugin(bool fEnable);
@@ -52,7 +52,7 @@ private:
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
                          HWND hwndContainer, const RECT &rcVideo);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-    void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL **ppCaptionForTest = NULL);
+    void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest = NULL);
     void OnSize(STREAM_INDEX index);
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
     void ProcessPacket(BYTE *pPacket);
@@ -98,11 +98,13 @@ private:
 
     // 字幕描画
     HWND m_hwndPainting;
+    HWND m_hwndContainer;
     CPseudoOSD m_osdList[OSD_LIST_MAX];
     int m_osdUsedCount;
-    CPseudoOSD *m_pOsdUsingList[STREAM_MAX][OSD_LIST_MAX];
-    int m_osdUsingCount[STREAM_MAX];
+    std::vector<CPseudoOSD*> m_pOsdUsingList[STREAM_MAX];
     int m_osdShowCount[STREAM_MAX];
+    int m_osdPrepareCount[STREAM_MAX];
+    bool m_fOsdClear[STREAM_MAX];
     bool m_fNeedtoShow;
     bool m_fFlashingFlipFlop;
 

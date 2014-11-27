@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2012-12-20
+// 最終更新: 2013-03-05
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <Shlwapi.h>
@@ -27,9 +27,10 @@
 #define WM_PROCESS_CAPTION      (WM_APP + 1)
 #define WM_DONE_MOVE            (WM_APP + 2)
 #define WM_DONE_SIZE            (WM_APP + 3)
+#define WM_RESET_OSDS           (WM_APP + 4)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.5; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.1.6; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 9;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
@@ -99,6 +100,7 @@ CTVCaption2::CTVCaption2()
     , m_fIgnoreSmall(false)
     , m_fCentering(false)
     , m_hwndPainting(NULL)
+    , m_hwndContainer(NULL)
     , m_osdUsedCount(0)
     , m_fNeedtoShow(false)
     , m_fFlashingFlipFlop(false)
@@ -124,8 +126,9 @@ CTVCaption2::CTVCaption2()
     for (int index = 0; index < STREAM_MAX; ++index) {
         m_showFlags[index] = 0;
         m_delayTime[index] = 0;
-        m_osdUsingCount[index] = 0;
         m_osdShowCount[index] = 0;
+        m_osdPrepareCount[index] = 0;
+        m_fOsdClear[index] = false;
     }
     ::memset(&m_pat, 0, sizeof(m_pat));
 }
@@ -251,7 +254,7 @@ HWND CTVCaption2::FindVideoContainer()
 
 
 // Video Containerウィンドウ上の映像の位置を得る
-bool CTVCaption2::GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect)
+bool CTVCaption2::GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect, RECT *pExVideoRect)
 {
     RECT rc;
     if (!hwndContainer || !::GetClientRect(hwndContainer, &rc)) {
@@ -260,28 +263,46 @@ bool CTVCaption2::GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT 
     if (pRect) {
         *pRect = rc;
     }
-    if (pVideoRect) {
+    if (pVideoRect || pExVideoRect) {
+        RECT rcPadding;
+        if (!pVideoRect) pVideoRect = &rcPadding;
+        if (!pExVideoRect) pExVideoRect = &rcPadding;
+
         // 正確に取得する術はなさそうなので中央に配置されていると仮定
         int aspectX = 16;
         int aspectY = 9;
+        double cropX = 1;
         TVTest::VideoInfo vi;
-        if (m_pApp->GetVideoInfo(&vi) && vi.Height == 480 && vi.YAspect * 4 == 3 * vi.XAspect) {
-            // 4:3SDを特別扱い(アスペクト比情報はいまいち正確でない可能性があるのであまり信用しない)(参考up0511mod)
-            aspectX = 4;
-            aspectY = 3;
+        if (m_pApp->GetVideoInfo(&vi)) {
+            if (vi.Height == 480 && vi.YAspect * 4 == 3 * vi.XAspect) {
+                // 4:3SDを特別扱い(アスペクト比情報はいまいち正確でない可能性があるのであまり信用しない)(参考up0511mod)
+                aspectX = 4;
+                aspectY = 3;
+            }
+            if (vi.Width > 0) {
+                cropX = (double)(vi.SourceRect.right - vi.SourceRect.left) / vi.Width;
+                // Y方向ははみ出しやすいので考慮しない
+            }
         }
-        if (rc.bottom * aspectX < aspectY * rc.right) {
+        if (cropX == 0 || aspectX * cropX * rc.bottom < aspectY * rc.right) {
             // ウィンドウが動画よりもワイド
-            pVideoRect->left = (rc.right - rc.bottom * aspectX / aspectY) / 2;
+            pVideoRect->left = (rc.right - (int)(aspectX * cropX * rc.bottom / aspectY)) / 2;
             pVideoRect->right = rc.right - pVideoRect->left;
             pVideoRect->top = 0;
             pVideoRect->bottom = rc.bottom;
         }
         else {
-            pVideoRect->top = (rc.bottom - rc.right * aspectY / aspectX) / 2;
+            pVideoRect->top = (rc.bottom - (int)(aspectY * rc.right / (aspectX * cropX))) / 2;
             pVideoRect->bottom = rc.bottom - pVideoRect->top;
             pVideoRect->left = 0;
             pVideoRect->right = rc.right;
+        }
+        // カットした分だけ拡げる(ウィンドウからはみ出す場合もある)
+        *pExVideoRect = *pVideoRect;
+        if (cropX != 0) {
+            int x = (int)((pExVideoRect->right - pExVideoRect->left) * (1 - cropX) / cropX) / 2;
+            pExVideoRect->left -= x;
+            pExVideoRect->right += x;
         }
     }
     return true;
@@ -645,13 +666,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
         // 全画面表示状態が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
             // オーナーが変わるので破棄する必要がある
-            pThis->DestroyOsds();
-            HWND hwndContainer = pThis->FindVideoContainer();
-            if (hwndContainer) {
-                for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
-                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
-                }
-            }
+            ::SendMessage(pThis->m_hwndPainting, WM_RESET_OSDS, 0, 0);
         }
         break;
     case TVTest::EVENT_SERVICECHANGE:
@@ -743,7 +758,7 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
             }
 
             RECT rc, rcVideo;
-            if (GetVideoContainerLayout(FindVideoContainer(), &rc, &rcVideo)) {
+            if (GetVideoContainerLayout(m_hwndContainer, &rc, &rcVideo)) {
                 BITMAPINFOHEADER bihRes = bih;
                 bihRes.biWidth = rcVideo.right - rcVideo.left;
                 bihRes.biHeight = rcVideo.bottom - rcVideo.top;
@@ -862,8 +877,11 @@ void CTVCaption2::HideOsds(STREAM_INDEX index)
 {
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
-    while (m_osdShowCount[index] > 0) {
-        m_pOsdUsingList[index][--m_osdShowCount[index]]->Hide();
+    for (; m_osdShowCount[index] > 0; --m_osdShowCount[index]) {
+        m_pOsdUsingList[index].front()->Hide();
+        // 最後尾に移動
+        m_pOsdUsingList[index].push_back(m_pOsdUsingList[index].front());
+        m_pOsdUsingList[index].erase(m_pOsdUsingList[index].begin());
     }
 }
 
@@ -894,10 +912,12 @@ void CTVCaption2::DestroyOsds()
     }
     CPseudoOSD::FreeWorkBitmap();
     m_osdUsedCount = 0;
-    m_osdUsingCount[STREAM_CAPTION] = 0;
-    m_osdUsingCount[STREAM_SUPERIMPOSE] = 0;
-    m_osdShowCount[STREAM_CAPTION] = 0;
-    m_osdShowCount[STREAM_SUPERIMPOSE] = 0;
+    for (int index = 0; index < STREAM_MAX; ++index) {
+        m_pOsdUsingList[index].clear();
+        m_osdShowCount[index] = 0;
+        m_osdPrepareCount[index] = 0;
+        m_fOsdClear[index] = false;
+    }
     DeleteTextures();
 }
 
@@ -928,22 +948,18 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
     CPseudoOSD *pOsd;
-    if (m_osdShowCount[index] >= OSD_LIST_MAX) {
-        pOsd = m_pOsdUsingList[index][0];
-    }
-    else if (m_osdShowCount[index] < m_osdUsingCount[index]) {
-        pOsd = m_pOsdUsingList[index][m_osdShowCount[index]++];
+    if (m_osdShowCount[index] + m_osdPrepareCount[index] < (int)m_pOsdUsingList[index].size()) {
+        pOsd = m_pOsdUsingList[index][m_osdShowCount[index] + m_osdPrepareCount[index]++];
     }
     else if (m_osdUsedCount >= OSD_LIST_MAX) {
         pOsd = &m_osdList[0];
     }
     else {
-        m_pOsdUsingList[index][m_osdUsingCount[index]++] = &m_osdList[m_osdUsedCount++];
-        pOsd = m_pOsdUsingList[index][m_osdShowCount[index]++];
+        m_pOsdUsingList[index].push_back(&m_osdList[m_osdUsedCount++]);
+        pOsd = m_pOsdUsingList[index][m_osdShowCount[index] + m_osdPrepareCount[index]++];
     }
     CPseudoOSD &osd = *pOsd;
     osd.ClearText();
-    osd.SetImage(NULL, 0);
     osd.SetTextColor(m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB),
                      m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
 
@@ -952,7 +968,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
                       m_backOpacity>=0 ? min(m_backOpacity,100) : style.stBackColor.ucAlpha*100/255;
     osd.SetOpacity(textOpacity, backOpacity);
 
-    osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*nomalHeight,1) : m_strokeWidth*72,
+    osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*(nomalHeight+charHeight)/2,1) : m_strokeWidth*72,
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
     osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
@@ -1245,7 +1261,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                                 (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
                 RECT rc;
                 ::SetRect(&rc, (int)((dirW-charW)/2*scaleX), (int)((dirH-charH)/2*scaleY), charScaleW, charScaleH);
-                osd.SetImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), &rc);
+                osd.SetImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), rc);
                 if (m_paintingMethod != 3) osd.PrepareWindow();
                 posX += dirW;
             }
@@ -1300,14 +1316,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             LPCREATESTRUCT pcs = reinterpret_cast<LPCREATESTRUCT>(lParam);
             pThis = reinterpret_cast<CTVCaption2*>(pcs->lpCreateParams);
             ::SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pThis));
-
-            HWND hwndContainer = pThis->FindVideoContainer();
-            if (hwndContainer) {
-                for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
-                    pThis->m_osdList[i].Create(hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
-                }
-                pThis->m_osdCompositor.SetContainerWindow(hwndContainer);
-            }
+            ::PostMessage(hwnd, WM_RESET_OSDS, 0, 0);
             pThis->m_fNeedtoShow = pThis->m_pApp->GetPreview();
         }
         return 0;
@@ -1363,16 +1372,27 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         pThis->OnSize(STREAM_CAPTION);
         pThis->OnSize(STREAM_SUPERIMPOSE);
         return 0;
+    case WM_RESET_OSDS:
+        DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): WM_RESET_OSDS\n"));
+        pThis->DestroyOsds();
+        pThis->m_hwndContainer = pThis->FindVideoContainer();
+        if (pThis->m_hwndContainer) {
+            for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
+                pThis->m_osdList[i].Create(pThis->m_hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
+            }
+            pThis->m_osdCompositor.SetContainerWindow(pThis->m_hwndContainer);
+        }
+        return 0;
     }
     return ::DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
 
-void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL **ppCaptionForTest)
+void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest)
 {
     STREAM_INDEX index = STREAM_CAPTION;
     DWORD pcr = 0;
-    if (!ppCaptionForTest) {
+    if (!pCaptionForTest) {
         CBlockLock lock(&m_streamLock);
         if (pCaptionManager->IsEmpty()) {
             // 次の字幕文を取得する
@@ -1391,66 +1411,69 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
         }
     }
 
-    HWND hwndContainer = NULL;
-    RECT rcVideo = {0};
-    int lastShowCount = m_osdShowCount[index];
-    bool fTextureModified = false;
-    for (;;) {
-        // 表示タイミングに達した字幕本文を1つだけ取得する
-        const CAPTION_DATA_DLL *pCaption = ppCaptionForTest ? *ppCaptionForTest++ : pCaptionManager->PopCaption(pcr, m_fIgnorePts);
-        if (!pCaption) {
-            break;
-        }
+    // 表示タイミングに達した字幕本文を1つだけ取得する
+    const CAPTION_DATA_DLL *pCaption = pCaptionForTest ? pCaptionForTest : pCaptionManager->PopCaption(pcr, m_fIgnorePts);
+    if (!pCaption) {
+        return;
+    }
+    else {
         int dmf = 10;
-        if (!ppCaptionForTest) {
+        if (!pCaptionForTest) {
             const LANG_TAG_INFO_DLL *pLangTag = pCaptionManager->GetLangTag();
             dmf = pLangTag ? pLangTag->ucDMF : 16;
         }
         if (m_fNeedtoShow && ((m_showFlags[index]>>dmf)&1)) {
             if (pCaption->bClear) {
-                HideOsds(index);
-                if (m_paintingMethod == 3) {
-                    bool fDeleted;
-                    fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_NORMAL);
-                    fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_FLASHING) || fDeleted;
-                    fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_IFLASHING) || fDeleted;
-                    if (fDeleted) {
-                        fTextureModified = true;
-                    }
-                }
-                lastShowCount = 0;
+                m_fOsdClear[index] = true;
             }
             else {
-                if (!hwndContainer) {
-                    hwndContainer = FindVideoContainer();
-                    if (!GetVideoContainerLayout(hwndContainer, NULL, &rcVideo)) {
-                        hwndContainer = NULL;
+                RECT rcVideo;
+                if (GetVideoContainerLayout(m_hwndContainer, NULL, NULL, &rcVideo)) {
+                    const DRCS_PATTERN_DLL *pDrcsList = NULL;
+                    DWORD drcsCount = 0;
+                    if (!pCaptionForTest) {
+                        pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
                     }
+                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, m_hwndContainer, rcVideo);
                 }
-                const DRCS_PATTERN_DLL *pDrcsList = NULL;
-                DWORD drcsCount = 0;
-                if (!ppCaptionForTest) {
-                    pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
-                }
-                if (hwndContainer) {
-                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, hwndContainer, rcVideo);
-                }
+            }
+        }
+        // 次行が取得できるかどうか
+        if (!pCaptionForTest && pCaptionManager->PopCaption(pcr, m_fIgnorePts, true)) {
+            // 他のメッセージの遅延を減らすため次行の描画は後回しにする
+            ::PostMessage(m_hwndPainting, WM_PROCESS_CAPTION, 0, 0);
+            return;
+        }
+    }
+
+    bool fTextureModified = false;
+    if (m_fOsdClear[index]) {
+        m_fOsdClear[index] = false;
+        HideOsds(index);
+        if (m_paintingMethod == 3) {
+            bool fDeleted;
+            fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_NORMAL);
+            fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_FLASHING) || fDeleted;
+            fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_IFLASHING) || fDeleted;
+            if (fDeleted) {
+                fTextureModified = true;
             }
         }
     }
     // ちらつき防止のため表示処理をまとめる
-    while (lastShowCount < m_osdShowCount[index]) {
+    for (; m_osdPrepareCount[index] > 0; --m_osdPrepareCount[index], ++m_osdShowCount[index]) {
         if (m_paintingMethod == 3) {
-            HBITMAP hbm = m_pOsdUsingList[index][lastShowCount]->CreateBitmap();
+            HBITMAP hbm = m_pOsdUsingList[index][m_osdShowCount[index]]->CreateBitmap();
             if (hbm) {
                 int left, top;
-                m_pOsdUsingList[index][lastShowCount]->GetPosition(&left, &top, NULL, NULL);
-                if (hwndContainer) {
+                m_pOsdUsingList[index][m_osdShowCount[index]]->GetPosition(&left, &top, NULL, NULL);
+                RECT rcVideo;
+                if (GetVideoContainerLayout(m_hwndContainer, NULL, &rcVideo)) {
                     // 疑似OSD系から逆変換
                     left -= rcVideo.left;
                     top -= rcVideo.top;
                 }
-                int intv = m_pOsdUsingList[index][lastShowCount]->GetFlashingInterval();
+                int intv = m_pOsdUsingList[index][m_osdShowCount[index]]->GetFlashingInterval();
                 int group = intv > 0 ? TXGROUP_FLASHING : intv < 0 ? TXGROUP_IFLASHING : TXGROUP_NORMAL;
                 if (m_osdCompositor.AddTexture(hbm, left, top, group!=TXGROUP_IFLASHING, index + group) != 0) {
                     fTextureModified = true;
@@ -1464,9 +1487,8 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
             }
         }
         else {
-            m_pOsdUsingList[index][lastShowCount]->Show();
+            m_pOsdUsingList[index][m_osdShowCount[index]]->Show();
         }
-        ++lastShowCount;
     }
     if (fTextureModified) {
         m_osdCompositor.UpdateSurface();
@@ -1478,7 +1500,7 @@ void CTVCaption2::OnSize(STREAM_INDEX index)
 {
     if (m_osdShowCount[index] > 0) {
         RECT rc;
-        if (GetVideoContainerLayout(FindVideoContainer(), &rc, NULL)) {
+        if (GetVideoContainerLayout(m_hwndContainer, &rc, NULL)) {
             // とりあえずはみ出ないようにする
             for (int i = 0; i < m_osdShowCount[index]; ++i) {
                 int left, top, width, height;
@@ -1998,16 +2020,13 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
                 // テスト字幕を構成
                 CAPTION_CHAR_DATA_DLL testCapCharGaiji = TESTCAP_CHAR_LIST[0];
                 CAPTION_DATA_DLL testCapGaiji = TESTCAP_LIST[0];
-                const CAPTION_DATA_DLL *testCapDisp[_countof(TESTCAP_LIST) + 1];
                 testCapCharGaiji.pszDecode = testGaiji;
                 testCapGaiji.pstCharList = &testCapCharGaiji;
-                testCapDisp[0] = &testCapGaiji;
-                testCapDisp[_countof(TESTCAP_LIST)] = NULL;
-                for (int i = 1; i < _countof(TESTCAP_LIST); ++i) {
-                    testCapDisp[i] = &TESTCAP_LIST[i];
-                }
                 HideAllOsds();
-                ProcessCaption(NULL, testCapDisp);
+                ProcessCaption(NULL, &testCapGaiji);
+                for (int i = 1; i < _countof(TESTCAP_LIST); ++i) {
+                    ProcessCaption(NULL, &TESTCAP_LIST[i]);
+                }
             }
         }
         return TRUE;

@@ -62,7 +62,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/PDBALTPATH:%_PDB% /OPT:NOWIN98"
-				AdditionalDependencies="Shlwapi.lib Winmm.lib imagehlp.lib strmiids.lib mfuuid.lib"
+				AdditionalDependencies="Shlwapi.lib Winmm.lib"
 				OutputFile="$(OutDir)\TVCaptionMod2.tvtp"
 				LinkIncremental="2"
 				ModuleDefinitionFile="Exports.def"
@@ -141,7 +141,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/PDBALTPATH:%_PDB% /OPT:NOWIN98"
-				AdditionalDependencies="Shlwapi.lib Winmm.lib imagehlp.lib strmiids.lib mfuuid.lib"
+				AdditionalDependencies="Shlwapi.lib Winmm.lib"
 				OutputFile="$(OutDir)\TVCaptionMod2.tvtp"
 				LinkIncremental="1"
 				ModuleDefinitionFile="Exports.def"

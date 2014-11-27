@@ -1,8 +1,14 @@
-﻿#ifndef INCLUDE_OSD_COMPOSITOR_H
+﻿// TVTestのVMR9/EVRレンダラに対するOSD合成管理クラス ver.1 (2013-01-24)
+// 改変流用自由(ただしプラグイン間の互換をなるべく維持してください)
+#ifndef INCLUDE_OSD_COMPOSITOR_H
 #define INCLUDE_OSD_COMPOSITOR_H
 
 #include <DShow.h>
 #include <d3d9.h>
+
+#ifndef OSD_COMPOSITOR_VERSION
+#define OSD_COMPOSITOR_VERSION 1
+#endif
 
 class COsdCompositor
 {
@@ -16,6 +22,11 @@ public:
     bool ShowTexture(bool fShow, int ID, int Group);
     bool GetSurfaceRect(RECT *pRect);
     bool UpdateSurface();
+#if OSD_COMPOSITOR_VERSION >= 1
+    typedef BOOL (CALLBACK *UpdateCallbackFunc)(void *pBits, const RECT *pSurfaceRect, int Pitch, void *pClientData);
+    bool SetUpdateCallback(UpdateCallbackFunc Callback, void *pClientData = NULL, bool fTop = false);
+    int GetVersion();
+#endif
     bool Initialize();
     void Uninitialize();
 private:
@@ -34,6 +45,14 @@ private:
         int Width;
         int Height;
     };
+#if OSD_COMPOSITOR_VERSION >= 1
+    struct SET_UPDATE_CALLBACK_PARAM {
+        int nSize;
+        int Flags;
+        UpdateCallbackFunc Callback;
+        void *pClientData;
+    };
+#endif
     enum RENDERER_TYPE { RT_VMR9, RT_EVR, };
     typedef HRESULT (WINAPI CoCreateInstanceFunc)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID FAR*);
     typedef IDirect3D9 *(WINAPI Direct3DCreate9Func)(UINT);
@@ -66,6 +85,11 @@ private:
     int m_TxCount;
     struct { int ID, Group; } m_GroupList[256];
     int m_GroupListLen;
+#if OSD_COMPOSITOR_VERSION >= 1
+    struct { UpdateCallbackFunc Callback; void *pClientData; bool fTop; } m_CallbackList[64];
+    int m_CallbackListLen;
+    UpdateCallbackFunc m_LocCallback;
+#endif
 };
 
 #endif // INCLUDE_OSD_COMPOSITOR_H

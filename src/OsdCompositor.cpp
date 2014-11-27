@@ -1,12 +1,12 @@
 ﻿#include <Windows.h>
-#include <ImageHlp.h>
+#include <DbgHelp.h>
 #include "OsdCompositor.h"
 #include <vmr9.h>
 #include <evr9.h>
 
-//#pragma comment(lib, "imagehlp.lib")
-//#pragma comment(lib, "strmiids.lib")
-//#pragma comment(lib, "mfuuid.lib")
+#pragma comment(lib, "dbghelp.lib")
+#pragma comment(lib, "strmiids.lib")
+#pragma comment(lib, "mfuuid.lib")
 
 #if 0
 static int GetRefCount(IUnknown *pUnk)
@@ -24,6 +24,10 @@ static int GetRefCount(IUnknown *pUnk)
 #define WM_SET_TEXTURE_INFO     (WM_APP + 4)
 #define WM_GET_SURFACE_RECT     (WM_APP + 5)
 #define WM_UPDATE_SURFACE       (WM_APP + 6)
+#if OSD_COMPOSITOR_VERSION >= 1
+#define WM_SET_UPDATE_CALLBACK  (WM_APP + 7)
+#define WM_GET_VERSION          (WM_APP + 8)
+#endif
 
 static const LPCTSTR OSD_COMPOSITOR_WINDOW_CLASS = TEXT("TVTest Plugin OsdCompositor");
 static const CLSID CLSID_madVR = {0xe1a8b82a, 0x32ce, 0x4b0d, {0xbe, 0x0d, 0xaa, 0x68, 0xc7, 0x72, 0xe4, 0x23}};
@@ -42,6 +46,10 @@ COsdCompositor::COsdCompositor()
     , m_TxListLen(0)
     , m_TxCount(0)
     , m_GroupListLen(0)
+#if OSD_COMPOSITOR_VERSION >= 1
+    , m_CallbackListLen(0)
+    , m_LocCallback(NULL)
+#endif
 {
 }
 
@@ -158,6 +166,42 @@ bool COsdCompositor::UpdateSurface()
     return SendMessageToHandle(WM_UPDATE_SURFACE, 0, 0) != FALSE;
 }
 
+#if OSD_COMPOSITOR_VERSION >= 1
+// サーフェイス合成時(UpdateSurface()を呼んだとき)のコールバックを設定する
+// AddTexture()より低コストだけど自力で再描画が必要
+bool COsdCompositor::SetUpdateCallback(UpdateCallbackFunc Callback, void *pClientData, bool fTop)
+{
+    // 自オブジェクトが設定したコールバックがあれば解除
+    if (m_LocCallback) {
+        SET_UPDATE_CALLBACK_PARAM ucp = {0};
+        ucp.nSize = sizeof(ucp);
+        ucp.Flags = 0;
+        ucp.Callback = m_LocCallback;
+        SendMessageToHandle(WM_SET_UPDATE_CALLBACK, 0, reinterpret_cast<LPARAM>(&ucp));
+        m_LocCallback = NULL;
+    }
+    if (Callback) {
+        SET_UPDATE_CALLBACK_PARAM ucp = {0};
+        ucp.nSize = sizeof(ucp);
+        ucp.Flags = fTop ? 3 : 1;
+        ucp.Callback = Callback;
+        ucp.pClientData = pClientData;
+        if (!SendMessageToHandle(WM_SET_UPDATE_CALLBACK, 0, reinterpret_cast<LPARAM>(&ucp))) {
+            return false;
+        }
+        m_LocCallback = Callback;
+    }
+    return true;
+}
+
+// 生成されたOsdCompositorウィンドウのバージョンを取得する
+// 失敗または無印版の場合は0を返す
+int COsdCompositor::GetVersion()
+{
+    return static_cast<int>(SendMessageToHandle(WM_GET_VERSION, 0, 0));
+}
+#endif
+
 // 初期化する
 // 先行プラグインが既にウィンドウを作成していた場合にもfalseを返すので、
 // 実際にオブジェクトを利用できるかどうかはFindHandle()がNULLを返すかどうかで判断する
@@ -196,8 +240,14 @@ bool COsdCompositor::Initialize()
     return false;
 }
 
+// 破棄する
+// Initialize()の戻り値に関わらず呼ぶ
 void COsdCompositor::Uninitialize()
 {
+#if OSD_COMPOSITOR_VERSION >= 1
+    SetUpdateCallback(NULL);
+#endif
+
     if (m_pfnCoCreateInstance) {
         Hook(m_pfnCoCreateInstance, CoCreateInstanceHook);
         m_pfnCoCreateInstance = NULL;
@@ -259,6 +309,9 @@ LRESULT CALLBACK COsdCompositor::WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
         while (pThis->m_TxListLen > 0) {
             _aligned_free(pThis->m_TxList[--pThis->m_TxListLen].pBits);
         }
+#if OSD_COMPOSITOR_VERSION >= 1
+        pThis->m_CallbackListLen = 0;
+#endif
         return 0;
     case WM_SET_CONTAINER_WINDOW:
         {
@@ -360,6 +413,35 @@ LRESULT CALLBACK COsdCompositor::WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
             }
         }
         return TRUE;
+#if OSD_COMPOSITOR_VERSION >= 1
+    case WM_SET_UPDATE_CALLBACK:
+        {
+            SET_UPDATE_CALLBACK_PARAM *pUcp = reinterpret_cast<SET_UPDATE_CALLBACK_PARAM*>(lParam);
+            if (pUcp->Flags & 1) {
+                if (pThis->m_CallbackListLen < _countof(pThis->m_CallbackList)) {
+                    // 登録
+                    pThis->m_CallbackList[pThis->m_CallbackListLen].pClientData = pUcp->pClientData;
+                    pThis->m_CallbackList[pThis->m_CallbackListLen].fTop = (pUcp->Flags & 2) != 0;
+                    pThis->m_CallbackList[pThis->m_CallbackListLen++].Callback = pUcp->Callback;
+                    return TRUE;
+                }
+            }
+            else {
+                for (int i = 0; i < pThis->m_CallbackListLen; ++i) {
+                    if (pThis->m_CallbackList[i].Callback == pUcp->Callback) {
+                        // 登録抹消
+                        ::memmove(&pThis->m_CallbackList[i], &pThis->m_CallbackList[i + 1],
+                                  (pThis->m_CallbackListLen - (i + 1)) * sizeof(pThis->m_CallbackList[0]));
+                        --pThis->m_CallbackListLen;
+                        return TRUE;
+                    }
+                }
+            }
+        }
+        return FALSE;
+    case WM_GET_VERSION:
+        return OSD_COMPOSITOR_VERSION;
+#endif
     }
     return ::DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
@@ -611,12 +693,26 @@ bool COsdCompositor::SetupSurface(int VideoWidth, int VideoHeight, RECT *pSurfac
         if (SUCCEEDED(hr)) {
             //::memset(lr.pBits, 0x60, lr.Pitch * (rcSurface.bottom - rcSurface.top)); // DEBUG
             ::memset(lr.pBits, 0, lr.Pitch * (rcSurface.bottom - rcSurface.top));
+#if OSD_COMPOSITOR_VERSION >= 1
+            for (int i = 0; i < m_CallbackListLen; ++i) {
+                if (!m_CallbackList[i].fTop) {
+                    m_CallbackList[i].Callback(lr.pBits, &rcSurface, lr.Pitch, m_CallbackList[i].pClientData);
+                }
+            }
+#endif
             for (int i = 0; i < m_TxListLen; ++i) {
                 ComposeAlpha((DWORD*)lr.pBits, lr.Pitch / 4,
                              rcSurface.right - rcSurface.left, rcSurface.bottom - rcSurface.top,
                              (DWORD*)m_TxList[i].pBits, m_TxList[i].Width, m_TxList[i].Width, m_TxList[i].Height,
                              m_TxList[i].Left - rcSurface.left, m_TxList[i].Top - rcSurface.top);
             }
+#if OSD_COMPOSITOR_VERSION >= 1
+            for (int i = 0; i < m_CallbackListLen; ++i) {
+                if (m_CallbackList[i].fTop) {
+                    m_CallbackList[i].Callback(lr.pBits, &rcSurface, lr.Pitch, m_CallbackList[i].pClientData);
+                }
+            }
+#endif
             m_pD3DS9->UnlockRect();
         }
     }

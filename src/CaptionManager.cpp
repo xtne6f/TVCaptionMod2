@@ -156,7 +156,7 @@ void CCaptionManager::Analyze(DWORD currentPcr)
 }
 
 // 表示タイミングに達した字幕本文を1つだけとり出す
-const CAPTION_DATA_DLL *CCaptionManager::PopCaption(DWORD currentPcr, bool fIgnorePts)
+const CAPTION_DATA_DLL *CCaptionManager::PopCaption(DWORD currentPcr, bool fIgnorePts, bool fNoDelete)
 {
     if (m_capCount != 0) {
         CAPTION_DATA_DLL *pCaption = m_pCapList;
@@ -164,8 +164,10 @@ const CAPTION_DATA_DLL *CCaptionManager::PopCaption(DWORD currentPcr, bool fIgno
         if ((m_fSuperimpose || fIgnorePts) && MSB(m_pcr + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr) ||
             !m_fSuperimpose && !fIgnorePts && MSB(m_pts + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr))
         {
-            ++m_pCapList;
-            --m_capCount;
+            if (!fNoDelete) {
+                ++m_pCapList;
+                --m_capCount;
+            }
             return pCaption;
         }
     }
