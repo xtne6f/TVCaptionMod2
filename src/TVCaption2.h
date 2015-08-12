@@ -93,6 +93,8 @@ private:
     bool m_fAvoidHalfAlpha;
     bool m_fIgnoreSmall;
     bool m_fCentering;
+    int m_adjustViewX;
+    int m_adjustViewY;
     TCHAR m_szRomSoundList[32 * 20];
 
     // 字幕描画

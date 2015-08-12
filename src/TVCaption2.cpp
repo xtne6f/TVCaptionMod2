@@ -92,6 +92,8 @@ CTVCaption2::CTVCaption2()
     , m_fAvoidHalfAlpha(false)
     , m_fIgnoreSmall(false)
     , m_fCentering(false)
+    , m_adjustViewX(0)
+    , m_adjustViewY(0)
     , m_hwndPainting(NULL)
     , m_hwndContainer(NULL)
     , m_fNeedtoShow(false)
@@ -541,6 +543,8 @@ void CTVCaption2::LoadSettings()
     m_fAvoidHalfAlpha   = GetBufferedProfileInt(buf, TEXT("AvoidHalfAlpha"), 0) != 0;
     m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
     m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
+    m_adjustViewX       = GetBufferedProfileInt(buf, TEXT("ViewXAdjust"), 0);
+    m_adjustViewY       = GetBufferedProfileInt(buf, TEXT("ViewYAdjust"), 0);
     GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList));
 
     m_fEnTextColor = textColor >= 0;
@@ -595,6 +599,8 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("AvoidHalfAlpha"), m_fAvoidHalfAlpha, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("ViewXAdjust"), m_adjustViewX, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("ViewYAdjust"), m_adjustViewY, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
 }
 
@@ -1090,6 +1096,8 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         scaleY /= 1.5;
         offsetX += (rcVideo.right - rcVideo.left) / 6;
     }
+    offsetX += (rcVideo.right - rcVideo.left) * min(max(m_adjustViewX, -99), 99) / 100;
+    offsetY += (rcVideo.bottom - rcVideo.top) * min(max(m_adjustViewY, -99), 99) / 100;
 
     bool fDoneAntiPadding = false;
     int posX = caption.wPosX;
@@ -1816,6 +1824,8 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::CheckDlgButton(hDlg, IDC_CHECK_ADD_PADDING, m_paddingWidth > 0 ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_IGNORE_SMALL, m_fIgnoreSmall ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_CENTERING, m_fCentering ? BST_CHECKED : BST_UNCHECKED);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_X, m_adjustViewX, TRUE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_Y, m_adjustViewY, TRUE);
     ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, m_szRomSoundList[0] && m_szRomSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
 
     ::RemoveProp(hDlg, TEXT("Ini"));
@@ -2044,6 +2054,18 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
         case IDC_CHECK_CENTERING:
             m_fCentering = ::IsDlgButtonChecked(hDlg, IDC_CHECK_CENTERING) != BST_UNCHECKED;
             fSave = fReDisp = true;
+            break;
+        case IDC_EDIT_ADJUST_VIEW_X:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_adjustViewX = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_X, NULL, TRUE);
+                fSave = fReDisp = true;
+            }
+            break;
+        case IDC_EDIT_ADJUST_VIEW_Y:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                m_adjustViewY = ::GetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_Y, NULL, TRUE);
+                fSave = fReDisp = true;
+            }
             break;
         case IDC_CHECK_ROMSOUND:
             ::lstrcpy(m_szRomSoundList, ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) != BST_UNCHECKED ? ROMSOUND_ENABLED : ROMSOUND_EXAMPLE);

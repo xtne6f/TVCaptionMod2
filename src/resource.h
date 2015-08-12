@@ -40,3 +40,5 @@
 #define IDC_CHECK_ROMSOUND                      1031
 #define IDC_STATIC_CAPFOLDER                    1032
 #define IDC_STATIC_GAIJI_TABLE                  1033
+#define IDC_EDIT_ADJUST_VIEW_X                  1034
+#define IDC_EDIT_ADJUST_VIEW_Y                  1035
