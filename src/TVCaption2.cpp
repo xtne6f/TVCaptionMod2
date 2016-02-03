@@ -1309,7 +1309,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
         else if (pDrcs && pszDrcsStr) {
             // DRCSを文字列で描画
-            int lenWos = StrlenWoLoSurrogate(pszDrcsStr);
+            lenWos = StrlenWoLoSurrogate(pszDrcsStr);
             if (pOsdCarry && lenWos > 0) {
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
                 AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),

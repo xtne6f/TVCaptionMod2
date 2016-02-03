@@ -359,9 +359,9 @@ LRESULT CALLBACK COsdCompositor::WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
         return 0;
     case WM_SET_CONTAINER_WINDOW:
         {
-            HWND hwnd = reinterpret_cast<HWND>(lParam);
-            if (pThis->m_hwndContainer != hwnd) {
-                pThis->m_hwndContainer = hwnd;
+            HWND hwndContainer = reinterpret_cast<HWND>(lParam);
+            if (pThis->m_hwndContainer != hwndContainer) {
+                pThis->m_hwndContainer = hwndContainer;
                 pThis->ReleaseDevice();
             }
         }
@@ -733,7 +733,7 @@ bool COsdCompositor::SetupSurface(int VideoWidth, int VideoHeight, RECT *pSurfac
     // テクスチャをサーフェイスに合成
     if (m_pD3DS9) {
         D3DLOCKED_RECT lr;
-        HRESULT hr = m_pD3DS9->LockRect(&lr, NULL, 0);
+        hr = m_pD3DS9->LockRect(&lr, NULL, 0);
         if (SUCCEEDED(hr)) {
             //::memset(lr.pBits, 0x60, lr.Pitch * (rcSurface.bottom - rcSurface.top)); // DEBUG
             ::memset(lr.pBits, 0, lr.Pitch * (rcSurface.bottom - rcSurface.top));
