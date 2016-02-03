@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.8
+﻿TVTest TVCaptionMod2 Plugin ver.1.9
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -7,16 +7,13 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 作成した字幕プラグインです。字幕の中央表示をしたいがために作りました。
 
 ■動作環境
-・Windows XP以降。ただしVistaと7は未確認
+・Windows XP以降
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
-  # 動作テスト環境:
-  # ・Windows 8(x64):  TVTest0.8.1(x64), TVH264_0.5.2(x86公式)
-  # ・Windows XP(x86): TVTest0.7.23(x86公式)
-・Visual C++ 2010 SP1 再頒布可能パッケージ (x86/x64)
+・Visual Studio 2015 Update 1 の Visual C++ 再頒布可能パッケージ (x86/x64)
 
 ■以前のバージョンからの移行
 TVCaptionMod2.tvtpを以前のものと置きかえてください。Caption.dllは不要になりまし
-た。再頒布可能パッケージが2005→2010になったので注意してください。
+た。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpを入れ、右クリックメニューからプラ
@@ -28,7 +25,7 @@ TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 さい。必須ではないですが、記号の文字化けを防ぐために外字用フォントとして「和田研
 ゴシック2004ARIB」(外字テーブル名!std)や「Windows TV ゴシック」(!typebank)を導入
 ・設定しておくことをお勧めします。
-(参考)和田研フォント入手先: http://sourceforge.jp/projects/jis2004/
+(参考)和田研フォント入手先: https://osdn.jp/projects/jis2004/
 また、これらのフォントを導入する場合、添付の"gaiji.zip"フォルダにある
 "TVCaptionMod2_Gaiji_std(typebank).txt"をプラグインフォルダに入れ、外字テーブル
 名を"std"や"typebank"にしておくと、ドットの粗い文字や記号の出現をかなり抑制でき
@@ -215,6 +212,8 @@ IgnoreSmall
 Centering
     字幕を画面中央に表示する[=1]かどうか
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
+ViewXAdjust / ViewYAdjust
+    字幕の表示位置を補正(単位はパーセント)
 RomSoundList*
     内蔵音0～18のリストを':'区切りで指定
     # フォーマット: [;]{内蔵音0}:{内蔵音1}: ... :{内蔵音18}
@@ -269,6 +268,9 @@ http://www.marumo.ne.jp/junk/tsselect-0.1.8.lzh)よりソースコードを改�
 ------引用終了------
 
 ■更新履歴
+ver.1.9 (2016-02-03)
+・ソース管理をGitHubに移行した。以後の更新内容は省略
+・https://github.com/xtne6f/TVCaptionMod2
 ver.1.8 (2013-12-10)
 ・文字の縦横比を調整できるようにした
 ・半角英字への置換をオフにできるようにした
