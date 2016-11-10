@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual C++ Express 2010
+# Visual Studio 2010
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TVCaption2", "TVCaption2.vcxproj", "{4BE74EE2-B6D0-427D-9DA4-652737CA71DE}"
 EndProject
 Global
