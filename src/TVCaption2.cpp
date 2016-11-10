@@ -1779,7 +1779,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
 
     static const LPCTSTR GAIJI_TABLE_LIST[] = {
         TEXT("!std"), TEXT("!typebank"), TEXT("arphic"), TEXT("dyna"), TEXT("estima"), TEXT("ricoh"),
-        TEXT("ryobi"), TEXT("std"), TEXT("std19"), TEXT("typebank"), NULL
+        TEXT("ryobi"), TEXT("std"), TEXT("std19"), TEXT("stdpua"), TEXT("typebank"), NULL
     };
     ::SendDlgItemMessage(hDlg, IDC_COMBO_GAIJI_TABLE, CB_RESETCONTENT, 0, 0);
     AddToComboBoxList(hDlg, IDC_COMBO_GAIJI_TABLE, GAIJI_TABLE_LIST);
