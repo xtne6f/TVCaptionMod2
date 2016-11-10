@@ -372,15 +372,15 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
     else if (GetLongModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
         ::PathRemoveExtension(gaijiPath);
         ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), tableName);
-        LPWSTR text = NewReadTextFileToEnd(gaijiPath, FILE_SHARE_READ);
-        if (text) {
+        std::vector<WCHAR> text = ReadTextFileToEnd(gaijiPath, FILE_SHARE_READ);
+        if (!text.empty()) {
             // 1行目は外字テーブル
-            int len = ::StrCSpn(text, TEXT("\r\n"));
+            int len = ::StrCSpn(&text.front(), TEXT("\r\n"));
             DWORD tableSize = len;
-            fRet = m_captionDll.SetGaiji(1, text, &tableSize);
+            fRet = m_captionDll.SetGaiji(1, &text.front(), &tableSize);
 
             // あれば2行目からDRCS→文字列マップ
-            LPCTSTR p = text + len;
+            LPCTSTR p = &text[len];
             SKIP_CRLF(p);
             if (!::StrCmpNI(p, TEXT("[DRCSMap]"), 9)) {
                 p += ::StrCSpn(p, TEXT("\r\n"));
@@ -402,7 +402,6 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
                     SKIP_CRLF(p);
                 }
             }
-            delete [] text;
         }
     }
 

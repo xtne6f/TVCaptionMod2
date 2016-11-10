@@ -1,6 +1,8 @@
 ﻿#ifndef INCLUDE_UTIL_H
 #define INCLUDE_UTIL_H
 
+#include <vector>
+
 // NewReadTextFileToEnd()の最大ファイルサイズ
 #define READ_FILE_MAX_SIZE  (4096 * 1024)
 
@@ -16,7 +18,7 @@ int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault);
 int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName);
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
-WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
+std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
 int StrlenWoLoSurrogate(LPCTSTR str);
 bool HexStringToByteArray(LPCTSTR str, BYTE *pDest, int destLen);
 void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList);

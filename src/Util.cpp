@@ -69,12 +69,12 @@ DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
 }
 
 // BOM付きUTF-16テキストファイルを文字列として全て読む
-// 成功するとnewされた配列のポインタが返るので、必ずdeleteすること
-WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
+std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
 {
+    std::vector<WCHAR> ret;
     HANDLE hFile = ::CreateFile(fileName, GENERIC_READ, dwShareMode, NULL,
                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return NULL;
+    if (hFile == INVALID_HANDLE_VALUE) return ret;
 
     WCHAR bom;
     DWORD readBytes;
@@ -84,19 +84,19 @@ WCHAR *NewReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
         readBytes != sizeof(WCHAR) || bom != L'\xFEFF')
     {
         ::CloseHandle(hFile);
-        return NULL;
+        return ret;
     }
 
-    WCHAR *pRet = new WCHAR[fileBytes / sizeof(WCHAR) - 1 + 1];
-    if (!::ReadFile(hFile, pRet, fileBytes - sizeof(WCHAR), &readBytes, NULL)) {
-        delete [] pRet;
+    ret.resize((fileBytes - 1) / sizeof(WCHAR) + 1, L'\0');
+    fileBytes -= sizeof(WCHAR);
+    if (fileBytes > 0 && !::ReadFile(hFile, &ret.front(), fileBytes, &readBytes, NULL)) {
+        ret.clear();
         ::CloseHandle(hFile);
-        return NULL;
+        return ret;
     }
-    pRet[readBytes / sizeof(WCHAR)] = 0;
 
     ::CloseHandle(hFile);
-    return pRet;
+    return ret;
 }
 
 int StrlenWoLoSurrogate(LPCTSTR str)
