@@ -124,12 +124,12 @@ CTVCaption2::CTVCaption2()
         m_osdPrepareCount[index] = 0;
         m_fOsdClear[index] = false;
     }
-    ::memset(&m_pat, 0, sizeof(m_pat));
+    PAT zeroPat = {};
+    m_pat = zeroPat;
 }
 
 CTVCaption2::~CTVCaption2()
 {
-    reset_pat(&m_pat);
 }
 
 
@@ -1576,8 +1576,8 @@ BOOL CALLBACK CTVCaption2::StreamCallback(BYTE *pData, void *pClientData)
 
 static void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
 {
-    for (int i = 0; i < pPat->pid_count; ++i) {
-        const PMT *pPmt = pPat->pmt[i];
+    for (size_t i = 0; i < pPat->pmt.size(); ++i) {
+        const PMT *pPmt = &pPat->pmt[i];
         // このPMTに映像PIDが含まれるか調べる
         bool fVideoPmt = false;
         int privPid[2] = {-1, -1};
@@ -1596,7 +1596,7 @@ static void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, i
             }
         }
         if (fVideoPmt) {
-            *pPmtPid = pPat->pid[i];
+            *pPmtPid = pPat->pmt[i].pmt_pid;
             *pPcrPid = pPmt->pcr_pid;
             *pCaption1Pid = privPid[0];
             *pCaption2Pid = privPid[1];
@@ -1613,7 +1613,8 @@ static void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, i
 void CTVCaption2::ProcessPacket(BYTE *pPacket)
 {
     if (m_fResetPat) {
-        reset_pat(&m_pat);
+        PAT zeroPat = {};
+        m_pat = zeroPat;
         m_pcrPid = -1;
         m_caption1Pid = -1;
         m_caption2Pid = -1;
@@ -1682,10 +1683,9 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
             return;
         }
         // PATリストにあるPMT監視
-        for (int i = 0; i < m_pat.pid_count; ++i) {
-            if (header.pid == m_pat.pid[i]/* && header.pid != 0*/) {
-                PMT *pPmt = m_pat.pmt[i];
-                extract_pmt(pPmt, pPayload, payloadSize,
+        for (size_t i = 0; i < m_pat.pmt.size(); ++i) {
+            if (header.pid == m_pat.pmt[i].pmt_pid/* && header.pid != 0*/) {
+                extract_pmt(&m_pat.pmt[i], pPayload, payloadSize,
                             header.payload_unit_start_indicator,
                             header.continuity_counter);
                 GetPidsFromVideoPmt(&pmtPid, &m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
