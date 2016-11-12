@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.1.9
+﻿TVTest TVCaptionMod2 Plugin ver.2.0
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -9,11 +9,13 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ■動作環境
 ・Windows XP以降
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
-・Visual Studio 2015 Update 1 の Visual C++ 再頒布可能パッケージ (x86/x64)
+・Microsoft Visual C++ 2015 再頒布可能パッケージ Update 3 (x86/x64)
 
 ■以前のバージョンからの移行
-TVCaptionMod2.tvtpを以前のものと置きかえてください。Caption.dllは不要になりまし
-た。
+TVCaptionMod2.tvtpを以前のものと置きかえてください。Caption.dllは不要です。
+デフォルトの外字テーブル(!std)をUnicode5.2ベースに更新しました。Unicode5.2に対応
+したフォントであれば基本的に外字フォントの導入は不要です。以前の外字テーブルが必
+要な場合は"gaiji.zip"の"TVCaptionMod2_Gaiji_stdpua.txt"を使ってください。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpを入れ、右クリックメニューからプラ
@@ -45,9 +47,9 @@ TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 外字テーブル名は和田研フォントと同じです。"j"などの下部を表示できるようにやや上
 付きなので文字位置補正のY方向を5ぐらいに設定すると丁度いいです。
 rounded-mplus-1m-arib-20131205.zip
-http://www1.axfc.net/uploader/search.pl?md5=515426ac97c31be34a1ec0210e2ed64e
+https://www.axfc.net/u/search.pl?md5=515426ac97c31be34a1ec0210e2ed64e
 rounded-mplus-1m-arib-20121219.zip
-http://www1.axfc.net/uploader/search.pl?md5=a62e691abf379ff1cf777519b65d3f5f
+https://www.axfc.net/u/search.pl?md5=a62e691abf379ff1cf777519b65d3f5f
 (1年ぐらいで流れるっぽいので入り用なら再頒布してください)
 
 ■既知の不具合
@@ -130,8 +132,6 @@ GaijiTableName
     # ば記号が羅列されるので大体わかります)をえらび、プラグインフォルダに置いて
     # ください。{テーブル名}の部分を指定することでその外字テーブルが使われます。
     # 
-    # ARIB STD-B24第一分冊の表7-19および表7-20に忠実なフォントは[=!std]と指定し
-    # てください。
     # 「Windows TV ゴシック/丸ゴシック/太丸ゴシック」についてはプラグインに組み
     # 込まれています。[=!typebank]と指定してください。
     # 
