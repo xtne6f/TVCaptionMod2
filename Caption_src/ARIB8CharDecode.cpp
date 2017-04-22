@@ -154,7 +154,7 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_GR = &m_G2;
 
 	m_strDecode = L"";
-	m_emStrSize = STR_NORMAL;
+	m_emStrSize = CP_STR_NORMAL;
 
 	m_bCharColorIndex = 7;
 	m_bBackColorIndex = 8;
@@ -493,12 +493,12 @@ BOOL CARIB8CharDecode::C1( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		break;
 	case 0x89:
 		//MSZ 半角指定
-		m_emStrSize = STR_MEDIUM;
+		m_emStrSize = CP_STR_MEDIUM;
 		dwReadSize = 1;
 		break;
 	case 0x8A:
 		//NSZ 全角指定
-		m_emStrSize = STR_NORMAL;
+		m_emStrSize = CP_STR_NORMAL;
 		dwReadSize = 1;
 		break;
 	case 0x80:
@@ -543,24 +543,24 @@ BOOL CARIB8CharDecode::C1( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		break;
 	case 0x88:
 		//SSZ 小型サイズ
-		m_emStrSize = STR_SMALL;
+		m_emStrSize = CP_STR_SMALL;
 		dwReadSize = 1;
 		break;
 	case 0x8B:
 		//SZX 指定サイズ
 		if( dwSrcSize < 2 ) return FALSE;
 		if( pbSrc[1] == 0x60 ){
-			m_emStrSize = STR_MICRO;
+			m_emStrSize = CP_STR_MICRO;
 		}else if( pbSrc[1] == 0x41 ){
-			m_emStrSize = STR_HIGH_W;
+			m_emStrSize = CP_STR_HIGH_W;
 		}else if( pbSrc[1] == 0x44 ){
-			m_emStrSize = STR_WIDTH_W;
+			m_emStrSize = CP_STR_WIDTH_W;
 		}else if( pbSrc[1] == 0x45 ){
-			m_emStrSize = STR_W;
+			m_emStrSize = CP_STR_W;
 		}else if( pbSrc[1] == 0x6B ){
-			m_emStrSize = STR_SPECIAL_1;
+			m_emStrSize = CP_STR_SPECIAL_1;
 		}else if( pbSrc[1] == 0x64 ){
-			m_emStrSize = STR_SPECIAL_2;
+			m_emStrSize = CP_STR_SPECIAL_2;
 		}
 		dwReadSize = 2;
 		break;
@@ -1324,9 +1324,9 @@ void CARIB8CharDecode::ActivePositionForward( int nCount )
 WORD CARIB8CharDecode::GetCharDirSize(void) const
 {
 	WORD wSize = m_wCharW + m_wCharHInterval;
-	if( m_emStrSize==STR_SMALL || m_emStrSize==STR_MEDIUM ){
+	if( m_emStrSize==CP_STR_SMALL || m_emStrSize==CP_STR_MEDIUM ){
 		wSize /= 2;
-	}else if( m_emStrSize==STR_W || m_emStrSize==STR_WIDTH_W ){
+	}else if( m_emStrSize==CP_STR_W || m_emStrSize==CP_STR_WIDTH_W ){
 		wSize *= 2;
 	}
 	return wSize==0 ? 1 : wSize;
@@ -1335,9 +1335,9 @@ WORD CARIB8CharDecode::GetCharDirSize(void) const
 WORD CARIB8CharDecode::GetLineDirSize(void) const
 {
 	WORD wSize = m_wCharH + m_wCharVInterval;
-	if( m_emStrSize==STR_SMALL ){
+	if( m_emStrSize==CP_STR_SMALL ){
 		wSize /= 2;
-	}else if( m_emStrSize==STR_W || m_emStrSize==STR_HIGH_W ){
+	}else if( m_emStrSize==CP_STR_W || m_emStrSize==CP_STR_HIGH_W ){
 		wSize *= 2;
 	}
 	return wSize==0 ? 1 : wSize;

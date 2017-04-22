@@ -1,8 +1,6 @@
 ﻿#include <Windows.h>
 #include "Caption.h"
 
-#define DRCS_SIZE_MAX 36
-
 BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern)
 {
 	WORD wGradation = pPattern->wGradation;

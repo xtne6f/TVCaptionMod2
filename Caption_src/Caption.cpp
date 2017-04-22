@@ -57,7 +57,7 @@ DWORD WINAPI SwitchStreamCP(DWORD dwIndex)
 DWORD WINAPI InitializeCP()
 {
 	if( g_sys != NULL ){
-		return ERR_INIT;
+		return CP_ERR_INIT;
 	}
 	g_sys = new CCaptionMain;
 	g_charMode = MODE_ACP;
@@ -69,7 +69,7 @@ DWORD WINAPI InitializeCP()
 DWORD WINAPI InitializeCPW()
 {
 	if( g_sys != NULL ){
-		return ERR_INIT;
+		return CP_ERR_INIT;
 	}
 	g_sys = new CCaptionMain;
 	g_charMode = MODE_UTF16;
@@ -81,7 +81,7 @@ DWORD WINAPI InitializeCPW()
 DWORD WINAPI InitializeUNICODE()
 {
 	if( g_sys != NULL ){
-		return ERR_INIT;
+		return CP_ERR_INIT;
 	}
 	g_sys = new CCaptionMain;
 	g_charMode = MODE_UTF8;
@@ -107,7 +107,7 @@ DWORD WINAPI UnInitializeCP()
 DWORD WINAPI AddTSPacketCP(BYTE* pbPacket)
 {
 	if( g_sys == NULL ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	return g_sys->AddTSPacket(pbPacket);
 }
@@ -115,7 +115,7 @@ DWORD WINAPI AddTSPacketCP(BYTE* pbPacket)
 DWORD WINAPI ClearCP()
 {
 	if( g_sys == NULL ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	return g_sys->Clear();
 }
@@ -123,7 +123,7 @@ DWORD WINAPI ClearCP()
 DWORD WINAPI GetTagInfoCP(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount)
 {
 	if( g_sys == NULL ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	return g_sys->GetTagInfo(ppList, pdwListCount);
 }
@@ -131,7 +131,7 @@ DWORD WINAPI GetTagInfoCP(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount)
 DWORD WINAPI GetCaptionDataCP(unsigned char ucLangTag, CAPTION_DATA_DLL** ppList, DWORD* pdwListCount)
 {
 	if( g_sys == NULL || (g_charMode != MODE_ACP && g_charMode != MODE_UTF8) ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	DWORD dwRet = g_sys->GetCaptionData(ucLangTag, ppList, pdwListCount);
 
@@ -185,7 +185,7 @@ DWORD WINAPI GetCaptionDataCP(unsigned char ucLangTag, CAPTION_DATA_DLL** ppList
 DWORD WINAPI GetCaptionDataCPW(unsigned char ucLangTag, CAPTION_DATA_DLL** ppList, DWORD* pdwListCount)
 {
 	if( g_sys == NULL || g_charMode != MODE_UTF16 ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	return g_sys->GetCaptionData(ucLangTag, ppList, pdwListCount);
 }
@@ -193,7 +193,7 @@ DWORD WINAPI GetCaptionDataCPW(unsigned char ucLangTag, CAPTION_DATA_DLL** ppLis
 DWORD WINAPI GetDRCSPatternCP(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList, DWORD* pdwListCount)
 {
 	if( g_sys == NULL ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	return g_sys->GetDRCSPattern(ucLangTag, ppList, pdwListCount);
 }
@@ -201,7 +201,7 @@ DWORD WINAPI GetDRCSPatternCP(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList
 DWORD WINAPI SetGaijiCP(DWORD dwCommand, const WCHAR* pTable, DWORD* pdwTableSize)
 {
 	if( g_sys == NULL ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	if( dwCommand == 0 ){
 		return g_sys->ResetGaijiTable(pdwTableSize);
@@ -214,7 +214,7 @@ DWORD WINAPI SetGaijiCP(DWORD dwCommand, const WCHAR* pTable, DWORD* pdwTableSiz
 DWORD WINAPI GetGaijiCP(DWORD dwCommand, WCHAR* pTable, DWORD* pdwTableSize)
 {
 	if( g_sys == NULL ){
-		return ERR_NOT_INIT;
+		return CP_ERR_NOT_INIT;
 	}
 	if( dwCommand == 1 ){
 		return g_sys->GetGaijiTable(pTable, pdwTableSize);

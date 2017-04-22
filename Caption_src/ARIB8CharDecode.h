@@ -45,24 +45,9 @@ using std::vector;
 #define MF_MODE_G 1 //Gセット
 #define MF_MODE_DRCS 2 //DRCS
 
-#define G_CELL_SIZE 94
-
-//文字サイズ
-typedef enum{
-	STR_SMALL = 0, //SSZ
-	STR_MEDIUM, //MSZ
-	STR_NORMAL, //NSZ
-	STR_MICRO, //SZX 0x60
-	STR_HIGH_W, //SZX 0x41
-	STR_WIDTH_W, //SZX 0x44
-	STR_W, //SZX 0x45
-	STR_SPECIAL_1, //SZX 0x6B
-	STR_SPECIAL_2, //SZX 0x64
-} STRING_SIZE;
-
 struct CAPTION_CHAR_DATA{
 	wstring strDecode;
-	STRING_SIZE emCharSizeMode;
+	CP_STRING_SIZE emCharSizeMode;
 
 	CLUT_DAT_DLL stCharColor;
 	CLUT_DAT_DLL stBackColor;
@@ -96,9 +81,6 @@ struct CAPTION_DATA{
 	vector<CAPTION_CHAR_DATA> CharList;
 	DWORD dwWaitTime;
 };
-
-//DRCS図形の縦横最大サイズ(運用規定より)
-#define DRCS_SIZE_MAX 36
 
 struct DRCS_PATTERN{
 	WORD wDRCCode;
@@ -151,7 +133,7 @@ protected:
 	//デコードした文字列
 	wstring m_strDecode;
 	//文字サイズ
-	STRING_SIZE m_emStrSize;
+	CP_STRING_SIZE m_emStrSize;
 
 	//CLUTのインデックス
 	BYTE m_bCharColorIndex;

@@ -1,19 +1,5 @@
 ﻿#pragma once
 
-#define ERR_INIT		10
-#define ERR_NOT_INIT	11
-//#define ERR_SIZE		12 //これを返すことはない
-
-#define ERR_NEED_NEXT_PACKET 13 //次のTSパケット入れないと解析できない
-#define ERR_CAN_NOT_ANALYZ 14 //本当にTSパケット？解析不可能
-#define ERR_NOT_FIRST 15 //最初のTSパケット未入力
-#define ERR_INVALID_PACKET 16 //本当にTSパケット？パケット飛んで壊れてるかも
-
-#define CHANGE_VERSION 20
-#define NO_ERR_TAG_INFO 21
-#define NO_ERR_CAPTION_1 22
-#define NO_ERR_CAPTION_8 29
-
 //運用規定により2言語まで
 #define LANG_TAG_MAX 2
 
@@ -34,6 +20,8 @@ public:
 	BOOL ResetGaijiTable(DWORD* pdwTableSize) { return m_cDec.ResetGaijiTable(pdwTableSize); }
 
 protected:
+	static const DWORD ERR_INVALID_PACKET = CP_ERR_INVALID_PACKET;
+
 	struct PAYLOAD_DATA{
 		BYTE bBuff[188];
 		WORD wSize;

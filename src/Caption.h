@@ -4,35 +4,6 @@
 #include "../Caption_src/CaptionDef.h"
 #include "../Caption_src/Caption.h"
 
-// 名前衝突的に危ういので接頭辞CP_を付けさせてもらう
-
-#define CP_ERR_INIT             10
-#define CP_ERR_NOT_INIT         11
-
-#define CP_ERR_NEED_NEXT_PACKET 13      // 次のTSパケット入れないと解析できない
-#define CP_ERR_CAN_NOT_ANALYZ   14      // 本当にTSパケット？解析不可能
-#define CP_ERR_NOT_FIRST        15      // 最初のTSパケット未入力
-#define CP_ERR_INVALID_PACKET   16      // 本当にTSパケット？パケット飛んで壊れてるかも
-
-#define CP_CHANGE_VERSION       20
-#define CP_NO_ERR_TAG_INFO      21
-#define CP_NO_ERR_CAPTION_1     22
-#define CP_NO_ERR_CAPTION_8     29
-
-#define G_CELL_SIZE 94
-
-typedef enum {
-    CP_STR_SMALL = 0,   // SSZ
-    CP_STR_MEDIUM,      // MSZ
-    CP_STR_NORMAL,      // NSZ
-    CP_STR_MICRO,       // SZX 0x60
-    CP_STR_HIGH_W,      // SZX 0x41
-    CP_STR_WIDTH_W,     // SZX 0x44
-    CP_STR_W,           // SZX 0x45
-    CP_STR_SPECIAL_1,   // SZX 0x6B
-    CP_STR_SPECIAL_2,   // SZX 0x64
-} CP_STRING_SIZE;
-
 inline bool operator==(const CLUT_DAT_DLL &a, const CLUT_DAT_DLL &b) {
     return a.ucR == b.ucR && a.ucG == b.ucG && a.ucB == b.ucB && a.ucAlpha == b.ucAlpha;
 }

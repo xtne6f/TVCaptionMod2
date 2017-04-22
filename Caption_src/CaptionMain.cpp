@@ -55,7 +55,7 @@ DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
 
 	if( ucSync != 0x47 ){
 		Clear();
-		return ERR_CAN_NOT_ANALYZ;
+		return CP_ERR_CAN_NOT_ANALYZ;
 	}
 
 	//パケットカウンターチェック
@@ -84,7 +84,7 @@ DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
 		if( ucPayloadStartFlag == 0 && m_PayloadList.size() == 0 ){
 			//リストに貯まっていないのに開始フラグのついたパケットじゃない
 			Clear();
-			return ERR_NOT_FIRST;
+			return CP_ERR_NOT_FIRST;
 		}
 
 		if( (m_bAnalyz == FALSE || dwStart > 188) && (ucPayloadStartFlag == 1)){
@@ -147,11 +147,11 @@ DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
 			dwRet = ParseListData();
 			m_PayloadList.clear();
 		}else{
-			return ERR_NEED_NEXT_PACKET;
+			return CP_ERR_NEED_NEXT_PACKET;
 		}
 	}
 
-	if( dwRet==TRUE || dwRet==CHANGE_VERSION || dwRet==NO_ERR_TAG_INFO || (NO_ERR_CAPTION_1<=dwRet && dwRet<=NO_ERR_CAPTION_8) ){
+	if( dwRet==TRUE || dwRet==CP_CHANGE_VERSION || dwRet==CP_NO_ERR_TAG_INFO || (CP_NO_ERR_CAPTION_1<=dwRet && dwRet<=CP_NO_ERR_CAPTION_8) ){
 		m_bAnalyz = TRUE;
 	}else{
 		Clear();
@@ -221,7 +221,7 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 	DWORD dwRet = TRUE;
 	if( ucDgiGroup == m_ucDgiGroup && ucID == 0 ){
 		//組が前回とおなじ字幕管理は再送とみなす
-		dwRet = NO_ERR_TAG_INFO;
+		dwRet = CP_NO_ERR_TAG_INFO;
 	}else if( ucDgiGroup != m_ucDgiGroup && 1 <= ucID && ucID <= LANG_TAG_MAX ){
 		//組が字幕管理と異なる字幕は処理しない
 		dwRet = TRUE;
@@ -241,7 +241,7 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 		//usDataGroupSizeはCRC_16の2バイト分を含まないので-2すべきでない
 		dwRet = ParseCaptionManagementData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_CaptionList[0], &m_DRCList[0], &m_DRCMap[0]);
 		if( dwRet == TRUE ){
-			dwRet = CHANGE_VERSION;
+			dwRet = CP_CHANGE_VERSION;
 		}
 	}else if( 1 <= ucID && ucID <= LANG_TAG_MAX ){
 		//字幕データ
@@ -252,7 +252,7 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 		dwRet = ParseCaptionData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_CaptionList[ucID],
 		                         &m_DRCList[ucID], &m_DRCMap[ucID], m_LangTagList[ucID-1].ucFormat-1);
 		if( dwRet == TRUE ){
-			dwRet = NO_ERR_CAPTION_1 + ucID - 1;
+			dwRet = CP_NO_ERR_CAPTION_1 + ucID - 1;
 		}else{
 			::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported Caption Data!\n"));
 			m_CaptionList[ucID].clear();
