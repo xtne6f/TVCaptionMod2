@@ -6,10 +6,6 @@
 #include "CaptionMain.h"
 #include "Caption.h"
 
-#ifdef _MANAGED
-#pragma managed(push, off)
-#endif
-
 #ifdef CAPTION_EXPORTS
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
@@ -225,8 +221,3 @@ DWORD WINAPI GetGaijiCP(DWORD dwCommand, WCHAR* pTable, DWORD* pdwTableSize)
 	}
 	return FALSE;
 }
-
-#ifdef _MANAGED
-#pragma managed(pop)
-#endif
-

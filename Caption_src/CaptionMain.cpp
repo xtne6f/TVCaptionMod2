@@ -9,14 +9,6 @@ CCaptionMain::CCaptionMain(void)
 	, m_bAnalyz(TRUE)
 	, m_dwNowReadSize(0)
 	, m_dwNeedSize(0)
-	, m_pCapList(NULL)
-	, m_pCapCharPool(NULL)
-	, m_pDRCList(NULL)
-	, m_pbBuff(NULL)
-	, m_dwCapListSize(0)
-	, m_dwCapCharPoolSize(0)
-	, m_dwDRCListSize(0)
-	, m_dwBuffSize(0)
 {
 	for( size_t i=0; i<LANG_TAG_MAX; i++ ){
 		//ucLangTag==0xFFは当該タグが存在しないことを示す
@@ -26,10 +18,6 @@ CCaptionMain::CCaptionMain(void)
 
 CCaptionMain::~CCaptionMain(void)
 {
-	SAFE_DELETE_ARRAY(m_pCapList);
-	SAFE_DELETE_ARRAY(m_pCapCharPool);
-	SAFE_DELETE_ARRAY(m_pDRCList);
-	SAFE_DELETE_ARRAY(m_pbBuff);
 }
 
 DWORD CCaptionMain::Clear()
@@ -174,22 +162,12 @@ DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
 DWORD CCaptionMain::ParseListData()
 {
 	//まずバッファを作る
-	DWORD dwBuffSize = 0;
-	for( int i=0; i<(int)m_PayloadList.size();i++){
-		dwBuffSize += m_PayloadList[i].wSize;
-	}
-	if( dwBuffSize+1 > m_dwBuffSize ){
-		SAFE_DELETE_ARRAY(m_pbBuff);
-		m_dwBuffSize = dwBuffSize+1;
-		m_pbBuff = new BYTE[m_dwBuffSize];
-	}
-	DWORD dwReadBuff = 0;
-	for( int i=0; i<(int)m_PayloadList.size();i++){
-		memcpy( m_pbBuff+dwReadBuff, m_PayloadList[i].bBuff, m_PayloadList[i].wSize );
-		dwReadBuff+=m_PayloadList[i].wSize;
+	m_pbBuff.clear();
+	for( size_t i = 0; i < m_PayloadList.size(); i++ ){
+		m_pbBuff.insert(m_pbBuff.end(), m_PayloadList[i].bBuff, m_PayloadList[i].bBuff + m_PayloadList[i].wSize);
 	}
 
-	if( dwReadBuff >= 6 ){
+	if( m_pbBuff.size() >= 6 ){
 		BYTE bStreamID = m_pbBuff[3];
 		WORD wPesSize = ((WORD)(m_pbBuff[4]))<<8 | m_pbBuff[5];
 		WORD wStartPos = 6;
@@ -197,14 +175,14 @@ DWORD CCaptionMain::ParseListData()
 		if( bStreamID == 0xBF ){
 			//private_stream_2
 			nDataSize = wPesSize;
-		}else if(  bStreamID == 0xBD && dwReadBuff >= 9 ){
+		}else if(  bStreamID == 0xBD && m_pbBuff.size() >= 9 ){
 			//private_stream_1
 			WORD wHeadSize = m_pbBuff[8];
 			wStartPos += 3+wHeadSize;
 			nDataSize = (6+wPesSize)-wStartPos;
 		}
-		if( nDataSize > 0 && (int)dwReadBuff >= wStartPos+nDataSize ){
-			return ParseCaption(m_pbBuff+wStartPos, nDataSize);
+		if( nDataSize > 0 && (int)m_pbBuff.size() >= wStartPos+nDataSize ){
+			return ParseCaption(&m_pbBuff[wStartPos], nDataSize);
 		}
 	}
 	return ERR_INVALID_PACKET;
@@ -504,23 +482,15 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 		for( size_t i=0; i<List.size(); i++ ){
 			dwCapCharPoolNeed += (DWORD)List[i].CharList.size();
 		}
-		if( List.size() > m_dwCapListSize ){
-			SAFE_DELETE_ARRAY(m_pCapList);
-			m_dwCapListSize = (DWORD)List.size();
-			m_pCapList = new CAPTION_DATA_DLL[m_dwCapListSize];
-		}
-		if( dwCapCharPoolNeed > m_dwCapCharPoolSize ){
-			SAFE_DELETE_ARRAY(m_pCapCharPool);
-			m_dwCapCharPoolSize = dwCapCharPoolNeed;
-			m_pCapCharPool = new CAPTION_CHAR_DATA_DLL[m_dwCapCharPoolSize];
-		}
+		m_pCapList.resize(List.size());
+		m_pCapCharPool.resize(dwCapCharPoolNeed == 0 ? 1 : dwCapCharPoolNeed);
 
 		DWORD dwCapCharPoolCount = 0;
 		vector<CAPTION_DATA>::const_iterator it = List.begin();
-		CAPTION_DATA_DLL *pCap = m_pCapList;
+		CAPTION_DATA_DLL *pCap = &m_pCapList[0];
 		for( ; it != List.end(); ++it,++pCap ){
 			pCap->dwListCount = (DWORD)it->CharList.size();
-			pCap->pstCharList = m_pCapCharPool + dwCapCharPoolCount;
+			pCap->pstCharList = &m_pCapCharPool[0] + dwCapCharPoolCount;
 			dwCapCharPoolCount += (DWORD)it->CharList.size();
 
 			vector<CAPTION_CHAR_DATA>::const_iterator jt = it->CharList.begin();
@@ -557,7 +527,7 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 			pCap->wAlignment = 0;
 		}
 		*pdwListCount = (DWORD)List.size();
-		*ppList = m_pCapList;
+		*ppList = &m_pCapList[0];
 		return TRUE;
 	}
 	return FALSE;
@@ -576,11 +546,7 @@ BOOL CCaptionMain::GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** pp
 		const vector<DRCS_PATTERN> &List = m_DRCList[ucLangTag+1];
 
 		//まずバッファを作る
-		if( List.size() > m_dwDRCListSize ){
-			SAFE_DELETE_ARRAY(m_pDRCList);
-			m_dwDRCListSize = (DWORD)List.size();
-			m_pDRCList = new DRCS_PATTERN_DLL[m_dwDRCListSize];
-		}
+		m_pDRCList.resize(List.size());
 
 		DWORD dwCount = 0;
 		vector<DRCS_PATTERN>::const_iterator it = List.begin();
@@ -599,7 +565,7 @@ BOOL CCaptionMain::GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** pp
 			}
 		}
 		*pdwListCount = dwCount;
-		*ppList = m_pDRCList;
+		*ppList = &m_pDRCList[0];
 		return TRUE;
 	}
 	return FALSE;

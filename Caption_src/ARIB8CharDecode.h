@@ -1,20 +1,9 @@
 ﻿#pragma once
 
-// MFCで使う時用
-/*#ifdef _DEBUG
-#undef new
-#endif
 #include <string>
 #include <vector>
-#include <map>
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
-*/
-#include <string>
-#include <vector>
-#include <map>
-using namespace std;
+using std::wstring;
+using std::vector;
 
 //文字符号集合
 //Gセット
@@ -71,7 +60,7 @@ typedef enum{
 	STR_SPECIAL_2, //SZX 0x64
 } STRING_SIZE;
 
-typedef struct _CAPTION_CHAR_DATA{
+struct CAPTION_CHAR_DATA{
 	wstring strDecode;
 	STRING_SIZE emCharSizeMode;
 
@@ -91,9 +80,9 @@ typedef struct _CAPTION_CHAR_DATA{
 	WORD wCharH;
 	WORD wCharHInterval;
 	WORD wCharVInterval;
-} CAPTION_CHAR_DATA;
+};
 
-typedef struct _CAPTION_DATA{
+struct CAPTION_DATA{
 	//bClear==TRUEのときdwWaitTime以外のフィールドは未定義
 	BOOL bClear;
 	WORD wSWFMode;
@@ -106,7 +95,7 @@ typedef struct _CAPTION_DATA{
 	//表示区画を同じくする本文のリスト
 	vector<CAPTION_CHAR_DATA> CharList;
 	DWORD dwWaitTime;
-} CAPTION_DATA;
+};
 
 //DRCS図形の縦横最大サイズ(運用規定より)
 #define DRCS_SIZE_MAX 36
@@ -146,11 +135,11 @@ public:
 	BOOL ResetGaijiTable(DWORD* pdwTableSize);
 
 protected:
-	typedef struct _MF_MODE{
+	struct MF_MODE{
 		int iMF; //文字符号集合
 		int iMode; //符号集合の分類
 		int iByte; //読み込みバイト数
-	} MF_MODE;
+	};
 
 	MF_MODE m_G0;
 	MF_MODE m_G1;

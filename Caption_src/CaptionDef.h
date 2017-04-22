@@ -1,14 +1,14 @@
-﻿#ifndef __CAPTION_DEF_H__
-#define __CAPTION_DEF_H__
+﻿#ifndef INCLUDE_CAPTION_DEF_H
+#define INCLUDE_CAPTION_DEF_H
 
-typedef struct _CLUT_DAT_DLL{
+typedef struct {
 	unsigned char ucR;
 	unsigned char ucG;
 	unsigned char ucB;
 	unsigned char ucAlpha;
 } CLUT_DAT_DLL;
 
-typedef struct _CAPTION_CHAR_DATA_DLL{
+typedef struct {
 	const void* pszDecode; //char* or WCHAR*
 	DWORD wCharSizeMode;
 
@@ -31,7 +31,7 @@ typedef struct _CAPTION_CHAR_DATA_DLL{
 	BYTE bAlignment; //zero cleared
 } CAPTION_CHAR_DATA_DLL;
 
-typedef struct _CAPTION_DATA_DLL{
+typedef struct {
 	BOOL bClear;
 	WORD wSWFMode;
 	WORD wClientX;
@@ -46,7 +46,7 @@ typedef struct _CAPTION_DATA_DLL{
 	DWORD dwWaitTime;
 } CAPTION_DATA_DLL;
 
-typedef struct _LANG_TAG_INFO_DLL{
+typedef struct {
 	unsigned char ucLangTag;
 	unsigned char ucDMF;
 	unsigned char ucDC;
@@ -56,7 +56,7 @@ typedef struct _LANG_TAG_INFO_DLL{
 	unsigned char ucRollupMode;
 }LANG_TAG_INFO_DLL;
 
-typedef struct _DRCS_PATTERN_DLL{
+typedef struct {
 	DWORD dwDRCCode;
 	DWORD dwUCS;
 	WORD wGradation;

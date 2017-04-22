@@ -1,5 +1,5 @@
-﻿#ifndef __CAPTION_H__
-#define __CAPTION_H__
+﻿#ifndef INCLUDE_CP_CAPTION_H
+#define INCLUDE_CP_CAPTION_H
 
 #ifdef CAPTION_EXPORTS
 #define CAPTION_DLLEXPORT __declspec(dllexport)

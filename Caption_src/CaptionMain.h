@@ -14,11 +14,6 @@
 #define NO_ERR_CAPTION_1 22
 #define NO_ERR_CAPTION_8 29
 
-#define SAFE_DELETE(p)       { if(p) { delete (p);     (p)=NULL; } }
-#define SAFE_DELETE_ARRAY(p) { if(p) { delete[] (p);   (p)=NULL; } }
-#define RESET_JD_SYSTEMTIME(p)  { if(p) { *p.wYear = 1991; *p.wMonth = 12; *p.wDay = 31; *p.wHour = 0; *p.wMinute = 0; *p.wSecond = 0; *p.wMilliseconds = 0; *p.wDayOfWeek = 0; } }
-#define RESET_MJD_SYSTEMTIME(p)  { if(p) { *p.wYear = 1858; *p.wMonth = 11; *p.wDay = 17; *p.wHour = 0; *p.wMinute = 0; *p.wSecond = 0; *p.wMilliseconds = 0; *p.wDayOfWeek = 0; } }
-
 //運用規定により2言語まで
 #define LANG_TAG_MAX 2
 
@@ -60,15 +55,10 @@ protected:
 	DWORD m_dwNeedSize; //PESの解析に必要なペイロード長
 
 	LANG_TAG_INFO_DLL m_LangTagDllList[LANG_TAG_MAX];
-	CAPTION_DATA_DLL *m_pCapList;
-	CAPTION_CHAR_DATA_DLL *m_pCapCharPool;
-	DRCS_PATTERN_DLL *m_pDRCList;
-	BYTE *m_pbBuff;
-
-	DWORD m_dwCapListSize;
-	DWORD m_dwCapCharPoolSize;
-	DWORD m_dwDRCListSize;
-	DWORD m_dwBuffSize;
+	vector<CAPTION_DATA_DLL> m_pCapList;
+	vector<CAPTION_CHAR_DATA_DLL> m_pCapCharPool;
+	vector<DRCS_PATTERN_DLL> m_pDRCList;
+	vector<BYTE> m_pbBuff;
 
 	CARIB8CharDecode m_cDec;
 
