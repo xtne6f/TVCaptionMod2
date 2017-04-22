@@ -92,6 +92,7 @@ CTVCaption2::CTVCaption2()
     , m_fAvoidHalfAlpha(false)
     , m_fIgnoreSmall(false)
     , m_fCentering(false)
+    , m_fShrinkSDScale(false)
     , m_adjustViewX(0)
     , m_adjustViewY(0)
     , m_hwndPainting(NULL)
@@ -542,6 +543,7 @@ void CTVCaption2::LoadSettings()
     m_fAvoidHalfAlpha   = GetBufferedProfileInt(buf, TEXT("AvoidHalfAlpha"), 0) != 0;
     m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
     m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
+    m_fShrinkSDScale    = GetBufferedProfileInt(buf, TEXT("ShrinkSDScale"), 0) != 0;
     m_adjustViewX       = GetBufferedProfileInt(buf, TEXT("ViewXAdjust"), 0);
     m_adjustViewY       = GetBufferedProfileInt(buf, TEXT("ViewYAdjust"), 0);
     GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList));
@@ -598,6 +600,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("AvoidHalfAlpha"), m_fAvoidHalfAlpha, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("ShrinkSDScale"), m_fShrinkSDScale, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("ViewXAdjust"), m_adjustViewX, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("ViewYAdjust"), m_adjustViewY, m_szIniPath);
     ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
@@ -1076,6 +1079,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     double scaleY = (double)(rcVideo.bottom - rcVideo.top);
     int offsetX = rcVideo.left;
     int offsetY = rcVideo.top;
+    bool shrinkScale = false;
     if (caption.wSWFMode==14) {
         // Cプロファイル
         scaleX /= 320+20/2;
@@ -1085,6 +1089,12 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     else if (caption.wSWFMode==9 || caption.wSWFMode==10) {
         scaleX /= 720;
         scaleY /= 480;
+        shrinkScale = m_fShrinkSDScale;
+        if (shrinkScale) {
+            // 16:9の描画ウィンドウに対して字幕プレーンのアスペクト比が不変となる係数をかける
+            scaleX = scaleX * 27 / 32;
+            offsetX += (rcVideo.right - rcVideo.left) * (32 - 27) / 32 / 2;
+        }
     }
     else {
         scaleX /= 960;
@@ -1093,7 +1103,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     if (m_fCentering) {
         scaleX /= 1.5;
         scaleY /= 1.5;
-        offsetX += (rcVideo.right - rcVideo.left) / 6;
+        offsetX += (rcVideo.right - rcVideo.left) * (shrinkScale ? 27 : 32) / 32 / 6;
     }
     offsetX += (rcVideo.right - rcVideo.left) * min(max(m_adjustViewX, -99), 99) / 100;
     offsetY += (rcVideo.bottom - rcVideo.top) * min(max(m_adjustViewY, -99), 99) / 100;
@@ -1823,6 +1833,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::CheckDlgButton(hDlg, IDC_CHECK_ADD_PADDING, m_paddingWidth > 0 ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_IGNORE_SMALL, m_fIgnoreSmall ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_CENTERING, m_fCentering ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_SHRINK_SD_SCALE, m_fShrinkSDScale ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_X, m_adjustViewX, TRUE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_Y, m_adjustViewY, TRUE);
     ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, m_szRomSoundList[0] && m_szRomSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
@@ -2052,6 +2063,10 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             break;
         case IDC_CHECK_CENTERING:
             m_fCentering = ::IsDlgButtonChecked(hDlg, IDC_CHECK_CENTERING) != BST_UNCHECKED;
+            fSave = fReDisp = true;
+            break;
+        case IDC_CHECK_SHRINK_SD_SCALE:
+            m_fShrinkSDScale = ::IsDlgButtonChecked(hDlg, IDC_CHECK_SHRINK_SD_SCALE) != BST_UNCHECKED;
             fSave = fReDisp = true;
             break;
         case IDC_EDIT_ADJUST_VIEW_X:
