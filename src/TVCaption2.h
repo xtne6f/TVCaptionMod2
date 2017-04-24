@@ -90,7 +90,7 @@ private:
     int m_strokeSmoothLevel;
     int m_strokeByDilate;
     int m_paddingWidth;
-    bool m_fAvoidHalfAlpha;
+    int m_avoidHalfFlags;
     bool m_fIgnoreSmall;
     bool m_fCentering;
     bool m_fShrinkSDScale;

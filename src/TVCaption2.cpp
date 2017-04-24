@@ -89,7 +89,7 @@ CTVCaption2::CTVCaption2()
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
     , m_paddingWidth(0)
-    , m_fAvoidHalfAlpha(false)
+    , m_avoidHalfFlags(0)
     , m_fIgnoreSmall(false)
     , m_fCentering(false)
     , m_fShrinkSDScale(false)
@@ -540,7 +540,8 @@ void CTVCaption2::LoadSettings()
     m_strokeSmoothLevel = GetBufferedProfileInt(buf, TEXT("StrokeSmoothLevel"), 1);
     m_strokeByDilate    = GetBufferedProfileInt(buf, TEXT("StrokeByDilate"), 22);
     m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
-    m_fAvoidHalfAlpha   = GetBufferedProfileInt(buf, TEXT("AvoidHalfAlpha"), 0) != 0;
+    m_avoidHalfFlags    = GetBufferedProfileInt(buf, TEXT("AvoidHalfAlpha"), 0) |
+                          GetBufferedProfileInt(buf, TEXT("AvoidHalfFlags"), 0);
     m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
     m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
     m_fShrinkSDScale    = GetBufferedProfileInt(buf, TEXT("ShrinkSDScale"), 0) != 0;
@@ -597,7 +598,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("AvoidHalfAlpha"), m_fAvoidHalfAlpha, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("AvoidHalfFlags"), m_avoidHalfFlags, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("ShrinkSDScale"), m_fShrinkSDScale, m_szIniPath);
@@ -1181,11 +1182,14 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 }
                 else if (fSearchHalf) {
                     for (int k = 0; HALF_F_LIST[k]; ++k) {
-                        if ((!m_fAvoidHalfAlpha || HALF_R_LIST[k] != TEXT('A') && HALF_R_LIST[k] != TEXT('a')) &&
+                        TCHAR r = HALF_R_LIST[k];
+                        if ((!(m_avoidHalfFlags & 1) || r != TEXT('A') && r != TEXT('a')) &&
+                            (!(m_avoidHalfFlags & 2) || r != TEXT('0')) &&
+                            (!(m_avoidHalfFlags & 4) || r == TEXT('A') || r == TEXT('a') || r == TEXT('0')) &&
                             HALF_F_LIST[k] <= pszShow[j] && pszShow[j] <= HALF_T_LIST[k])
                         {
                             // 半角置換可能文字
-                            szHalf[0] = HALF_R_LIST[k] + pszShow[j] - HALF_F_LIST[k];
+                            szHalf[0] = r + pszShow[j] - HALF_F_LIST[k];
                             szHalf[1] = 0;
                             pszCarry = &pszShow[j+1];
                             break;
