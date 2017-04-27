@@ -43,3 +43,4 @@
 #define IDC_EDIT_ADJUST_VIEW_X                  1034
 #define IDC_EDIT_ADJUST_VIEW_Y                  1035
 #define IDC_CHECK_SHRINK_SD_SCALE               1036
+#define IDC_COMBO_AVOID_HALF                    1037

@@ -43,7 +43,7 @@ static const CAPTION_CHAR_DATA_DLL TESTCAP_CHAR_LIST[] = {
     {L"　",CP_STR_MEDIUM,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
     {L"みんなで正の湯に行こう",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
     {L"お～",CP_STR_NORMAL,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
-    {L"ッ",CP_STR_MEDIUM,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {L"ッ！ｘ６",CP_STR_MEDIUM,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
 };
 static const CAPTION_DATA_DLL TESTCAP_LIST[] = {
     {FALSE,7,170,30,620,480,170,359,0,1,NULL,0}, // 外字例示用
@@ -540,8 +540,7 @@ void CTVCaption2::LoadSettings()
     m_strokeSmoothLevel = GetBufferedProfileInt(buf, TEXT("StrokeSmoothLevel"), 1);
     m_strokeByDilate    = GetBufferedProfileInt(buf, TEXT("StrokeByDilate"), 22);
     m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
-    m_avoidHalfFlags    = GetBufferedProfileInt(buf, TEXT("AvoidHalfAlpha"), 0) |
-                          GetBufferedProfileInt(buf, TEXT("AvoidHalfFlags"), 0);
+    m_avoidHalfFlags    = GetBufferedProfileInt(buf, TEXT("AvoidHalfFlags"), 0);
     m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
     m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
     m_fShrinkSDScale    = GetBufferedProfileInt(buf, TEXT("ShrinkSDScale"), 0) != 0;
@@ -1835,6 +1834,12 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::SetDlgItemInt(hDlg, IDC_EDIT_BY_DILATE, m_strokeByDilate, FALSE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_VERT_ANTI, m_vertAntiAliasing, FALSE);
     ::CheckDlgButton(hDlg, IDC_CHECK_ADD_PADDING, m_paddingWidth > 0 ? BST_CHECKED : BST_UNCHECKED);
+
+    static const LPCTSTR AVOID_HALF_LIST[] = { TEXT(""), TEXT("A"), TEXT("1"), TEXT("1A"), TEXT("@"), TEXT("@A"), TEXT("@1"), TEXT("@1A"), NULL };
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_AVOID_HALF, CB_RESETCONTENT, 0, 0);
+    AddToComboBoxList(hDlg, IDC_COMBO_AVOID_HALF, AVOID_HALF_LIST);
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_AVOID_HALF, CB_SETCURSEL, m_avoidHalfFlags & 7, 0);
+
     ::CheckDlgButton(hDlg, IDC_CHECK_IGNORE_SMALL, m_fIgnoreSmall ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_CENTERING, m_fCentering ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_SHRINK_SD_SCALE, m_fShrinkSDScale ? BST_CHECKED : BST_UNCHECKED);
@@ -2060,6 +2065,12 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
         case IDC_CHECK_ADD_PADDING:
             m_paddingWidth = ::IsDlgButtonChecked(hDlg, IDC_CHECK_ADD_PADDING) != BST_UNCHECKED ? 5 : 0;
             fSave = fReDisp = true;
+            break;
+        case IDC_COMBO_AVOID_HALF:
+            if (HIWORD(wParam) == CBN_SELCHANGE) {
+                m_avoidHalfFlags = static_cast<int>(::SendDlgItemMessage(hDlg, IDC_COMBO_AVOID_HALF, CB_GETCURSEL, 0, 0)) & 7;
+                fSave = fReDisp = true;
+            }
             break;
         case IDC_CHECK_IGNORE_SMALL:
             m_fIgnoreSmall = ::IsDlgButtonChecked(hDlg, IDC_CHECK_IGNORE_SMALL) != BST_UNCHECKED;
