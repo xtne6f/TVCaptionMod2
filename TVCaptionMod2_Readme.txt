@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.0
+﻿TVTest TVCaptionMod2 Plugin ver.2.1
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -16,6 +16,7 @@ TVCaptionMod2.tvtpを以前のものと置きかえてください。Caption.dll
 デフォルトの外字テーブル(!std)をUnicode5.2ベースに更新しました。Unicode5.2に対応
 したフォントであれば基本的に外字フォントの導入は不要です。以前の外字テーブルが必
 要な場合は"gaiji.zip"の"TVCaptionMod2_Gaiji_stdpua.txt"を使ってください。
+設定キーAvoidHalfAlphaをAvoidHalfFlagsに変更しました。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpを入れ、右クリックメニューからプラ
@@ -47,9 +48,9 @@ TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 外字テーブル名は和田研フォントと同じです。"j"などの下部を表示できるようにやや上
 付きなので文字位置補正のY方向を5ぐらいに設定すると丁度いいです。
 rounded-mplus-1m-arib-20131205.zip
-https://www.axfc.net/u/search.pl?md5=515426ac97c31be34a1ec0210e2ed64e
+https://www.axfc.net/u/search.pl?sha1=c5d3f3115218431e3fda0b8c25ac62e05ce48428
 rounded-mplus-1m-arib-20121219.zip
-https://www.axfc.net/u/search.pl?md5=a62e691abf379ff1cf777519b65d3f5f
+https://www.axfc.net/u/search.pl?sha1=a75e3938b25c6426197d919a37b784f16474cbe8
 (1年ぐらいで流れるっぽいので入り用なら再頒布してください)
 
 ■既知の不具合
@@ -68,8 +69,8 @@ EnOsdCompositor
     # にします。たぶんつぎの場合に効果的です:
     # ・TVTest本体のキャプチャ機能でキャプをとりたい
     # ・XPや非Aero環境での性能向上
-    # APIフックを利用した比較的リスキーな機能です。Aeroな環境では従来の設定キー
-    # Method[=2]を利用することを強くお勧めします。
+    # TVTest ver.0.9.0未満ではAPIフックを利用する比較的リスキーな機能です。Aero
+    # な環境では従来の設定キーMethod[=2]を利用することをお勧めします。
 Version*
     設定ファイルのバージョン
     # デフォルト値を出力するために使います。特にユーザがいじる必要はありません。
@@ -201,17 +202,21 @@ StrokeByDilate
 PaddingWidth*
     両端の余白をふやす幅
     # 文字の左右端が背景枠からはみ出るようなときに使います。
-AvoidHalfAlpha*
-    半角英字への置換をオフにする[=1]かどうか
-    # プロポーショナルな英字の描画が乱れるときに使います。
+AvoidHalfFlags
+    英字/数字/その他約物(@や!など)の半角置換を回避するフラグ
+    # (旧AvoidHalfAlphaから拡張)
+    # プロポーショナルな文字の描画が乱れるときに使います。
     # この設定でプロポーショナルフォントが破綻なく使用できるとは限りません。等幅
-    # フォントの使用が原則です。
+    # フォントの使用をお勧めします。
 IgnoreSmall
     振り仮名らしきものを除外する[=1]かどうか
     # 厳密には小型サイズ(SSZ)の字幕文を除外します。
 Centering
     字幕を画面中央に表示する[=1]かどうか
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
+ShrinkSDScale
+    SD字幕の横幅をすこし縮める[=1]かどうか
+    # 標準画質放送の字幕は横に引き伸ばされることが多いですが、これを補正します。
 ViewXAdjust / ViewYAdjust
     字幕の表示位置を補正(単位はパーセント)
 RomSoundList*
