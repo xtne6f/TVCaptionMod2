@@ -115,8 +115,9 @@ CTVCaption2::CTVCaption2()
     m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
     m_szRomSoundList[0] = 0;
-    ::memset(&m_rcAdjust, 0, sizeof(m_rcAdjust));
-    ::memset(&m_rcGaijiAdjust, 0, sizeof(m_rcGaijiAdjust));
+    RECT rcZero = {};
+    m_rcAdjust = rcZero;
+    m_rcGaijiAdjust = rcZero;
 
     for (int index = 0; index < STREAM_MAX; ++index) {
         m_showFlags[index] = 0;
@@ -150,7 +151,7 @@ bool CTVCaption2::GetPluginInfo(TVTest::PluginInfo *pInfo)
 bool CTVCaption2::Initialize()
 {
     // ウィンドウクラスの登録
-    WNDCLASS wc = {0};
+    WNDCLASS wc = {};
     wc.lpfnWndProc = PaintingWndProc;
     wc.hInstance = g_hinstDLL;
     wc.lpszClassName = TV_CAPTION2_WINDOW_CLASS;
@@ -869,7 +870,7 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                         // ファイルがなければ書きこむ
                         HANDLE hFile = ::CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
                         if (hFile != INVALID_HANDLE_VALUE) {
-                            BITMAPFILEHEADER bmfHeader = {0};
+                            BITMAPFILEHEADER bmfHeader = {};
                             bmfHeader.bfType = 0x4D42;
                             bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(bih);
                             bmfHeader.bfSize = bmfHeader.bfOffBits + sizeImage;
@@ -1132,9 +1133,9 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         const DRCS_PATTERN_DLL *pDrcs = NULL;
         LPCTSTR pszDrcsStr = NULL;
         bool fSearchGaiji = m_szGaijiFaceName[0] != 0;
-        WCHAR szGaiji[3] = {0};
+        WCHAR szGaiji[3] = {};
         bool fSearchHalf = charData.wCharSizeMode == CP_STR_MEDIUM;
-        WCHAR szHalf[2] = {0};
+        WCHAR szHalf[2] = {};
         if (drcsCount != 0 || fSearchGaiji || fSearchHalf) {
             for (int j = 0; pszShow[j]; ++j) {
                 if (0xEC00 <= pszShow[j] && pszShow[j] <= 0xECFF) {
@@ -2115,7 +2116,7 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
                 TCHAR testGaiji[64];
                 ::lstrcpy(testGaiji, TEXT("外字"));
                 for (int i = 0, j = 0; i < GAIJI_TABLE_SIZE; ++i) {
-                    WCHAR wc[3] = {0};
+                    WCHAR wc[3] = {};
                     wc[0] = gaijiTable[j++];
                     wc[1] = (wc[0] & 0xFC00) == 0xD800 ? gaijiTable[j++] : 0;
                     if (i % G_CELL_SIZE == 0 || i % (G_CELL_SIZE + 1) == 9) ::lstrcat(testGaiji, wc);

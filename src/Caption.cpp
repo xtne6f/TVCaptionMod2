@@ -9,7 +9,7 @@ BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern)
 	if( !(wGradation==2 || wGradation==4) || nWidth>DRCS_SIZE_MAX || nHeight>DRCS_SIZE_MAX ){
 		return FALSE;
 	}
-	BYTE bData[(DRCS_SIZE_MAX*DRCS_SIZE_MAX + 3) / 4] = {0};
+	BYTE bData[(DRCS_SIZE_MAX*DRCS_SIZE_MAX + 3) / 4] = {};
 	const BYTE *pbBitmap = pPattern->pbBitmap;
 
 	DWORD dwDataLen = wGradation==2 ? (nWidth*nHeight+7)/8 : (nWidth*nHeight+3)/4;

@@ -33,17 +33,11 @@ void *CPseudoOSD::m_pBitsMono=NULL;
 bool CPseudoOSD::Initialize(HINSTANCE hinst)
 {
 	if (m_hinst==NULL) {
-		WNDCLASS wc;
+		WNDCLASS wc={};
 
 		wc.style=CS_HREDRAW;
 		wc.lpfnWndProc=WndProc;
-		wc.cbClsExtra=0;
-		wc.cbWndExtra=0;
 		wc.hInstance=hinst;
-		wc.hIcon=NULL;
-		wc.hCursor=NULL;
-		wc.hbrBackground=NULL;
-		wc.lpszMenuName=NULL;
 		wc.lpszClassName=m_pszWindowClass;
 		if (::RegisterClass(&wc)==0)
 			return false;
@@ -400,7 +394,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 	UINT oldTa=::SetTextAlign(hdc,TA_LEFT|TA_BOTTOM|TA_NOUPDATECP);
 	int x=0;
 	std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
-	LOGFONT lfLast={0};
+	LOGFONT lfLast={};
 	HFONT hfont=NULL;
 	for (; it!=m_StyleList.end(); ++it) {
 		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
@@ -473,7 +467,7 @@ HBITMAP CPseudoOSD::CreateBitmap()
 
 	// ここだけbottom-upビットマップなので注意
 	void *pBits;
-	BITMAPINFO bmi={0};
+	BITMAPINFO bmi={};
 	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
 	bmi.bmiHeader.biWidth=Width;
 	bmi.bmiHeader.biHeight=Height;
@@ -501,7 +495,7 @@ void CPseudoOSD::Compose(HDC hdc,int Left,int Top)
 
 	// OSDのイメージを描画する一時ビットマップ
 	void *pBits;
-	BITMAPINFO bmi={0};
+	BITMAPINFO bmi={};
 	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
 	bmi.bmiHeader.biWidth=rc.right;
 	bmi.bmiHeader.biHeight=-rc.bottom;
@@ -834,7 +828,7 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAl
 	struct {
 		BITMAPINFOHEADER bmiHeader;
 		RGBQUAD bmiColors[2];
-	} bmiMono={0};
+	} bmiMono={};
 	bmiMono.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
 	bmiMono.bmiHeader.biWidth=Width*4;
 	bmiMono.bmiHeader.biHeight=-HeightMono;
