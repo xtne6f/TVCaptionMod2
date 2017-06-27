@@ -4,6 +4,25 @@
 #include <ShlObj.h>
 #include "Util.h"
 
+// 必要なバッファを確保してGetPrivateProfileSection()を呼ぶ
+std::vector<TCHAR> GetPrivateProfileSectionBuffer(LPCTSTR lpAppName, LPCTSTR lpFileName)
+{
+    std::vector<TCHAR> buf(4096);
+    for (;;) {
+        DWORD len = GetPrivateProfileSection(lpAppName, &buf.front(), static_cast<DWORD>(buf.size()), lpFileName);
+        if (len < buf.size() - 2) {
+            buf.resize(len + 1);
+            break;
+        }
+        if (buf.size() >= READ_FILE_MAX_SIZE / 2) {
+            buf.assign(1, TEXT('\0'));
+            break;
+        }
+        buf.resize(buf.size() * 2);
+    }
+    return buf;
+}
+
 // GetPrivateProfileSection()で取得したバッファから、キーに対応する文字列を取得する
 void GetBufferedProfileString(LPCTSTR lpBuff, LPCTSTR lpKeyName, LPCTSTR lpDefault, LPTSTR lpReturnedString, DWORD nSize)
 {
@@ -36,16 +55,6 @@ int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault)
 {
     TCHAR szVal[32];
     GetBufferedProfileString(lpBuff, lpKeyName, TEXT(""), szVal, _countof(szVal));
-    int nRet;
-    return ::StrToIntEx(szVal, STIF_DEFAULT, &nRet) ? nRet : nDefault;
-}
-
-// GetPrivateProfileInt()の負値対応版
-// 実際にはGetPrivateProfileInt()も負値を返すが、仕様ではない
-int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName)
-{
-    TCHAR szVal[32];
-    GetPrivateProfileString(lpAppName, lpKeyName, TEXT(""), szVal, _countof(szVal), lpFileName);
     int nRet;
     return ::StrToIntEx(szVal, STIF_DEFAULT, &nRet) ? nRet : nDefault;
 }

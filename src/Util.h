@@ -3,9 +3,6 @@
 
 #include <vector>
 
-// NewReadTextFileToEnd()の最大ファイルサイズ
-#define READ_FILE_MAX_SIZE  (4096 * 1024)
-
 #ifdef _DEBUG
 #define DEBUG_OUT(x) ::OutputDebugString(x)
 #define DDEBUG_OUT
@@ -13,9 +10,11 @@
 #define DEBUG_OUT(x)
 #endif
 
+static const size_t READ_FILE_MAX_SIZE = 64 * 1024 * 1024;
+
+std::vector<TCHAR> GetPrivateProfileSectionBuffer(LPCTSTR lpAppName, LPCTSTR lpFileName);
 void GetBufferedProfileString(LPCTSTR lpBuff, LPCTSTR lpKeyName, LPCTSTR lpDefault, LPTSTR lpReturnedString, DWORD nSize);
 int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault);
-int GetPrivateProfileSignedInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int nDefault, LPCTSTR lpFileName);
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
 std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
@@ -25,9 +24,7 @@ void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList);
 void AddFaceNameToComboBoxList(HWND hDlg, int id);
 inline bool Is1SegPmtPid(int pid) { return 0x1FC8 <= pid && pid <= 0x1FCF; }
 
-#define APP_NAME TEXT("TVCaption2")
-
-#define PCR_PER_MSEC 45
+static const DWORD PCR_PER_MSEC = 45;
 
 #define H_262_VIDEO         0x02
 #define PES_PRIVATE_DATA    0x06

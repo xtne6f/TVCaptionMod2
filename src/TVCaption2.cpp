@@ -438,7 +438,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
     if (fEnable) {
         // 設定の読み込み
         LoadSettings();
-        int iniVer = GetPrivateProfileSignedInt(TEXT("Settings"), TEXT("Version"), 0, m_szIniPath);
+        int iniVer = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("Version"), 0, m_szIniPath);
         if (iniVer < INFO_VERSION) {
             // デフォルトの設定キーを出力するため
             SaveSettings();
@@ -498,22 +498,18 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
 // 設定の読み込み
 void CTVCaption2::LoadSettings()
 {
-    TCHAR buf[4096];
-    if (::GetPrivateProfileSection(TEXT("Settings"), buf, _countof(buf), m_szIniPath) >= _countof(buf) - 2) {
-        buf[0] = 0;
-    }
-    GetBufferedProfileString(buf, TEXT("CaptureFolder"), TEXT(""), m_szCaptureFolder, _countof(m_szCaptureFolder));
-    GetBufferedProfileString(buf, TEXT("CaptureFileName"), TEXT("Capture"), m_szCaptureFileName, _countof(m_szCaptureFileName));
-    m_settingsIndex = GetBufferedProfileInt(buf, TEXT("SettingsIndex"), 0);
+    std::vector<TCHAR> vbuf = GetPrivateProfileSectionBuffer(TEXT("Settings"), m_szIniPath);
+    GetBufferedProfileString(&vbuf.front(), TEXT("CaptureFolder"), TEXT(""), m_szCaptureFolder, _countof(m_szCaptureFolder));
+    GetBufferedProfileString(&vbuf.front(), TEXT("CaptureFileName"), TEXT("Capture"), m_szCaptureFileName, _countof(m_szCaptureFileName));
+    m_settingsIndex = GetBufferedProfileInt(&vbuf.front(), TEXT("SettingsIndex"), 0);
 
     // ここからはセクション固有
     if (m_settingsIndex > 0) {
         TCHAR section[32];
         ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
-        if (::GetPrivateProfileSection(section, buf, _countof(buf), m_szIniPath) >= _countof(buf) - 2) {
-            buf[0] = 0;
-        }
+        vbuf = GetPrivateProfileSectionBuffer(section, m_szIniPath);
     }
+    LPCTSTR buf = &vbuf.front();
     GetBufferedProfileString(buf, TEXT("FaceName"), TEXT(""), m_szFaceName, _countof(m_szFaceName));
     GetBufferedProfileString(buf, TEXT("GaijiFaceName"), TEXT(""), m_szGaijiFaceName, _countof(m_szGaijiFaceName));
     GetBufferedProfileString(buf, TEXT("GaijiTableName"), TEXT("!std"), m_szGaijiTableName, _countof(m_szGaijiTableName));
@@ -614,7 +610,7 @@ void CTVCaption2::SwitchSettings(int specIndex)
     m_settingsIndex = specIndex < 0 ? m_settingsIndex + 1 : specIndex;
     TCHAR section[32];
     ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
-    if (GetPrivateProfileSignedInt(section, TEXT("Method"), -1, m_szIniPath) == -1) {
+    if (::GetPrivateProfileInt(section, TEXT("Method"), 0, m_szIniPath) == 0) {
         m_settingsIndex = 0;
     }
     WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_szIniPath);
@@ -656,7 +652,7 @@ int CTVCaption2::GetSettingsCount() const
     for (int i = 1; ; ++i) {
         TCHAR section[32];
         ::wsprintf(section, TEXT("Settings%d"), i);
-        if (GetPrivateProfileSignedInt(section, TEXT("Method"), -1, m_szIniPath) == -1) {
+        if (::GetPrivateProfileInt(section, TEXT("Method"), 0, m_szIniPath) == 0) {
             return i;
         }
     }

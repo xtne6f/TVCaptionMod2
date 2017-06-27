@@ -20,7 +20,7 @@ static DWORD g_dwMagic;
 #define TIMER_ID_FLASHING	1
 
 
-const LPCTSTR CPseudoOSD::m_pszWindowClass=APP_NAME TEXT(" Pseudo OSD");
+const LPCTSTR CPseudoOSD::m_pszWindowClass=TEXT("TVCaption2 Pseudo OSD");
 HINSTANCE CPseudoOSD::m_hinst=NULL;
 int CPseudoOSD::m_RefCount=0;
 
