@@ -23,6 +23,13 @@ class CTVCaption2 : public TVTest::CTVTestPlugin
             bool operator()(const DRCS_PAIR &l, const DRCS_PAIR &r) { return ::memcmp(l.md5, r.md5, 16) < 0; }
         };
     };
+    struct SHIFT_SMALL_STATE {
+        int posY;
+        int shiftH;
+        int dirH;
+        bool fSmall;
+        SHIFT_SMALL_STATE() : posY(-1), shiftH(0), dirH(0) {}
+    };
 public:
     // CTVTestPlugin
     CTVCaption2();
@@ -51,8 +58,9 @@ private:
     void HideAllOsds();
     void DestroyOsds();
     CPseudoOSD &CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
+    void DryrunCaptionData(const CAPTION_DATA_DLL &caption, SHIFT_SMALL_STATE &ssState);
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
-                         HWND hwndContainer, const RECT &rcVideo);
+                         SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest = NULL);
     void OnSize(STREAM_INDEX index);
@@ -92,6 +100,7 @@ private:
     int m_paddingWidth;
     int m_avoidHalfFlags;
     bool m_fIgnoreSmall;
+    bool m_fShiftSmall;
     bool m_fCentering;
     bool m_fShrinkSDScale;
     int m_adjustViewX;
@@ -108,6 +117,7 @@ private:
     bool m_fNeedtoShow;
     bool m_fFlashingFlipFlop;
     bool m_fProfileC;
+    SHIFT_SMALL_STATE m_shiftSmallState[STREAM_MAX];
 
     // 字幕解析
     CCaptionDll m_captionDll;

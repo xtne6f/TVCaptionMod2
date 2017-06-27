@@ -91,6 +91,7 @@ CTVCaption2::CTVCaption2()
     , m_paddingWidth(0)
     , m_avoidHalfFlags(0)
     , m_fIgnoreSmall(false)
+    , m_fShiftSmall(false)
     , m_fCentering(false)
     , m_fShrinkSDScale(false)
     , m_adjustViewX(0)
@@ -539,6 +540,7 @@ void CTVCaption2::LoadSettings()
     m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
     m_avoidHalfFlags    = GetBufferedProfileInt(buf, TEXT("AvoidHalfFlags"), 0);
     m_fIgnoreSmall      = GetBufferedProfileInt(buf, TEXT("IgnoreSmall"), 0) != 0;
+    m_fShiftSmall       = GetBufferedProfileInt(buf, TEXT("ShiftSmall"), 0) != 0;
     m_fCentering        = GetBufferedProfileInt(buf, TEXT("Centering"), 0) != 0;
     m_fShrinkSDScale    = GetBufferedProfileInt(buf, TEXT("ShrinkSDScale"), 0) != 0;
     m_adjustViewX       = GetBufferedProfileInt(buf, TEXT("ViewXAdjust"), 0);
@@ -596,6 +598,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("AvoidHalfFlags"), m_avoidHalfFlags, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
+    WritePrivateProfileInt(section, TEXT("ShiftSmall"), m_fShiftSmall, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("ShrinkSDScale"), m_fShrinkSDScale, m_szIniPath);
     WritePrivateProfileInt(section, TEXT("ViewXAdjust"), m_adjustViewX, m_szIniPath);
@@ -1059,9 +1062,41 @@ static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const 
 }
 
 
+// 字幕本文を予行で1行だけ処理する
+void CTVCaption2::DryrunCaptionData(const CAPTION_DATA_DLL &caption, SHIFT_SMALL_STATE &ssState)
+{
+    int posY = caption.wPosY;
+
+    if (posY < ssState.posY) {
+        // 前回よりも上方なのでリセット
+        ssState = SHIFT_SMALL_STATE();
+    }
+    if (posY > ssState.posY) {
+        if (ssState.dirH > 0 && posY >= ssState.posY + ssState.dirH && ssState.fSmall) {
+            // 前回の行を詰めることができる
+            ssState.shiftH -= ssState.dirH;
+        }
+        ssState.dirH = 0;
+        // 先頭行は詰めない
+        ssState.fSmall = ssState.posY >= 0;
+    }
+    ssState.posY = posY;
+
+    for (DWORD i = 0; i < caption.dwListCount; ++i) {
+        const CAPTION_CHAR_DATA_DLL &charData = caption.pstCharList[i];
+        int dirH;
+        GetCharSize(NULL, NULL, NULL, &dirH, charData);
+        if (ssState.dirH <= 0) {
+            ssState.dirH = dirH;
+        }
+        ssState.fSmall = ssState.fSmall && dirH == ssState.dirH && m_fShiftSmall && charData.wCharSizeMode == CP_STR_SMALL;
+    }
+}
+
+
 // 字幕本文を1行だけ処理する
 void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
-                                  HWND hwndContainer, const RECT &rcVideo)
+                                  SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo)
 {
 #ifdef DDEBUG_OUT
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): "));
@@ -1109,6 +1144,22 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     int posX = caption.wPosX;
     int posY = caption.wPosY;
 
+    if (posY < ssState.posY) {
+        // 前回よりも上方なのでリセット
+        ssState = SHIFT_SMALL_STATE();
+    }
+    if (posY > ssState.posY) {
+        if (ssState.dirH > 0 && posY >= ssState.posY + ssState.dirH && ssState.fSmall) {
+            // 前回の行を詰めることができる
+            ssState.shiftH -= ssState.dirH;
+        }
+        ssState.dirH = 0;
+        // 先頭行は詰めない
+        ssState.fSmall = ssState.posY >= 0;
+    }
+    ssState.posY = posY;
+    posY += ssState.shiftH;
+
     // DRCSか外字の描画後に繰り越す文字列
     LPCTSTR pszCarry = NULL;
     // スタイルが同じなのでOSDをまとめられるときの、繰り越すOSD
@@ -1124,6 +1175,11 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         int charNormalScaleH = (int)(charData.wCharH * scaleY);
         // 両端の余白幅は文字高さを基準にきめる
         int paddingW = (charData.wCharH * m_paddingWidth + 71) / 72;
+
+        if (ssState.dirH <= 0) {
+            ssState.dirH = dirH;
+        }
+        ssState.fSmall = ssState.fSmall && dirH == ssState.dirH && m_fShiftSmall && charData.wCharSizeMode == CP_STR_SMALL;
 
         LPCTSTR pszShow = m_fIgnoreSmall && charData.wCharSizeMode == CP_STR_SMALL ? TEXT("") :
                           pszCarry ? pszCarry : static_cast<LPCTSTR>(charData.pszDecode);
@@ -1482,6 +1538,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
         if (m_fNeedtoShow && ((m_showFlags[index]>>dmf)&1)) {
             if (pCaption->bClear) {
                 m_fOsdClear[index] = true;
+                m_shiftSmallState[index] = SHIFT_SMALL_STATE();
             }
             else {
                 RECT rcVideo;
@@ -1490,13 +1547,31 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
                     DWORD drcsCount = 0;
                     if (!pCaptionForTest) {
                         pCaptionManager->GetDrcsList(&pDrcsList, &drcsCount);
+                        if (m_shiftSmallState[index].posY < 0) {
+                            // クリア後の最初の字幕本文
+                            SHIFT_SMALL_STATE ssState;
+                            for (int i = -1; ; ++i) {
+                                const CAPTION_DATA_DLL *p = i < 0 ? pCaption : pCaptionManager->GetCaption(pcr, m_fIgnorePts, i);
+                                if (!p || p->bClear) {
+                                    break;
+                                }
+                                ssState.shiftH = -1;
+                                DryrunCaptionData(*p, ssState);
+                                if (ssState.shiftH >= 0) {
+                                    // リセットされた
+                                    break;
+                                }
+                                // 上に詰める高さを打ち消すことで実質的に下に詰める
+                                m_shiftSmallState[index].shiftH -= ssState.shiftH + 1;
+                            }
+                        }
                     }
-                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, m_hwndContainer, rcVideo);
+                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, m_shiftSmallState[index], m_hwndContainer, rcVideo);
                 }
             }
         }
         // 次行が取得できるかどうか
-        if (!pCaptionForTest && pCaptionManager->PopCaption(pcr, m_fIgnorePts, true)) {
+        if (!pCaptionForTest && pCaptionManager->GetCaption(pcr, m_fIgnorePts, 0)) {
             // 他のメッセージの遅延を減らすため次行の描画は後回しにする
             ::PostMessage(m_hwndPainting, WM_PROCESS_CAPTION, 0, 0);
             return;
@@ -1838,6 +1913,8 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::SendDlgItemMessage(hDlg, IDC_COMBO_AVOID_HALF, CB_SETCURSEL, m_avoidHalfFlags & 7, 0);
 
     ::CheckDlgButton(hDlg, IDC_CHECK_IGNORE_SMALL, m_fIgnoreSmall ? BST_CHECKED : BST_UNCHECKED);
+    ::EnableWindow(::GetDlgItem(hDlg, IDC_CHECK_SHIFT_SMALL), m_fIgnoreSmall);
+    ::CheckDlgButton(hDlg, IDC_CHECK_SHIFT_SMALL, m_fShiftSmall ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_CENTERING, m_fCentering ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_SHRINK_SD_SCALE, m_fShrinkSDScale ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_X, m_adjustViewX, TRUE);
@@ -2071,6 +2148,10 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             break;
         case IDC_CHECK_IGNORE_SMALL:
             m_fIgnoreSmall = ::IsDlgButtonChecked(hDlg, IDC_CHECK_IGNORE_SMALL) != BST_UNCHECKED;
+            ::EnableWindow(::GetDlgItem(hDlg, IDC_CHECK_SHIFT_SMALL), m_fIgnoreSmall);
+            // FALL THROUGH!
+        case IDC_CHECK_SHIFT_SMALL:
+            m_fShiftSmall = m_fIgnoreSmall && ::IsDlgButtonChecked(hDlg, IDC_CHECK_SHIFT_SMALL) != BST_UNCHECKED;
             fSave = fReDisp = true;
             break;
         case IDC_CHECK_CENTERING:
