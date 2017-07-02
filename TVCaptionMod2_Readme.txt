@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.1
+﻿TVTest TVCaptionMod2 Plugin ver.2.2
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -211,6 +211,9 @@ AvoidHalfFlags
 IgnoreSmall
     振り仮名らしきものを除外する[=1]かどうか
     # 厳密には小型サイズ(SSZ)の字幕文を除外します。
+ShiftSmall
+    振り仮名らしきものの行間を詰める[=1]かどうか
+    # IgnoreSmallを[=1]にしたときの行間が気になるときに使います。
 Centering
     字幕を画面中央に表示する[=1]かどうか
     # 厳密には字幕の表示領域を縦横2/3にして上部中央に配置します。
