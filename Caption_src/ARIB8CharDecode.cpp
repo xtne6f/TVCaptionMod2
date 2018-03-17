@@ -63,6 +63,20 @@ static const wchar_t KanaTable[]={
 	L'ヰ',L'ヱ',L'ヲ',L'ン',L'ヴ',L'ヵ',L'ヶ',L'ヽ',
 	L'ヾ',L'ー',L'。',L'「',L'」',L'、',L'・'
 };
+static const wchar_t JisXKanaTable[]={
+	L'。', L'「', L'」', L'、', L'・', L'ヲ', L'ァ',
+	L'ィ', L'ゥ', L'ェ', L'ォ', L'ャ', L'ュ', L'ョ', L'ッ',
+	L'ー', L'ア', L'イ', L'ウ', L'エ', L'オ', L'カ', L'キ',
+	L'ク', L'ケ', L'コ', L'サ', L'シ', L'ス', L'セ', L'ソ',
+	L'タ', L'チ', L'ツ', L'テ', L'ト', L'ナ', L'ニ', L'ヌ',
+	L'ネ', L'ノ', L'ハ', L'ヒ', L'フ', L'ヘ', L'ホ', L'マ',
+	L'ミ', L'ム', L'メ', L'モ', L'ヤ', L'ユ', L'ヨ', L'ラ',
+	L'リ', L'ル', L'レ', L'ロ', L'ワ', L'ン', L'゛', L'゜',
+	L'・', L'・', L'・', L'・', L'・', L'・', L'・', L'・',
+	L'・', L'・', L'・', L'・', L'・', L'・', L'・', L'・',
+	L'・', L'・', L'・', L'・', L'・', L'・', L'・', L'・',
+	L'・', L'・', L'・', L'・', L'・', L'・', L'・'
+};
 
 //デフォルトマクロ文(NULは効果がないと規定されている)
 static const BYTE DefaultMacro[][20]={
@@ -116,10 +130,6 @@ CARIB8CharDecode::CARIB8CharDecode(void)
 {
 	DWORD dwRet;
 	ResetGaijiTable(&dwRet);
-}
-
-CARIB8CharDecode::~CARIB8CharDecode(void)
-{
 }
 
 //STD-B24で規定される初期化動作をおこなう
@@ -667,10 +677,10 @@ BOOL CARIB8CharDecode::C1( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		break;
 	case 0x9B:
 		//CSI コントロールシーケンス
-		if( CSI( pbSrc, dwSrcSize, &dwReadBuff ) == FALSE ){
+		if( CSI( pbSrc+1, dwSrcSize-1, &dwReadBuff ) == FALSE ){
 			return FALSE;
 		}
-		dwReadSize = dwReadBuff;
+		dwReadSize = 1+dwReadBuff;
 		break;
 	default:
 		//未サポートの制御コード
@@ -695,9 +705,8 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 		switch( mode->iMF ){
 			case MF_JISX_KANA:
 				{
-				//JISX X0201の0x7FまではASCIIと同じ -> STD-B24には記述がみつからなかったので一旦普通の扱いにする
-				//Gセットのカタカナ系集合
-				m_strDecode += KanaTable[(pbSrc[0]&0x7F)-0x21];
+				//JIS X0201片仮名
+				m_strDecode += JisXKanaTable[(pbSrc[0]&0x7F)-0x21];
 				ActivePositionForward(1);
 				}
 				break;
@@ -1040,10 +1049,9 @@ BOOL CARIB8CharDecode::ESC( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 	return TRUE;
 }
 
-//ESC()と違いpbSrcの0要素目にCSI(0x9B)自身を含むので注意
 BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSize )
 {
-	DWORD dwReadSize = 1;
+	DWORD dwReadSize = 0;
 
 	//中間文字0x20まで移動
 	WORD wP1 = 0;

@@ -107,7 +107,6 @@ class CARIB8CharDecode
 {
 public:
 	CARIB8CharDecode(void);
-	~CARIB8CharDecode(void);
 	//字幕を想定したワイド文字列への変換
 	BOOL Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList, CDRCMap* pDRCMap, WORD wInitSWFMode );
 	//DRCSヘッダの分析(参考:mark10als)
