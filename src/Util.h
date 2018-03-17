@@ -1,7 +1,9 @@
 ﻿#ifndef INCLUDE_UTIL_H
 #define INCLUDE_UTIL_H
 
+#include <string>
 #include <vector>
+#include <tchar.h>
 
 #ifdef _DEBUG
 #define DEBUG_OUT(x) ::OutputDebugString(x)
@@ -9,6 +11,8 @@
 #else
 #define DEBUG_OUT(x)
 #endif
+
+typedef std::basic_string<TCHAR> tstring;
 
 static const size_t READ_FILE_MAX_SIZE = 64 * 1024 * 1024;
 
@@ -135,8 +139,8 @@ private:
     recursive_mutex_ *m_mtx;
 };
 
-bool CompareLogFont(const LOGFONT *pFont1,const LOGFONT *pFont2);
-bool BrowseFolderDialog(HWND hwndOwner,LPTSTR pszDirectory,LPCTSTR pszTitle);
+bool CompareLogFont(const LOGFONT &lf1, const LOGFONT &lf2);
+bool BrowseFolderDialog(HWND hwndOwner, TCHAR (&szDirectory)[MAX_PATH], LPCTSTR pszTitle);
 
 namespace DrawUtil {
 

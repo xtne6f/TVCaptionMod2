@@ -1,5 +1,4 @@
 ﻿#include <Windows.h>
-#include <Shlwapi.h>
 #include <CommCtrl.h>
 #include <ShlObj.h>
 #include "Util.h"
@@ -26,44 +25,40 @@ std::vector<TCHAR> GetPrivateProfileSectionBuffer(LPCTSTR lpAppName, LPCTSTR lpF
 // GetPrivateProfileSection()で取得したバッファから、キーに対応する文字列を取得する
 void GetBufferedProfileString(LPCTSTR lpBuff, LPCTSTR lpKeyName, LPCTSTR lpDefault, LPTSTR lpReturnedString, DWORD nSize)
 {
-    int nKeyLen = ::lstrlen(lpKeyName);
-    if (nKeyLen <= 126) {
-        TCHAR szKey[128];
-        ::lstrcpy(szKey, lpKeyName);
-        ::lstrcpy(szKey + (nKeyLen++), TEXT("="));
-        while (*lpBuff) {
-            int nLen = ::lstrlen(lpBuff);
-            if (!::StrCmpNI(lpBuff, szKey, nKeyLen)) {
-                if ((lpBuff[nKeyLen] == TEXT('\'') || lpBuff[nKeyLen] == TEXT('"')) &&
-                    nLen >= nKeyLen + 2 && lpBuff[nKeyLen] == lpBuff[nLen - 1])
-                {
-                    ::lstrcpyn(lpReturnedString, lpBuff + nKeyLen + 1, min(nLen-nKeyLen-1, static_cast<int>(nSize)));
-                }
-                else {
-                    ::lstrcpyn(lpReturnedString, lpBuff + nKeyLen, nSize);
-                }
-                return;
+    size_t nKeyLen = _tcslen(lpKeyName);
+    while (*lpBuff) {
+        size_t nLen = _tcslen(lpBuff);
+        if (!_tcsnicmp(lpBuff, lpKeyName, nKeyLen) && lpBuff[nKeyLen] == TEXT('=')) {
+            if ((lpBuff[nKeyLen + 1] == TEXT('\'') || lpBuff[nKeyLen + 1] == TEXT('"')) &&
+                nLen >= nKeyLen + 3 && lpBuff[nKeyLen + 1] == lpBuff[nLen - 1])
+            {
+                _tcsncpy_s(lpReturnedString, nSize, lpBuff + nKeyLen + 2, min(nLen - nKeyLen - 3, static_cast<size_t>(nSize - 1)));
             }
-            lpBuff += nLen + 1;
+            else {
+                _tcsncpy_s(lpReturnedString, nSize, lpBuff + nKeyLen + 1, _TRUNCATE);
+            }
+            return;
         }
+        lpBuff += nLen + 1;
     }
-    ::lstrcpyn(lpReturnedString, lpDefault, nSize);
+    _tcsncpy_s(lpReturnedString, nSize, lpDefault, _TRUNCATE);
 }
 
 // GetPrivateProfileSection()で取得したバッファから、キーに対応する数値を取得する
 int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault)
 {
-    TCHAR szVal[32];
-    GetBufferedProfileString(lpBuff, lpKeyName, TEXT(""), szVal, _countof(szVal));
-    int nRet;
-    return ::StrToIntEx(szVal, STIF_DEFAULT, &nRet) ? nRet : nDefault;
+    TCHAR sz[16];
+    GetBufferedProfileString(lpBuff, lpKeyName, TEXT(""), sz, _countof(sz));
+    LPTSTR endp;
+    int nRet = _tcstol(sz, &endp, 10);
+    return endp == sz ? nDefault : nRet;
 }
 
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName)
 {
-    TCHAR szValue[32];
-    ::wsprintf(szValue, TEXT("%d"), value);
-    return ::WritePrivateProfileString(lpAppName, lpKeyName, szValue, lpFileName);
+    TCHAR sz[16];
+    _stprintf_s(sz, TEXT("%d"), value);
+    return ::WritePrivateProfileString(lpAppName, lpKeyName, sz, lpFileName);
 }
 
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
@@ -406,50 +401,53 @@ void extract_adaptation_field(ADAPTATION_FIELD *dst, const unsigned char *data)
 }
 #endif
 
-#if 1 // From: TVTest_0.7.23_Src/Util.cpp
-bool CompareLogFont(const LOGFONT *pFont1,const LOGFONT *pFont2)
+bool CompareLogFont(const LOGFONT &lf1, const LOGFONT &lf2)
 {
-	return memcmp(pFont1,pFont2,28/*offsetof(LOGFONT,lfFaceName)*/)==0
-		&& lstrcmp(pFont1->lfFaceName,pFont2->lfFaceName)==0;
+    return lf1.lfHeight == lf2.lfHeight &&
+           lf1.lfWidth == lf2.lfWidth &&
+           lf1.lfEscapement == lf2.lfEscapement &&
+           lf1.lfOrientation == lf2.lfOrientation &&
+           lf1.lfWeight == lf2.lfWeight &&
+           lf1.lfItalic == lf2.lfItalic &&
+           lf1.lfUnderline == lf2.lfUnderline &&
+           lf1.lfStrikeOut == lf2.lfStrikeOut &&
+           lf1.lfCharSet == lf2.lfCharSet &&
+           lf1.lfOutPrecision == lf2.lfOutPrecision &&
+           lf1.lfClipPrecision == lf2.lfClipPrecision &&
+           lf1.lfQuality == lf2.lfQuality &&
+           lf1.lfPitchAndFamily == lf2.lfPitchAndFamily &&
+           !_tcscmp(lf1.lfFaceName, lf2.lfFaceName);
 }
 
-int CALLBACK BrowseFolderCallback(HWND hwnd,UINT uMsg,LPARAM lpData,LPARAM lParam)
+static int CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
 {
-	switch (uMsg) {
-	case BFFM_INITIALIZED:
-		if (((LPTSTR)lParam)[0]!=TEXT('\0')) {
-			TCHAR szDirectory[MAX_PATH];
-
-			lstrcpy(szDirectory,(LPTSTR)lParam);
-			PathRemoveBackslash(szDirectory);
-			SendMessage(hwnd,BFFM_SETSELECTION,TRUE,(LPARAM)szDirectory);
-		}
-		break;
-	}
-	return 0;
+    if (uMsg == BFFM_INITIALIZED && reinterpret_cast<LPCTSTR>(lpData)[0]) {
+        SendMessage(hwnd, BFFM_SETSELECTION, TRUE, lpData);
+    }
+    return 0;
 }
 
-bool BrowseFolderDialog(HWND hwndOwner,LPTSTR pszDirectory,LPCTSTR pszTitle)
+bool BrowseFolderDialog(HWND hwndOwner, TCHAR (&szDirectory)[MAX_PATH], LPCTSTR pszTitle)
 {
-	BROWSEINFO bi;
-	PIDLIST_ABSOLUTE pidl;
-	BOOL fRet;
-
-	bi.hwndOwner=hwndOwner;
-	bi.pidlRoot=nullptr;
-	bi.pszDisplayName=pszDirectory;
-	bi.lpszTitle=pszTitle;
-	bi.ulFlags=BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
-	bi.lpfn=BrowseFolderCallback;
-	bi.lParam=(LPARAM)pszDirectory;
-	pidl=SHBrowseForFolder(&bi);
-	if (!pidl)
-		return false;
-	fRet=SHGetPathFromIDList(pidl,pszDirectory);
-	CoTaskMemFree(pidl);
-	return fRet==TRUE;
+    TCHAR szDisplayName[MAX_PATH];
+    BROWSEINFO bi;
+    bi.hwndOwner = hwndOwner;
+    bi.pidlRoot = nullptr;
+    bi.pszDisplayName = szDisplayName;
+    bi.lpszTitle = pszTitle;
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    bi.lpfn = BrowseCallbackProc;
+    bi.lParam = reinterpret_cast<LPARAM>(szDirectory);
+    PIDLIST_ABSOLUTE pidl = SHBrowseForFolder(&bi);
+    if (pidl) {
+        if (SHGetPathFromIDList(pidl, szDirectory)) {
+            CoTaskMemFree(pidl);
+            return true;
+        }
+        CoTaskMemFree(pidl);
+    }
+    return false;
 }
-#endif
 
 #if 1 // From: TVTest_0.7.23_Src/DrawUtil.cpp
 

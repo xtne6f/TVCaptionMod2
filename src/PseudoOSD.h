@@ -8,7 +8,7 @@ class CPseudoOSD
 	COLORREF m_crBackColor;
 	COLORREF m_crTextColor;
 	struct STYLE_ELEM {
-		std::basic_string<TCHAR> Text;
+		tstring Text;
 		HBITMAP hbm;
 		int Width;
 		LOGFONT lf;

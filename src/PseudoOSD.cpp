@@ -1,7 +1,5 @@
 ﻿#include <Windows.h>
 #include <WindowsX.h>
-#include <vector>
-#include <string>
 #include "Util.h"
 #include "PseudoOSD.h"
 
@@ -404,7 +402,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 			lf.lfWidth=lf.lfWidth*it->AdjustRect.right/100*MultX;
 			lf.lfHeight=lf.lfHeight*it->AdjustRect.bottom/100*MultY;
 			//フォントが変化するときだけ作る
-			if (!CompareLogFont(&lf,&lfLast)) {
+			if (!CompareLogFont(lf,lfLast)) {
 				if (hfont) ::DeleteObject(hfont);
 				hfont=::CreateFontIndirect(&lf);
 				lfLast=lf;
@@ -847,7 +845,7 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAl
 	*pAllocWidth=Width;
 #ifdef DDEBUG_OUT
 	TCHAR szDebug[128];
-	::wsprintf(szDebug,TEXT(__FUNCTION__) TEXT("(): w=%d,h=%d,hm=%d\n"),Width,Height,HeightMono);
+	_stprintf_s(szDebug,TEXT(__FUNCTION__) TEXT("(): w=%d,h=%d,hm=%d\n"),Width,Height,HeightMono);
 	DEBUG_OUT(szDebug);
 #endif
 	return true;

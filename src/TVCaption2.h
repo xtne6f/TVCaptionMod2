@@ -6,6 +6,8 @@ class CTVCaption2 : public TVTest::CTVTestPlugin
 {
     // 事前に作成しておくOSDの数(作成時にウィンドウが前面にくるので、気になるなら増やす)
     static const int OSD_PRE_CREATE_NUM = 12;
+    // 設定値の最大読み込み文字数
+    static const int SETTING_VALUE_MAX = 2048;
     static const int GAIJI_TABLE_SIZE = G_CELL_SIZE * 7;
     static const int FLASHING_INTERVAL = 500;
     static const int TXGROUP_NORMAL = 1;
@@ -50,6 +52,7 @@ private:
     void AddSettings();
     void DeleteSettings();
     int GetSettingsCount() const;
+    bool PlayRomSound(int index) const;
     static LRESULT CALLBACK EventCallback(UINT Event, LPARAM lParam1, LPARAM lParam2, void *pClientData);
     void OnCapture(bool fSaveToFile);
     static BOOL CALLBACK WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData);
@@ -72,9 +75,9 @@ private:
     INT_PTR ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     // 設定
-    TCHAR m_szIniPath[MAX_PATH];
-    TCHAR m_szCaptureFolder[MAX_PATH];
-    TCHAR m_szCaptureFileName[64];
+    tstring m_iniPath;
+    tstring m_captureFolder;
+    tstring m_captureFileName;
     TCHAR m_szFaceName[LF_FACESIZE];
     TCHAR m_szGaijiFaceName[LF_FACESIZE];
     TCHAR m_szGaijiTableName[LF_FACESIZE];
@@ -105,7 +108,7 @@ private:
     bool m_fShrinkSDScale;
     int m_adjustViewX;
     int m_adjustViewY;
-    TCHAR m_szRomSoundList[32 * 20];
+    tstring m_romSoundList;
 
     // 字幕描画
     HWND m_hwndPainting;

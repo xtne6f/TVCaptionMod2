@@ -2,9 +2,8 @@
 // 最終更新: 2017-07-02
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
-#include <Shlwapi.h>
-#include <vector>
 #include <memory>
+#include <utility>
 #include <algorithm>
 #include "Util.h"
 #include "PseudoOSD.h"
@@ -110,13 +109,9 @@ CTVCaption2::CTVCaption2()
     , m_caption1Pid(-1)
     , m_caption2Pid(-1)
 {
-    m_szIniPath[0] = 0;
-    m_szCaptureFolder[0] = 0;
-    m_szCaptureFileName[0] = 0;
     m_szFaceName[0] = 0;
     m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
-    m_szRomSoundList[0] = 0;
     RECT rcZero = {};
     m_rcAdjust = rcZero;
     m_rcGaijiAdjust = rcZero;
@@ -161,13 +156,19 @@ bool CTVCaption2::Initialize()
 
     if (!CPseudoOSD::Initialize(g_hinstDLL)) return false;
 
-    if (!GetLongModuleFileName(g_hinstDLL, m_szIniPath, _countof(m_szIniPath)) ||
-        !::PathRenameExtension(m_szIniPath, TEXT(".ini"))) return false;
+    TCHAR path[MAX_PATH];
+    if (!GetLongModuleFileName(g_hinstDLL, path, _countof(path))) return false;
+    m_iniPath = path;
+    size_t lastSep = m_iniPath.find_last_of(TEXT("/\\."));
+    if (lastSep != tstring::npos && m_iniPath[lastSep] == TEXT('.')) {
+        m_iniPath.erase(lastSep);
+    }
+    m_iniPath += TEXT(".ini");
 
     // 必要ならOsdCompositorを初期化(プラグインの有効無効とは独立)
-    UINT EnOsdCompositor = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 99, m_szIniPath);
+    UINT EnOsdCompositor = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 99, m_iniPath.c_str());
     if (EnOsdCompositor == 99) {
-        ::WritePrivateProfileString(TEXT("Settings"), TEXT("EnOsdCompositor"), TEXT("0"), m_szIniPath);
+        WritePrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_iniPath.c_str());
     }
     else if (EnOsdCompositor != 0) {
         // フィルタグラフを取得できないバージョンではAPIフックを使う
@@ -236,8 +237,8 @@ HWND CTVCaption2::GetFullscreenWindow()
     TVTest::HostInfo hostInfo;
     if (m_pApp->GetFullscreen() && m_pApp->GetHostInfo(&hostInfo)) {
         TCHAR className[64];
-        ::lstrcpyn(className, hostInfo.pszAppName, 48);
-        ::lstrcat(className, L" Fullscreen");
+        _tcsncpy_s(className, hostInfo.pszAppName, 47);
+        _tcscat_s(className, TEXT(" Fullscreen"));
 
         HWND hwnd = nullptr;
         while ((hwnd = ::FindWindowEx(nullptr, hwnd, className, nullptr)) != nullptr) {
@@ -252,13 +253,11 @@ HWND CTVCaption2::GetFullscreenWindow()
 
 static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 {
-    void **params = reinterpret_cast<void**>(lParam);
+    std::pair<HWND, LPCTSTR> *params = reinterpret_cast<std::pair<HWND, LPCTSTR>*>(lParam);
     TCHAR className[64];
-    if (::GetClassName(hwnd, className, _countof(className)) &&
-        !::lstrcmp(className, static_cast<LPCTSTR>(params[1])))
-    {
+    if (::GetClassName(hwnd, className, _countof(className)) && !_tcscmp(className, params->second)) {
         // 見つかった
-        *static_cast<HWND*>(params[0]) = hwnd;
+        params->first = hwnd;
         return FALSE;
     }
     return TRUE;
@@ -269,18 +268,18 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 // 必ず取得できると仮定してはいけない
 HWND CTVCaption2::FindVideoContainer()
 {
-    HWND hwndFound = nullptr;
+    std::pair<HWND, LPCTSTR> params(nullptr, nullptr);
     TVTest::HostInfo hostInfo;
     if (m_pApp->GetHostInfo(&hostInfo)) {
         TCHAR searchName[64];
-        ::lstrcpyn(searchName, hostInfo.pszAppName, 32);
-        ::lstrcat(searchName, L" Video Container");
+        _tcsncpy_s(searchName, hostInfo.pszAppName, 31);
+        _tcscat_s(searchName, TEXT(" Video Container"));
 
-        void *params[2] = { &hwndFound, searchName };
+        params.second = searchName;
         HWND hwndFull = GetFullscreenWindow();
-        ::EnumChildWindows(hwndFull ? hwndFull : m_pApp->GetAppWindow(), EnumWindowsProc, reinterpret_cast<LPARAM>(params));
+        ::EnumChildWindows(hwndFull ? hwndFull : m_pApp->GetAppWindow(), EnumWindowsProc, reinterpret_cast<LPARAM>(&params));
     }
-    return hwndFound;
+    return params.first;
 }
 
 
@@ -360,40 +359,38 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
     pDrcsStrMap->clear();
 
     bool fRet = false;
-    TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
 
     // 組み込みのもので外字テーブル設定
-    if (!::lstrcmpi(tableName, TEXT("!std"))) {
+    if (!_tcsicmp(tableName, TEXT("!std"))) {
         // DLLデフォルトにリセット
         DWORD tableSize;
         fRet = m_captionDll.SetGaiji(0, nullptr, &tableSize);
     }
-    else if (!::lstrcmpi(tableName, TEXT("!typebank"))) {
+    else if (!_tcsicmp(tableName, TEXT("!typebank"))) {
         DWORD tableSize = _countof(GaijiTable_typebank);
         fRet = m_captionDll.SetGaiji(1, GaijiTable_typebank, &tableSize);
     }
     // ファイルから外字テーブル設定
-    else if (GetLongModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
-        ::PathRemoveExtension(gaijiPath);
-        ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), tableName);
-        std::vector<WCHAR> text = ReadTextFileToEnd(gaijiPath, FILE_SHARE_READ);
+    else {
+        tstring gaijiPath = m_iniPath.substr(0, m_iniPath.rfind(TEXT('.'))) + TEXT("_Gaiji_") + tableName + TEXT(".txt");
+        std::vector<WCHAR> text = ReadTextFileToEnd(gaijiPath.c_str(), FILE_SHARE_READ);
         if (!text.empty()) {
             // 1行目は外字テーブル
-            int len = ::StrCSpn(text.data(), TEXT("\r\n"));
-            DWORD tableSize = len;
+            size_t len = _tcscspn(text.data(), TEXT("\r\n"));
+            DWORD tableSize = static_cast<DWORD>(len);
             fRet = m_captionDll.SetGaiji(1, text.data(), &tableSize);
 
             // あれば2行目からDRCS→文字列マップ
             LPCTSTR p = &text[len];
             SKIP_CRLF(p);
-            if (!::StrCmpNI(p, TEXT("[DRCSMap]"), 9)) {
-                p += ::StrCSpn(p, TEXT("\r\n"));
+            if (!_tcsnicmp(p, TEXT("[DRCSMap]"), 9)) {
+                p += _tcscspn(p, TEXT("\r\n"));
                 SKIP_CRLF(p);
                 while (*p && *p != TEXT('[')) {
                     DRCS_PAIR pair;
-                    len = ::StrCSpn(p, TEXT("\r\n"));
+                    len = _tcscspn(p, TEXT("\r\n"));
                     if (HexStringToByteArray(p, pair.md5, 16) && p[32] == TEXT('=')) {
-                        ::lstrcpyn(pair.str, p+33, min(len-32, _countof(pair.str)));
+                        _tcsncpy_s(pair.str, p + 33, min(len - 33, _countof(pair.str) - 1));
                         // 既ソートにしておく
                         if (pDrcsStrMap->empty() || DRCS_PAIR::COMPARE()(pDrcsStrMap->back(), pair)) {
                             pDrcsStrMap->push_back(pair);
@@ -441,7 +438,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
     if (fEnable) {
         // 設定の読み込み
         LoadSettings();
-        int iniVer = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("Version"), 0, m_szIniPath);
+        int iniVer = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("Version"), 0, m_iniPath.c_str());
         if (iniVer < INFO_VERSION) {
             // デフォルトの設定キーを出力するため
             SaveSettings();
@@ -501,16 +498,19 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
 // 設定の読み込み
 void CTVCaption2::LoadSettings()
 {
-    std::vector<TCHAR> vbuf = GetPrivateProfileSectionBuffer(TEXT("Settings"), m_szIniPath);
-    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFolder"), TEXT(""), m_szCaptureFolder, _countof(m_szCaptureFolder));
-    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileName"), TEXT("Capture"), m_szCaptureFileName, _countof(m_szCaptureFileName));
+    std::vector<TCHAR> vbuf = GetPrivateProfileSectionBuffer(TEXT("Settings"), m_iniPath.c_str());
+    TCHAR val[SETTING_VALUE_MAX];
+    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFolder"), TEXT(""), val, _countof(val));
+    m_captureFolder = val;
+    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileName"), TEXT("Capture"), val, _countof(val));
+    m_captureFileName = val;
     m_settingsIndex = GetBufferedProfileInt(vbuf.data(), TEXT("SettingsIndex"), 0);
 
     // ここからはセクション固有
     if (m_settingsIndex > 0) {
         TCHAR section[32];
-        ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
-        vbuf = GetPrivateProfileSectionBuffer(section, m_szIniPath);
+        _stprintf_s(section, TEXT("Settings%d"), m_settingsIndex);
+        vbuf = GetPrivateProfileSectionBuffer(section, m_iniPath.c_str());
     }
     LPCTSTR buf = vbuf.data();
     GetBufferedProfileString(buf, TEXT("FaceName"), TEXT(""), m_szFaceName, _countof(m_szFaceName));
@@ -546,7 +546,8 @@ void CTVCaption2::LoadSettings()
     m_fShrinkSDScale    = GetBufferedProfileInt(buf, TEXT("ShrinkSDScale"), 0) != 0;
     m_adjustViewX       = GetBufferedProfileInt(buf, TEXT("ViewXAdjust"), 0);
     m_adjustViewY       = GetBufferedProfileInt(buf, TEXT("ViewYAdjust"), 0);
-    GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, m_szRomSoundList, _countof(m_szRomSoundList));
+    GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, val, _countof(val));
+    m_romSoundList = val;
 
     m_fEnTextColor = textColor >= 0;
     m_textColor = RGB(textColor/1000000%1000, textColor/1000%1000, textColor%1000);
@@ -558,53 +559,52 @@ void CTVCaption2::LoadSettings()
 // 設定の保存
 void CTVCaption2::SaveSettings() const
 {
-    WritePrivateProfileInt(TEXT("Settings"), TEXT("Version"), INFO_VERSION, m_szIniPath);
-    ::WritePrivateProfileString(TEXT("Settings"), TEXT("CaptureFolder"), m_szCaptureFolder, m_szIniPath);
-    ::WritePrivateProfileString(TEXT("Settings"), TEXT("CaptureFileName"), m_szCaptureFileName, m_szIniPath);
-    WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_szIniPath);
+    TCHAR section[32] = TEXT("Settings");
+    WritePrivateProfileInt(section, TEXT("Version"), INFO_VERSION, m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("CaptureFolder"), m_captureFolder.c_str(), m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("CaptureFileName"), m_captureFileName.c_str(), m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("SettingsIndex"), m_settingsIndex, m_iniPath.c_str());
 
     // ここからはセクション固有
-    TCHAR section[32];
-    ::lstrcpy(section, TEXT("Settings"));
     if (m_settingsIndex > 0) {
-        ::wsprintf(section + ::lstrlen(section), TEXT("%d"), m_settingsIndex);
+        _stprintf_s(section, TEXT("Settings%d"), m_settingsIndex);
     }
-    ::WritePrivateProfileString(section, TEXT("FaceName"), m_szFaceName, m_szIniPath);
-    ::WritePrivateProfileString(section, TEXT("GaijiFaceName"), m_szGaijiFaceName, m_szIniPath);
-    ::WritePrivateProfileString(section, TEXT("GaijiTableName"), m_szGaijiTableName, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("Method"), m_paintingMethod, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("ShowFlags"), m_showFlags[STREAM_CAPTION], m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("ShowFlagsSuper"), m_showFlags[STREAM_SUPERIMPOSE], m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("DelayTime"), m_delayTime[STREAM_CAPTION], m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("DelayTimeSuper"), m_delayTime[STREAM_SUPERIMPOSE], m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("IgnorePts"), m_fIgnorePts, m_szIniPath);
+    ::WritePrivateProfileString(section, TEXT("FaceName"), m_szFaceName, m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("GaijiFaceName"), m_szGaijiFaceName, m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("GaijiTableName"), m_szGaijiTableName, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("Method"), m_paintingMethod, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("ShowFlags"), m_showFlags[STREAM_CAPTION], m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("ShowFlagsSuper"), m_showFlags[STREAM_SUPERIMPOSE], m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("DelayTime"), m_delayTime[STREAM_CAPTION], m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("DelayTimeSuper"), m_delayTime[STREAM_SUPERIMPOSE], m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("IgnorePts"), m_fIgnorePts, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("TextColor"), !m_fEnTextColor ? -1 :
-                           GetRValue(m_textColor)*1000000 + GetGValue(m_textColor)*1000 + GetBValue(m_textColor), m_szIniPath);
+                           GetRValue(m_textColor)*1000000 + GetGValue(m_textColor)*1000 + GetBValue(m_textColor), m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("BackColor"), !m_fEnBackColor ? -1 :
-                           GetRValue(m_backColor)*1000000 + GetGValue(m_backColor)*1000 + GetBValue(m_backColor), m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("TextOpacity"), m_textOpacity, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_vertAntiAliasing, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontXAdjust"), m_rcAdjust.left, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontYAdjust"), m_rcAdjust.top, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_rcAdjust.right, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("FontRatioAdjust"), m_rcAdjust.bottom, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("GaijiFontXAdjust"), m_rcGaijiAdjust.left, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("GaijiFontYAdjust"), m_rcGaijiAdjust.top, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("GaijiFontSizeAdjust"), m_rcGaijiAdjust.right, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("GaijiFontRatioAdjust"), m_rcGaijiAdjust.bottom, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("AvoidHalfFlags"), m_avoidHalfFlags, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("ShiftSmall"), m_fShiftSmall, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("ShrinkSDScale"), m_fShrinkSDScale, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("ViewXAdjust"), m_adjustViewX, m_szIniPath);
-    WritePrivateProfileInt(section, TEXT("ViewYAdjust"), m_adjustViewY, m_szIniPath);
-    ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_szRomSoundList, m_szIniPath);
+                           GetRValue(m_backColor)*1000000 + GetGValue(m_backColor)*1000 + GetBValue(m_backColor), m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("TextOpacity"), m_textOpacity, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("BackOpacity"), m_backOpacity, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("VertAntiAliasing"), m_vertAntiAliasing, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("FontXAdjust"), m_rcAdjust.left, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("FontYAdjust"), m_rcAdjust.top, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("FontSizeAdjust"), m_rcAdjust.right, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("FontRatioAdjust"), m_rcAdjust.bottom, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("GaijiFontXAdjust"), m_rcGaijiAdjust.left, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("GaijiFontYAdjust"), m_rcGaijiAdjust.top, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("GaijiFontSizeAdjust"), m_rcGaijiAdjust.right, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("GaijiFontRatioAdjust"), m_rcGaijiAdjust.bottom, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("AvoidHalfFlags"), m_avoidHalfFlags, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("IgnoreSmall"), m_fIgnoreSmall, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("ShiftSmall"), m_fShiftSmall, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("Centering"), m_fCentering, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("ShrinkSDScale"), m_fShrinkSDScale, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("ViewXAdjust"), m_adjustViewX, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("ViewYAdjust"), m_adjustViewY, m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("RomSoundList"), m_romSoundList.c_str(), m_iniPath.c_str());
 }
 
 
@@ -614,18 +614,18 @@ void CTVCaption2::SwitchSettings(int specIndex)
 {
     m_settingsIndex = specIndex < 0 ? m_settingsIndex + 1 : specIndex;
     TCHAR section[32];
-    ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
-    if (::GetPrivateProfileInt(section, TEXT("Method"), 0, m_szIniPath) == 0) {
+    _stprintf_s(section, TEXT("Settings%d"), m_settingsIndex);
+    if (::GetPrivateProfileInt(section, TEXT("Method"), 0, m_iniPath.c_str()) == 0) {
         m_settingsIndex = 0;
     }
-    WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_szIniPath);
+    WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), m_settingsIndex, m_iniPath.c_str());
     LoadSettings();
 }
 
 
 void CTVCaption2::AddSettings()
 {
-    WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), GetSettingsCount(), m_szIniPath);
+    WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), GetSettingsCount(), m_iniPath.c_str());
     LoadSettings();
     SaveSettings();
 }
@@ -638,15 +638,15 @@ void CTVCaption2::DeleteSettings()
         int lastIndex = m_settingsIndex;
         // 1つずつ手前にシフト
         for (int i = m_settingsIndex; i < settingsCount - 1; ++i) {
-            WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), i + 1, m_szIniPath);
+            WritePrivateProfileInt(TEXT("Settings"), TEXT("SettingsIndex"), i + 1, m_iniPath.c_str());
             LoadSettings();
             m_settingsIndex = i;
             SaveSettings();
         }
         // 末尾セクションを削除
         TCHAR section[32];
-        ::wsprintf(section, TEXT("Settings%d"), settingsCount - 1);
-        ::WritePrivateProfileString(section, nullptr, nullptr, m_szIniPath);
+        _stprintf_s(section, TEXT("Settings%d"), settingsCount - 1);
+        ::WritePrivateProfileString(section, nullptr, nullptr, m_iniPath.c_str());
         SwitchSettings(min(lastIndex, settingsCount - 2));
     }
 }
@@ -656,8 +656,8 @@ int CTVCaption2::GetSettingsCount() const
 {
     for (int i = 1; ; ++i) {
         TCHAR section[32];
-        ::wsprintf(section, TEXT("Settings%d"), i);
-        if (::GetPrivateProfileInt(section, TEXT("Method"), 0, m_szIniPath) == 0) {
+        _stprintf_s(section, TEXT("Settings%d"), i);
+        if (::GetPrivateProfileInt(section, TEXT("Method"), 0, m_iniPath.c_str()) == 0) {
             return i;
         }
     }
@@ -665,28 +665,27 @@ int CTVCaption2::GetSettingsCount() const
 
 
 // 内蔵音再生する
-static bool PlayRomSound(LPCTSTR list, int index)
+bool CTVCaption2::PlayRomSound(int index) const
 {
-    if (index<0 || list[0]==TEXT(';')) return false;
+    if (index < 0 || m_romSoundList.empty() || m_romSoundList[0] == TEXT(';')) return false;
 
-    int len = ::StrCSpn(list, TEXT(":"));
-    for (; index>0 && list[len]; --index) {
-        list += len+1;
-        len = ::StrCSpn(list, TEXT(":"));
+    size_t i = 0;
+    size_t j = m_romSoundList.find(TEXT(':'));
+    for (; index > 0 && j != tstring::npos; --index) {
+        i = j + 1;
+        j = m_romSoundList.find(TEXT(':'), i);
     }
     if (index>0) return false;
 
-    TCHAR id[32], path[MAX_PATH + 64];
-    ::lstrcpyn(id, list, min(len+1,_countof(id)));
+    tstring id(m_romSoundList, i, j - i);
 
-    if (id[0]==TEXT('!')) {
+    if (!id.empty() && id[0] == TEXT('!')) {
         // 定義済みのサウンド
-        return ::PlaySound(id+1, nullptr, SND_ASYNC|SND_NODEFAULT|SND_ALIAS) != FALSE;
+        return ::PlaySound(&id.c_str()[1], nullptr, SND_ASYNC|SND_NODEFAULT|SND_ALIAS) != FALSE;
     }
-    else if (id[0] && GetLongModuleFileName(g_hinstDLL, path, MAX_PATH)) {
-        ::PathRemoveExtension(path);
-        ::wsprintf(path + ::lstrlen(path), TEXT("\\%s.wav"), id);
-        return ::PlaySound(path, nullptr, SND_ASYNC|SND_NODEFAULT|SND_FILENAME) != FALSE;
+    else if (!id.empty()) {
+        tstring path = m_iniPath.substr(0, m_iniPath.rfind(TEXT('.'))) + TEXT('\\') + id + TEXT(".wav");
+        return ::PlaySound(path.c_str(), nullptr, SND_ASYNC|SND_NODEFAULT|SND_FILENAME) != FALSE;
     }
     return false;
 }
@@ -702,7 +701,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
     case TVTest::EVENT_PLUGINENABLE:
         // プラグインの有効状態が変化した
         if (pThis->EnablePlugin(lParam1 != 0)) {
-            PlayRomSound(pThis->m_szRomSoundList, lParam1 != 0 ? 17 : 18);
+            pThis->PlayRomSound(lParam1 != 0 ? 17 : 18);
             return TRUE;
         }
         return 0;
@@ -752,7 +751,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                     bool fShowLang2 = pThis->m_caption1Manager.IsShowLang2();
                     pThis->m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_LANG, fShowLang2 ? TVTest::PLUGIN_COMMAND_STATE_CHECKED : 0);
                     TCHAR str[32];
-                    ::wsprintf(str, TEXT("第%d言語に切り替えました。"), fShowLang2 ? 2 : 1);
+                    _stprintf_s(str, TEXT("第%d言語に切り替えました。"), fShowLang2 ? 2 : 1);
                     pThis->m_pApp->AddLog(str);
                 }
                 break;
@@ -764,7 +763,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
                 {
                     pThis->m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
                 }
-                PlayRomSound(pThis->m_szRomSoundList, 16);
+                pThis->PlayRomSound(16);
                 break;
             case ID_COMMAND_CAPTURE:
                 pThis->OnCapture(false);
@@ -858,21 +857,17 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
             int sizeImage = (bih.biWidth*3+3) / 4 * 4 * bih.biHeight;
             if (fSaveToFile) {
                 // ファイルに保存
-                if (::PathIsDirectory(m_szCaptureFolder)) {
-                    TCHAR fileName[_countof(m_szCaptureFileName) + 64];
+                if (!m_captureFolder.empty()) {
+                    LPCTSTR sep = m_captureFolder.back() == TEXT('/') || m_captureFolder.back() == TEXT('\\') ? TEXT("") : TEXT("\\");
                     SYSTEMTIME st;
                     ::GetLocalTime(&st);
-                    ::wsprintf(fileName, TEXT("%s%d%02d%02d-%02d%02d%02d"),
-                               m_szCaptureFileName, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-                    TCHAR path[MAX_PATH + 16];
-                    if (::PathCombine(path, m_szCaptureFolder, fileName)) {
-                        int len = ::lstrlen(path);
-                        ::lstrcpy(path+len, TEXT(".bmp"));
-                        for (int i = 1; i <= 10 && ::PathFileExists(path); ++i) {
-                            ::wsprintf(path+len, TEXT("-%d.bmp"), i);
-                        }
+                    TCHAR t[64];
+                    _stprintf_s(t, TEXT("%d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                    TCHAR ext[16] = TEXT(".bmp");
+                    for (int i = 1; i <= 10; ++i) {
                         // ファイルがなければ書きこむ
-                        HANDLE hFile = ::CreateFile(path, GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+                        HANDLE hFile = ::CreateFile((m_captureFolder + sep + m_captureFileName + t + ext).c_str(),
+                                                    GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
                         if (hFile != INVALID_HANDLE_VALUE) {
                             BITMAPFILEHEADER bmfHeader = {};
                             bmfHeader.bfType = 0x4D42;
@@ -883,7 +878,9 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                             ::WriteFile(hFile, &bih, sizeof(bih), &dwWritten, nullptr);
                             ::WriteFile(hFile, pBits, sizeImage, &dwWritten, nullptr);
                             ::CloseHandle(hFile);
+                            break;
                         }
+                        _stprintf_s(ext, TEXT("-%d.bmp"), i);
                     }
                 }
             }
@@ -993,7 +990,7 @@ static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth,
     logFont.lfClipPrecision  = CLIP_DEFAULT_PRECIS;
     logFont.lfQuality        = DRAFT_QUALITY;
     logFont.lfPitchAndFamily = (faceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
-    ::lstrcpy(logFont.lfFaceName, faceName);
+    _tcscpy_s(logFont.lfFaceName, faceName);
     RECT rc = {charHeight * rcFontAdjust.left / 72, charHeight * rcFontAdjust.top / 72, rcFontAdjust.right * rcFontAdjust.bottom / 100, rcFontAdjust.right};
     pOsd->AddText(text, width, logFont, rc);
 }
@@ -1255,7 +1252,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         bool fSameStyle = false;
         if (pszCarry) {
             // 繰り越す
-            ::lstrcpyn(szTmp, pszShow, min(static_cast<int>(pszCarry - pszShow), _countof(szTmp)));
+            _tcsncpy_s(szTmp, pszShow, min(static_cast<size_t>(pszCarry - pszShow), _countof(szTmp)) - 1);
             pszShow = szTmp;
         }
         else if (i+1 < caption.dwListCount) {
@@ -1400,7 +1397,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
 
         if (charData.bPRA != 0) {
-            PlayRomSound(m_szRomSoundList, charData.bPRA - 1);
+            PlayRomSound(charData.bPRA - 1);
         }
     }
 }
@@ -1824,16 +1821,16 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::SetProp(hDlg, TEXT("Ini"), reinterpret_cast<HANDLE>(1));
 
     ::CheckDlgButton(hDlg, IDC_CHECK_OSD,
-        ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_szIniPath) != 0 ? BST_CHECKED : BST_UNCHECKED);
+        ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_iniPath.c_str()) != 0 ? BST_CHECKED : BST_UNCHECKED);
 
-    ::SetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, m_szCaptureFolder);
-    ::SendDlgItemMessage(hDlg, IDC_EDIT_CAPFOLDER, EM_LIMITTEXT, _countof(m_szCaptureFolder) - 1, 0);
+    ::SetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, m_captureFolder.c_str());
+    ::SendDlgItemMessage(hDlg, IDC_EDIT_CAPFOLDER, EM_LIMITTEXT, MAX_PATH - 1, 0);
 
     int settingsCount = GetSettingsCount();
     ::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_RESETCONTENT, 0, 0);
     for (int i = 0; i < settingsCount; ++i) {
         TCHAR text[32];
-        ::wsprintf(text, TEXT("設定%d"), i);
+        _stprintf_s(text, TEXT("設定%d"), i);
         ::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
     }
     ::SendDlgItemMessage(hDlg, IDC_COMBO_SETTINGS, CB_SETCURSEL, m_settingsIndex, 0);
@@ -1917,7 +1914,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::CheckDlgButton(hDlg, IDC_CHECK_SHRINK_SD_SCALE, m_fShrinkSDScale ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_X, m_adjustViewX, TRUE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_Y, m_adjustViewY, TRUE);
-    ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, m_szRomSoundList[0] && m_szRomSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, !m_romSoundList.empty() && m_romSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
 
     ::RemoveProp(hDlg, TEXT("Ini"));
 }
@@ -1946,11 +1943,13 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             break;
         case IDC_CHECK_OSD:
             WritePrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"),
-                ::IsDlgButtonChecked(hDlg, IDC_CHECK_OSD) != BST_UNCHECKED, m_szIniPath);
+                ::IsDlgButtonChecked(hDlg, IDC_CHECK_OSD) != BST_UNCHECKED, m_iniPath.c_str());
             break;
         case IDC_EDIT_CAPFOLDER:
             if (HIWORD(wParam) == EN_CHANGE) {
-                ::GetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, m_szCaptureFolder, _countof(m_szCaptureFolder));
+                TCHAR dir[MAX_PATH];
+                ::GetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, dir, _countof(dir));
+                m_captureFolder = dir;
                 fSave = true;
             }
             break;
@@ -2017,13 +2016,9 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
                 ::ShowWindow(::GetDlgItem(hDlg, IDC_STATIC_GAIJI_TABLE), SW_HIDE);
                 if (m_szGaijiTableName[0] != TEXT('!')) {
                     // 外字ファイルの存在確認
-                    TCHAR gaijiPath[MAX_PATH + LF_FACESIZE + 32];
-                    if (GetLongModuleFileName(g_hinstDLL, gaijiPath, MAX_PATH)) {
-                        ::PathRemoveExtension(gaijiPath);
-                        ::wsprintf(gaijiPath + ::lstrlen(gaijiPath), TEXT("_Gaiji_%s.txt"), m_szGaijiTableName);
-                        if (!::PathFileExists(gaijiPath)) {
-                            ::ShowWindow(::GetDlgItem(hDlg, IDC_STATIC_GAIJI_TABLE), SW_SHOW);
-                        }
+                    tstring gaijiPath = m_iniPath.substr(0, m_iniPath.rfind(TEXT('.'))) + TEXT("_Gaiji_") + m_szGaijiTableName + TEXT(".txt");
+                    if (::GetFileAttributes(gaijiPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                        ::ShowWindow(::GetDlgItem(hDlg, IDC_STATIC_GAIJI_TABLE), SW_SHOW);
                     }
                 }
                 fSave = fConfigureGaiji = fReDisp = true;
@@ -2173,7 +2168,7 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             }
             break;
         case IDC_CHECK_ROMSOUND:
-            ::lstrcpy(m_szRomSoundList, ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) != BST_UNCHECKED ? ROMSOUND_ENABLED : ROMSOUND_EXAMPLE);
+            m_romSoundList = ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) != BST_UNCHECKED ? ROMSOUND_ENABLED : ROMSOUND_EXAMPLE;
             fSave = true;
             break;
         default:
@@ -2193,12 +2188,12 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             if (m_captionDll.GetGaiji(1, gaijiTable, &tableSize)) {
                 // 例示用の外字を適当にえらぶ
                 TCHAR testGaiji[64];
-                ::lstrcpy(testGaiji, TEXT("外字"));
+                _tcscpy_s(testGaiji, TEXT("外字"));
                 for (int i = 0, j = 0; i < GAIJI_TABLE_SIZE; ++i) {
                     WCHAR wc[3] = {};
                     wc[0] = gaijiTable[j++];
                     wc[1] = (wc[0] & 0xFC00) == 0xD800 ? gaijiTable[j++] : 0;
-                    if (i % G_CELL_SIZE == 0 || i % (G_CELL_SIZE + 1) == 9) ::lstrcat(testGaiji, wc);
+                    if (i % G_CELL_SIZE == 0 || i % (G_CELL_SIZE + 1) == 9) _tcscat_s(testGaiji, wc);
                 }
                 // テスト字幕を構成
                 CAPTION_CHAR_DATA_DLL testCapCharGaiji = TESTCAP_CHAR_LIST[0];
