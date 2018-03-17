@@ -378,9 +378,9 @@ bool CTVCaption2::ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> 
         std::vector<WCHAR> text = ReadTextFileToEnd(gaijiPath, FILE_SHARE_READ);
         if (!text.empty()) {
             // 1行目は外字テーブル
-            int len = ::StrCSpn(&text.front(), TEXT("\r\n"));
+            int len = ::StrCSpn(text.data(), TEXT("\r\n"));
             DWORD tableSize = len;
-            fRet = m_captionDll.SetGaiji(1, &text.front(), &tableSize);
+            fRet = m_captionDll.SetGaiji(1, text.data(), &tableSize);
 
             // あれば2行目からDRCS→文字列マップ
             LPCTSTR p = &text[len];
@@ -501,9 +501,9 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
 void CTVCaption2::LoadSettings()
 {
     std::vector<TCHAR> vbuf = GetPrivateProfileSectionBuffer(TEXT("Settings"), m_szIniPath);
-    GetBufferedProfileString(&vbuf.front(), TEXT("CaptureFolder"), TEXT(""), m_szCaptureFolder, _countof(m_szCaptureFolder));
-    GetBufferedProfileString(&vbuf.front(), TEXT("CaptureFileName"), TEXT("Capture"), m_szCaptureFileName, _countof(m_szCaptureFileName));
-    m_settingsIndex = GetBufferedProfileInt(&vbuf.front(), TEXT("SettingsIndex"), 0);
+    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFolder"), TEXT(""), m_szCaptureFolder, _countof(m_szCaptureFolder));
+    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileName"), TEXT("Capture"), m_szCaptureFileName, _countof(m_szCaptureFileName));
+    m_settingsIndex = GetBufferedProfileInt(vbuf.data(), TEXT("SettingsIndex"), 0);
 
     // ここからはセクション固有
     if (m_settingsIndex > 0) {
@@ -511,7 +511,7 @@ void CTVCaption2::LoadSettings()
         ::wsprintf(section, TEXT("Settings%d"), m_settingsIndex);
         vbuf = GetPrivateProfileSectionBuffer(section, m_szIniPath);
     }
-    LPCTSTR buf = &vbuf.front();
+    LPCTSTR buf = vbuf.data();
     GetBufferedProfileString(buf, TEXT("FaceName"), TEXT(""), m_szFaceName, _countof(m_szFaceName));
     GetBufferedProfileString(buf, TEXT("GaijiFaceName"), TEXT(""), m_szGaijiFaceName, _countof(m_szGaijiFaceName));
     GetBufferedProfileString(buf, TEXT("GaijiTableName"), TEXT("!std"), m_szGaijiTableName, _countof(m_szGaijiTableName));

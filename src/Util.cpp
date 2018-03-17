@@ -9,7 +9,7 @@ std::vector<TCHAR> GetPrivateProfileSectionBuffer(LPCTSTR lpAppName, LPCTSTR lpF
 {
     std::vector<TCHAR> buf(4096);
     for (;;) {
-        DWORD len = GetPrivateProfileSection(lpAppName, &buf.front(), static_cast<DWORD>(buf.size()), lpFileName);
+        DWORD len = GetPrivateProfileSection(lpAppName, buf.data(), static_cast<DWORD>(buf.size()), lpFileName);
         if (len < buf.size() - 2) {
             buf.resize(len + 1);
             break;
@@ -98,7 +98,7 @@ std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
 
     ret.resize((fileBytes - 1) / sizeof(WCHAR) + 1, L'\0');
     fileBytes -= sizeof(WCHAR);
-    if (fileBytes > 0 && !::ReadFile(hFile, &ret.front(), fileBytes, &readBytes, nullptr)) {
+    if (fileBytes > 0 && !::ReadFile(hFile, ret.data(), fileBytes, &readBytes, nullptr)) {
         ret.clear();
         ::CloseHandle(hFile);
         return ret;
