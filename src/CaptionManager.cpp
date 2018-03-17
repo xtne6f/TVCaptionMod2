@@ -6,7 +6,7 @@
 #define MSB(x) ((x) & 0x80000000)
 
 CCaptionManager::CCaptionManager()
-    : m_pCaptionDll(NULL)
+    : m_pCaptionDll(nullptr)
     , m_dwIndex(0)
     , m_fProfileC(false)
     , m_fShowLang2(false)
@@ -14,8 +14,8 @@ CCaptionManager::CCaptionManager()
     , m_fEnPts(false)
     , m_pcr(0)
     , m_pts(0)
-    , m_pCapList(NULL)
-    , m_pDrcsList(NULL)
+    , m_pCapList(nullptr)
+    , m_pDrcsList(nullptr)
     , m_capCount(0)
     , m_drcsCount(0)
     , m_fEnLastTagInfoPcr(false)
@@ -49,7 +49,7 @@ void CCaptionManager::Clear()
         if (m_fProfileC) {
             // 既定の字幕管理データを取得済みにする
             LANG_TAG_INFO_DLL *pLangList;
-            if (m_pCaptionDll->GetTagInfo(m_dwIndex, &pLangList, NULL) == TRUE) {
+            if (m_pCaptionDll->GetTagInfo(m_dwIndex, &pLangList, nullptr) == TRUE) {
                 m_lang1 = pLangList[0];
             }
         }
@@ -95,7 +95,7 @@ void CCaptionManager::Analyze(DWORD currentPcr)
                 // アダプテーションに続けてペイロードがある
                 ADAPTATION_FIELD adapt;
                 extract_adaptation_field(&adapt, pPayload);
-                pPayload = adapt.adaptation_field_length >= 0 ? pPayload + adapt.adaptation_field_length + 1 : NULL;
+                pPayload = adapt.adaptation_field_length >= 0 ? pPayload + adapt.adaptation_field_length + 1 : nullptr;
             }
             if (pPayload) {
                 int payloadSize = 188 - static_cast<int>(pPayload - pPacket);
@@ -177,5 +177,5 @@ const CAPTION_DATA_DLL *CCaptionManager::GetCaption(DWORD currentPcr, bool fIgno
             return pCaption;
         }
     }
-    return NULL;
+    return nullptr;
 }

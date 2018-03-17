@@ -21,18 +21,18 @@ static DWORD g_dwMagic;
 
 
 const LPCTSTR CPseudoOSD::m_pszWindowClass=TEXT("TVCaption2 Pseudo OSD");
-HINSTANCE CPseudoOSD::m_hinst=NULL;
+HINSTANCE CPseudoOSD::m_hinst=nullptr;
 int CPseudoOSD::m_RefCount=0;
 
-HBITMAP CPseudoOSD::m_hbmWork=NULL;
-HBITMAP CPseudoOSD::m_hbmWorkMono=NULL;
-void *CPseudoOSD::m_pBits=NULL;
-void *CPseudoOSD::m_pBitsMono=NULL;
+HBITMAP CPseudoOSD::m_hbmWork=nullptr;
+HBITMAP CPseudoOSD::m_hbmWorkMono=nullptr;
+void *CPseudoOSD::m_pBits=nullptr;
+void *CPseudoOSD::m_pBitsMono=nullptr;
 
 
 bool CPseudoOSD::Initialize(HINSTANCE hinst)
 {
-	if (m_hinst==NULL) {
+	if (!m_hinst) {
 		WNDCLASS wc={};
 
 		wc.style=CS_HREDRAW;
@@ -48,7 +48,7 @@ bool CPseudoOSD::Initialize(HINSTANCE hinst)
 
 
 CPseudoOSD::CPseudoOSD()
-	: m_hwnd(NULL)
+	: m_hwnd(nullptr)
 	, m_crBackColor(RGB(16,0,16))
 	, m_crTextColor(RGB(0,255,128))
 	, m_TimerID(0)
@@ -66,8 +66,8 @@ CPseudoOSD::CPseudoOSD()
 	, m_fHideText(false)
 	, m_fWindowPrepared(false)
 	, m_fLayeredWindow(false)
-	, m_hwndParent(NULL)
-	, m_hwndOwner(NULL)
+	, m_hwndParent(nullptr)
+	, m_hwndOwner(nullptr)
 {
 	m_Position.Left=0;
 	m_Position.Top=0;
@@ -97,7 +97,7 @@ int CPseudoOSD::GetEntireWidth(const std::vector<STYLE_ELEM> &List)
 
 bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow)
 {
-	if (m_hwnd!=NULL) {
+	if (m_hwnd) {
 		if (((fLayeredWindow && m_hwndParent==hwndParent && ::GetWindow(m_hwnd,GW_OWNER)==m_hwndOwner) ||
 		     (!fLayeredWindow && ::GetParent(m_hwnd)==hwndParent))
 				&& m_fLayeredWindow==fLayeredWindow)
@@ -114,9 +114,9 @@ bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow)
 		pt.y=m_Position.Top;
 		::ClientToScreen(hwndParent,&pt);
 		if (::CreateWindowEx(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-							 m_pszWindowClass,NULL,WS_POPUP,
+							 m_pszWindowClass,nullptr,WS_POPUP,
 							 pt.x,pt.y,GetEntireWidth(m_StyleList),m_Position.Height,
-							 hwndParent,NULL,m_hinst,this)==NULL)
+							 hwndParent,nullptr,m_hinst,this)==nullptr)
 			return false;
 
 		::GetWindowRect(hwndParent,&rc);
@@ -126,16 +126,16 @@ bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow)
 		m_hwndOwner = ::GetWindow(m_hwnd,GW_OWNER);
 		return true;
 	}
-	return ::CreateWindowEx(0,m_pszWindowClass,NULL,WS_CHILD,
+	return ::CreateWindowEx(0,m_pszWindowClass,nullptr,WS_CHILD,
 							m_Position.Left,m_Position.Top,
 							GetEntireWidth(m_StyleList),m_Position.Height,
-							hwndParent,NULL,m_hinst,this)!=NULL;
+							hwndParent,nullptr,m_hinst,this)!=nullptr;
 }
 
 
 bool CPseudoOSD::Destroy()
 {
-	if (m_hwnd!=NULL)
+	if (m_hwnd)
 		::DestroyWindow(m_hwnd);
 	ClearText();
 	return true;
@@ -145,7 +145,7 @@ bool CPseudoOSD::Destroy()
 // ウィンドウの描画作業を完了する
 bool CPseudoOSD::PrepareWindow()
 {
-	if (m_hwnd==NULL)
+	if (!m_hwnd)
 		return false;
 
 	m_fHideText=m_FlashingInterval<0;
@@ -164,12 +164,12 @@ bool CPseudoOSD::Show()
 		PrepareWindow();
 	m_fWindowPrepared=false;
 
-	if (m_hwnd==NULL)
+	if (!m_hwnd)
 		return false;
 
 	if (m_FlashingInterval!=0) {
 		m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_FLASHING,
-		                      m_FlashingInterval<0?-m_FlashingInterval:m_FlashingInterval,NULL);
+		                      m_FlashingInterval<0?-m_FlashingInterval:m_FlashingInterval,nullptr);
 	}
 	if (m_fLayeredWindow) {
 		// 実際には親子関係じゃないので自力で可視になるか判断する必要がある
@@ -185,7 +185,7 @@ bool CPseudoOSD::Show()
 		return true;
 	}
 	if (::IsWindowVisible(m_hwnd)) {
-		::RedrawWindow(m_hwnd,NULL,NULL,RDW_INVALIDATE | RDW_UPDATENOW);
+		::RedrawWindow(m_hwnd,nullptr,nullptr,RDW_INVALIDATE | RDW_UPDATENOW);
 	} else {
 		::ShowWindow(m_hwnd,SW_SHOW);
 		::BringWindowToTop(m_hwnd);
@@ -197,7 +197,7 @@ bool CPseudoOSD::Show()
 
 bool CPseudoOSD::Hide()
 {
-	if (m_hwnd==NULL)
+	if (!m_hwnd)
 		return false;
 	::ShowWindow(m_hwnd,SW_HIDE);
 	ClearText();
@@ -211,7 +211,7 @@ bool CPseudoOSD::Hide()
 
 bool CPseudoOSD::IsVisible() const
 {
-	if (m_hwnd==NULL)
+	if (!m_hwnd)
 		return false;
 	return ::IsWindowVisible(m_hwnd)!=FALSE;
 }
@@ -222,7 +222,7 @@ void CPseudoOSD::ClearText()
 	if (!m_StyleList.empty()) {
 		std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
 		for (; it!=m_StyleList.end(); ++it) {
-			if (it->hbm!=NULL) ::DeleteObject(it->hbm);
+			if (it->hbm) ::DeleteObject(it->hbm);
 		}
 		m_StyleList.clear();
 		SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
@@ -257,14 +257,14 @@ bool CPseudoOSD::SetPosition(int Left,int Top,int Height)
 	m_Position.Left=Left;
 	m_Position.Top=Top;
 	m_Position.Height=Height;
-	if (m_hwnd!=NULL) {
+	if (m_hwnd) {
 		if (m_fLayeredWindow) {
 			POINT pt;
 
 			pt.x=Left;
 			pt.y=Top;
 			::ClientToScreen(m_hwndParent,&pt);
-			::SetWindowPos(m_hwnd,NULL,pt.x,pt.y,GetEntireWidth(m_StyleList),Height,
+			::SetWindowPos(m_hwnd,nullptr,pt.x,pt.y,GetEntireWidth(m_StyleList),Height,
 						   SWP_NOZORDER | SWP_NOACTIVATE);
 		} else {
 			::SetWindowPos(m_hwnd,HWND_TOP,Left,Top,GetEntireWidth(m_StyleList),Height,0);
@@ -333,7 +333,7 @@ void CPseudoOSD::SetFlashingInterval(int Interval)
 
 void CPseudoOSD::OnParentMove()
 {
-	if (m_hwnd!=NULL && m_fLayeredWindow) {
+	if (m_hwnd && m_fLayeredWindow) {
 		RECT rcParent,rc;
 
 		::GetWindowRect(m_hwndParent,&rcParent);
@@ -341,7 +341,7 @@ void CPseudoOSD::OnParentMove()
 		::OffsetRect(&rc,
 					 rcParent.left-m_ParentPosition.x,
 					 rcParent.top-m_ParentPosition.y);
-		::SetWindowPos(m_hwnd,NULL,rc.left,rc.top,
+		::SetWindowPos(m_hwnd,nullptr,rc.left,rc.top,
 					   rc.right-rc.left,rc.bottom-rc.top,
 					   SWP_NOZORDER | SWP_NOACTIVATE);
 		m_ParentPosition.x=rcParent.left;
@@ -367,7 +367,7 @@ static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,i
 			dx[i]=0;
 		}
 	}
-	return ::ExtTextOut(hdc,x*MultX,y*MultY,0,NULL,lpString,cbCount,dx);
+	return ::ExtTextOut(hdc,x*MultX,y*MultY,0,nullptr,lpString,cbCount,dx);
 }
 
 static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,int cw,COLORREF cr)
@@ -377,13 +377,13 @@ static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,int cw,COLORREF cr)
 	lb.lbColor=cr;
 	lb.lbHatch=0;
 
-	HPEN hPen=::ExtCreatePen(PS_SOLID|PS_GEOMETRIC|PS_ENDCAP_SQUARE,cw,&lb,0,NULL);
+	HPEN hPen=::ExtCreatePen(PS_SOLID|PS_GEOMETRIC|PS_ENDCAP_SQUARE,cw,&lb,0,nullptr);
 	if (hPen) {
 		HGDIOBJ hPenOld=::SelectObject(hdc,hPen);
 		POINT lastPos;
 		::MoveToEx(hdc,bx,by,&lastPos);
 		::LineTo(hdc,ex,ey);
-		::MoveToEx(hdc,lastPos.x,lastPos.y,NULL);
+		::MoveToEx(hdc,lastPos.x,lastPos.y,nullptr);
 		::SelectObject(hdc,hPenOld);
 		::DeleteObject(hPen);
 	}
@@ -395,7 +395,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 	int x=0;
 	std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
 	LOGFONT lfLast={};
-	HFONT hfont=NULL;
+	HFONT hfont=nullptr;
 	for (; it!=m_StyleList.end(); ++it) {
 		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
 		if (lenWos > 0) {
@@ -428,7 +428,7 @@ void CPseudoOSD::DrawImageList(HDC hdc,int MultX,int MultY) const
 	int x=0;
 	std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
 	for (; it!=m_StyleList.end(); ++it) {
-		if (it->hbm!=NULL) {
+		if (it->hbm) {
 			DrawUtil::DrawBitmap(hdc,(x+it->PaintRect.left)*MultX,it->PaintRect.top*MultY,
 			                     it->PaintRect.right*MultX,it->PaintRect.bottom*MultY,it->hbm);
 		}
@@ -462,8 +462,8 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 HBITMAP CPseudoOSD::CreateBitmap()
 {
 	int Width,Height;
-	GetPosition(NULL,NULL,&Width,&Height);
-	if (Width<1 || Height<1 || !m_fLayeredWindow) return NULL;
+	GetPosition(nullptr,nullptr,&Width,&Height);
+	if (Width<1 || Height<1 || !m_fLayeredWindow) return nullptr;
 
 	// ここだけbottom-upビットマップなので注意
 	void *pBits;
@@ -474,9 +474,9 @@ HBITMAP CPseudoOSD::CreateBitmap()
 	bmi.bmiHeader.biPlanes=1;
 	bmi.bmiHeader.biBitCount=32;
 	bmi.bmiHeader.biCompression=BI_RGB;
-	HBITMAP hbm=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&pBits,NULL,0);
+	HBITMAP hbm=::CreateDIBSection(nullptr,&bmi,DIB_RGB_COLORS,&pBits,nullptr,0);
 	if (hbm) {
-		HDC hdcTmp=::CreateCompatibleDC(NULL);
+		HDC hdcTmp=::CreateCompatibleDC(nullptr);
 		HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcTmp,hbm));
 		UpdateLayeredWindow(hdcTmp,pBits,Width,Height,true);
 		::SelectObject(hdcTmp,hbmOld);
@@ -488,7 +488,7 @@ HBITMAP CPseudoOSD::CreateBitmap()
 // 表示中のOSDのイメージをhdcに合成する
 void CPseudoOSD::Compose(HDC hdc,int Left,int Top)
 {
-	if (hdc==NULL || !IsVisible()) return;
+	if (!hdc || !IsVisible()) return;
 	RECT rc;
 	::GetClientRect(m_hwnd,&rc);
 	if (rc.right<1 || rc.bottom<1) return;
@@ -502,8 +502,8 @@ void CPseudoOSD::Compose(HDC hdc,int Left,int Top)
 	bmi.bmiHeader.biPlanes=1;
 	bmi.bmiHeader.biBitCount=32;
 	bmi.bmiHeader.biCompression=BI_RGB;
-	HBITMAP hbmTmp=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&pBits,NULL,0);
-	if (hbmTmp==NULL) return;
+	HBITMAP hbmTmp=::CreateDIBSection(nullptr,&bmi,DIB_RGB_COLORS,&pBits,nullptr,0);
+	if (!hbmTmp) return;
 
 	HDC hdcTmp=::CreateCompatibleDC(hdc);
 	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcTmp,hbmTmp));
@@ -784,11 +784,11 @@ static void ComposeAlpha(BYTE* __restrict pBitsDest,int WidthDest,const BYTE* __
 
 void CPseudoOSD::FreeWorkBitmap()
 {
-	if (m_hbmWork!=NULL) {
+	if (m_hbmWork) {
 		::DeleteObject(m_hbmWork);
 		::DeleteObject(m_hbmWorkMono);
-		m_hbmWork=NULL;
-		m_hbmWorkMono=NULL;
+		m_hbmWork=nullptr;
+		m_hbmWorkMono=nullptr;
 	}
 }
 
@@ -796,7 +796,7 @@ void CPseudoOSD::FreeWorkBitmap()
 // 全オブジェクトで共用(状況によってはMB単位の確保と解放を秒単位でくり返すことになるため)
 bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth)
 {
-	if (m_hbmWork!=NULL) {
+	if (m_hbmWork) {
 		BITMAP bm,bmMono;
 		if (::GetObject(m_hbmWork,sizeof(BITMAP),&bm) &&
 		    ::GetObject(m_hbmWorkMono,sizeof(BITMAP),&bmMono))
@@ -819,8 +819,8 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAl
 	bmi.bmiHeader.biPlanes=1;
 	bmi.bmiHeader.biBitCount=32;
 	bmi.bmiHeader.biCompression=BI_RGB;
-	m_hbmWork=::CreateDIBSection(NULL,&bmi,DIB_RGB_COLORS,&m_pBits,NULL,0);
-	if (m_hbmWork==NULL) {
+	m_hbmWork=::CreateDIBSection(nullptr,&bmi,DIB_RGB_COLORS,&m_pBits,nullptr,0);
+	if (!m_hbmWork) {
 		return false;
 	}
 
@@ -838,10 +838,10 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAl
 	bmiMono.bmiColors[1].rgbBlue=255;
 	bmiMono.bmiColors[1].rgbGreen=255;
 	bmiMono.bmiColors[1].rgbRed=255;
-	m_hbmWorkMono=::CreateDIBSection(NULL,(BITMAPINFO*)&bmiMono,DIB_RGB_COLORS,&m_pBitsMono,NULL,0);
-	if (m_hbmWorkMono==NULL) {
+	m_hbmWorkMono=::CreateDIBSection(nullptr,(BITMAPINFO*)&bmiMono,DIB_RGB_COLORS,&m_pBitsMono,nullptr,0);
+	if (!m_hbmWorkMono) {
 		::DeleteObject(m_hbmWork);
-		m_hbmWork=NULL;
+		m_hbmWork=nullptr;
 		return false;
 	}
 	*pAllocWidth=Width;
@@ -853,7 +853,7 @@ bool CPseudoOSD::AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAl
 	return true;
 }
 
-// hdcCompose!=NULLのとき、このデバイスコンテキストのpBitsCompose(32bitDIBビット値)に合成する
+// hdcCompose!=nullptrのとき、このデバイスコンテキストのpBitsCompose(32bitDIBビット値)に合成する
 // さらにfKeepAlpha==trueのとき、アルファ値つきで描画する
 void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int WidthCompose,int HeightCompose,bool fKeepAlpha)
 {
@@ -876,7 +876,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 
 	HDC hdc,hdcSrc;
 	if (hdcCompose) {
-		hdc=NULL;
+		hdc=nullptr;
 		hdcSrc=::CreateCompatibleDC(hdcCompose);
 	} else {
 		hdc=::GetDC(m_hwnd);
@@ -915,10 +915,10 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		if (!m_fStrokeByDilate) {
 			// 縁取りを描画
 			HPEN hpen=(HPEN)::CreatePen(PS_SOLID,m_StrokeWidth<=0?0:(m_StrokeWidth*2*MultMono/72+2*MultMono),RGB(255,255,255));
-			if (hpen!=NULL) {
+			if (hpen) {
 				HPEN hpenOld=SelectPen(hdcMono,hpen);
 				HBRUSH hbr=(HBRUSH)::GetStockObject(WHITE_BRUSH);
-				if (hbr!=NULL) {
+				if (hbr) {
 					HBRUSH hbrOld=SelectBrush(hdcMono,hbr);
 					OldBkMode=::SetBkMode(hdcMono,TRANSPARENT);
 					::BeginPath(hdcMono);
@@ -956,7 +956,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		for (; it!=m_StyleList.end(); ++it) {
 			rcImage.left=rcImage.right;
 			rcImage.right+=it->Width;
-			if (it->hbm!=NULL) {
+			if (it->hbm) {
 				LayBitmapToAlpha(m_pBits,AllocWidth,rcImage,(BYTE)(m_Opacity*255/100),m_crBackColor);
 				fNeedToDilate=true;
 			}
@@ -988,7 +988,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		SIZE sz={Width,Height};
 		POINT ptSrc={0,0};
 		BLENDFUNCTION blend={AC_SRC_OVER,0,255,AC_SRC_ALPHA};
-		::UpdateLayeredWindow(m_hwnd,hdc,NULL,&sz,hdcSrc,&ptSrc,0,&blend,ULW_ALPHA);
+		::UpdateLayeredWindow(m_hwnd,hdc,nullptr,&sz,hdcSrc,&ptSrc,0,&blend,ULW_ALPHA);
 	}
 	::SelectObject(hdcMono,hbmMonoOld);
 	::DeleteDC(hdcMono);
@@ -1051,7 +1051,7 @@ LRESULT CALLBACK CPseudoOSD::WndProc(HWND hwnd,UINT uMsg,
 					if (::IsWindowVisible(hwnd))
 						pThis->UpdateLayeredWindow();
 				} else {
-					::InvalidateRect(hwnd,NULL,FALSE);
+					::InvalidateRect(hwnd,nullptr,FALSE);
 				}
 				break;
 			}
@@ -1093,7 +1093,7 @@ LRESULT CALLBACK CPseudoOSD::WndProc(HWND hwnd,UINT uMsg,
 		{
 			CPseudoOSD *pThis=GetThis(hwnd);
 			pThis->m_TimerID=0;
-			pThis->m_hwnd=NULL;
+			pThis->m_hwnd=nullptr;
 		}
 		return 0;
 	}

@@ -24,7 +24,7 @@ public:
     bool UpdateSurface();
 #if OSD_COMPOSITOR_VERSION >= 1
     typedef BOOL (CALLBACK *UpdateCallbackFunc)(void *pBits, const RECT *pSurfaceRect, int Pitch, void *pClientData);
-    bool SetUpdateCallback(UpdateCallbackFunc Callback, void *pClientData = NULL, bool fTop = false);
+    bool SetUpdateCallback(UpdateCallbackFunc Callback, void *pClientData = nullptr, bool fTop = false);
     int GetVersion();
 #endif
     bool Initialize(bool fSetHook);

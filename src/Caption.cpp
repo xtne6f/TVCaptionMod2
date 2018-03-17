@@ -28,24 +28,19 @@ BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern)
 		dwSizeImage = (dwSizeImage + 3) / 4 * 4;
 	}
 
-	HCRYPTPROV hProv = NULL;
-	HCRYPTHASH hHash = NULL;
+	HCRYPTPROV hProv;
 	BOOL bRet = FALSE;
-	if( !::CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) ){
-		hProv = NULL;
-		goto EXIT;
+	if( ::CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) ){
+		HCRYPTHASH hHash;
+		if( ::CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash) ){
+			DWORD dwHashLen = 16;
+			if( ::CryptHashData(hHash, bData, dwDataLen, 0) &&
+			    ::CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashLen, 0) ){
+				bRet = TRUE;
+			}
+			::CryptDestroyHash(hHash);
+		}
+		::CryptReleaseContext(hProv, 0);
 	}
-	if( !::CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash) ){
-		hHash = NULL;
-		goto EXIT;
-	}
-	if( !::CryptHashData(hHash, bData, dwDataLen, 0) ) goto EXIT;
-	DWORD dwHashLen = 16;
-	if( !::CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashLen, 0) ) goto EXIT;
-
-	bRet = TRUE;
-EXIT:
-	if( hHash ) ::CryptDestroyHash(hHash);
-	if( hProv ) ::CryptReleaseContext(hProv, 0);
 	return bRet;
 }

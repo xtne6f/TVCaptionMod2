@@ -81,15 +81,15 @@ DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
 std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
 {
     std::vector<WCHAR> ret;
-    HANDLE hFile = ::CreateFile(fileName, GENERIC_READ, dwShareMode, NULL,
-                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile = ::CreateFile(fileName, GENERIC_READ, dwShareMode, nullptr,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) return ret;
 
     WCHAR bom;
     DWORD readBytes;
-    DWORD fileBytes = ::GetFileSize(hFile, NULL);
+    DWORD fileBytes = ::GetFileSize(hFile, nullptr);
     if (fileBytes < sizeof(WCHAR) || READ_FILE_MAX_SIZE <= fileBytes ||
-        !::ReadFile(hFile, &bom, sizeof(WCHAR), &readBytes, NULL) ||
+        !::ReadFile(hFile, &bom, sizeof(WCHAR), &readBytes, nullptr) ||
         readBytes != sizeof(WCHAR) || bom != L'\xFEFF')
     {
         ::CloseHandle(hFile);
@@ -98,7 +98,7 @@ std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
 
     ret.resize((fileBytes - 1) / sizeof(WCHAR) + 1, L'\0');
     fileBytes -= sizeof(WCHAR);
-    if (fileBytes > 0 && !::ReadFile(hFile, &ret.front(), fileBytes, &readBytes, NULL)) {
+    if (fileBytes > 0 && !::ReadFile(hFile, &ret.front(), fileBytes, &readBytes, nullptr)) {
         ret.clear();
         ::CloseHandle(hFile);
         return ret;
@@ -436,14 +436,14 @@ bool BrowseFolderDialog(HWND hwndOwner,LPTSTR pszDirectory,LPCTSTR pszTitle)
 	BOOL fRet;
 
 	bi.hwndOwner=hwndOwner;
-	bi.pidlRoot=NULL;
+	bi.pidlRoot=nullptr;
 	bi.pszDisplayName=pszDirectory;
 	bi.lpszTitle=pszTitle;
 	bi.ulFlags=BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
 	bi.lpfn=BrowseFolderCallback;
 	bi.lParam=(LPARAM)pszDirectory;
 	pidl=SHBrowseForFolder(&bi);
-	if (pidl==NULL)
+	if (!pidl)
 		return false;
 	fRet=SHGetPathFromIDList(pidl,pszDirectory);
 	CoTaskMemFree(pidl);
@@ -460,7 +460,7 @@ bool Fill(HDC hdc,const RECT *pRect,COLORREF Color)
 {
 	HBRUSH hbr=::CreateSolidBrush(Color);
 
-	if (hbr==NULL)
+	if (!hbr)
 		return false;
 	::FillRect(hdc,pRect,hbr);
 	::DeleteObject(hbr);
@@ -471,11 +471,11 @@ bool Fill(HDC hdc,const RECT *pRect,COLORREF Color)
 bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
 				HBITMAP hbm,const RECT *pSrcRect,BYTE Opacity)
 {
-	if (hdc==NULL || hbm==NULL)
+	if (!hdc || !hbm)
 		return false;
 
 	int SrcX,SrcY,SrcWidth,SrcHeight;
-	if (pSrcRect!=NULL) {
+	if (pSrcRect) {
 		SrcX=pSrcRect->left;
 		SrcY=pSrcRect->top;
 		SrcWidth=pSrcRect->right-pSrcRect->left;
@@ -490,7 +490,7 @@ bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
 	}
 
 	HDC hdcMemory=::CreateCompatibleDC(hdc);
-	if (hdcMemory==NULL)
+	if (!hdcMemory)
 		return false;
 	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcMemory,hbm));
 

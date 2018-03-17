@@ -18,7 +18,7 @@ public:
     bool IsShowLang2() const { return m_fShowLang2; }
     void ShowLang2(bool fShowLang2) { m_fShowLang2 = fShowLang2; }
     const LANG_TAG_INFO_DLL *GetLangTag() const {
-        return m_fShowLang2 && m_lang2.ucLangTag!=0xFF ? &m_lang2 : m_lang1.ucLangTag!=0xFF ? &m_lang1 : NULL;
+        return m_fShowLang2 && m_lang2.ucLangTag!=0xFF ? &m_lang2 : m_lang1.ucLangTag!=0xFF ? &m_lang1 : nullptr;
     }
     void SetProfileC(bool fProfileC) { m_fProfileC = fProfileC; }
 private:

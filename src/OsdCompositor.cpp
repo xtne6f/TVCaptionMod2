@@ -33,22 +33,22 @@ static const LPCTSTR OSD_COMPOSITOR_WINDOW_CLASS = TEXT("TVTest Plugin OsdCompos
 static const CLSID CLSID_madVR = {0xe1a8b82a, 0x32ce, 0x4b0d, {0xbe, 0x0d, 0xaa, 0x68, 0xc7, 0x72, 0xe4, 0x23}};
 
 COsdCompositor::COsdCompositor()
-    : m_hwnd(NULL)
-    , m_hwndContainer(NULL)
-    , m_hOle32(NULL)
-    , m_pfnCoCreateInstance(NULL)
-    , m_pRenderer(NULL)
+    : m_hwnd(nullptr)
+    , m_hwndContainer(nullptr)
+    , m_hOle32(nullptr)
+    , m_pfnCoCreateInstance(nullptr)
+    , m_pRenderer(nullptr)
     , m_RendererType(RT_VMR9)
-    , m_hD3D9(NULL)
-    , m_pD3D9(NULL)
-    , m_pD3DD9(NULL)
-    , m_pD3DS9(NULL)
+    , m_hD3D9(nullptr)
+    , m_pD3D9(nullptr)
+    , m_pD3DD9(nullptr)
+    , m_pD3DS9(nullptr)
     , m_TxListLen(0)
     , m_TxCount(0)
     , m_GroupListLen(0)
 #if OSD_COMPOSITOR_VERSION >= 1
     , m_CallbackListLen(0)
-    , m_LocCallback(NULL)
+    , m_LocCallback(nullptr)
 #endif
 {
 }
@@ -60,8 +60,8 @@ COsdCompositor::~COsdCompositor()
 
 HWND COsdCompositor::FindHandle()
 {
-    HWND hwnd = NULL;
-    while ((hwnd = ::FindWindowEx(HWND_MESSAGE, hwnd, OSD_COMPOSITOR_WINDOW_CLASS, NULL)) != NULL) {
+    HWND hwnd = nullptr;
+    while ((hwnd = ::FindWindowEx(HWND_MESSAGE, hwnd, OSD_COMPOSITOR_WINDOW_CLASS, nullptr)) != nullptr) {
         DWORD pid;
         ::GetWindowThreadProcessId(hwnd, &pid);
         if (pid == ::GetCurrentProcessId()) break;
@@ -178,7 +178,7 @@ bool COsdCompositor::SetUpdateCallback(UpdateCallbackFunc Callback, void *pClien
         ucp.Flags = 0;
         ucp.Callback = m_LocCallback;
         SendMessageToHandle(WM_SET_UPDATE_CALLBACK, 0, reinterpret_cast<LPARAM>(&ucp));
-        m_LocCallback = NULL;
+        m_LocCallback = nullptr;
     }
     if (Callback) {
         SET_UPDATE_CALLBACK_PARAM ucp = {0};
@@ -204,21 +204,21 @@ int COsdCompositor::GetVersion()
 
 // 初期化する
 // 先行プラグインが既にウィンドウを作成していた場合にもfalseを返すので、
-// 実際にオブジェクトを利用できるかどうかはFindHandle()がNULLを返すかどうかで判断する
+// 実際にオブジェクトを利用できるかどうかはFindHandle()がnullptrを返すかどうかで判断する
 // fSetHook==falseとするときはOnFilterGraphInitialized()/OnFilterGraphFinalize()を適切に呼ぶ必要がある
 bool COsdCompositor::Initialize(bool fSetHook)
 {
     if (m_hwnd) return true;
 
     // ウィンドウクラス登録(プロセス内でただ1つに限定)
-    HMODULE hBase = ::GetModuleHandle(NULL);
+    HMODULE hBase = ::GetModuleHandle(nullptr);
     WNDCLASS wc = {0};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hBase;
     wc.lpszClassName = OSD_COMPOSITOR_WINDOW_CLASS;
     if (::RegisterClass(&wc)) {
         // ウィンドウ作成
-        m_hwnd = ::CreateWindow(OSD_COMPOSITOR_WINDOW_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hBase, this);
+        m_hwnd = ::CreateWindow(OSD_COMPOSITOR_WINDOW_CLASS, nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, hBase, this);
         if (m_hwnd) {
             if (fSetHook) {
                 // CoCreateInstanceをフック
@@ -229,17 +229,17 @@ bool COsdCompositor::Initialize(bool fSetHook)
                         if (Hook(CoCreateInstanceHook, m_pfnCoCreateInstance)) {
                             return true;
                         }
-                        m_pfnCoCreateInstance = NULL;
+                        m_pfnCoCreateInstance = nullptr;
                     }
                     ::FreeLibrary(m_hOle32);
-                    m_hOle32 = NULL;
+                    m_hOle32 = nullptr;
                 }
             }
             else {
                 return true;
             }
             ::DestroyWindow(m_hwnd);
-            m_hwnd = NULL;
+            m_hwnd = nullptr;
         }
         ::UnregisterClass(OSD_COMPOSITOR_WINDOW_CLASS, hBase);
     }
@@ -251,36 +251,36 @@ bool COsdCompositor::Initialize(bool fSetHook)
 void COsdCompositor::Uninitialize()
 {
 #if OSD_COMPOSITOR_VERSION >= 1
-    SetUpdateCallback(NULL);
+    SetUpdateCallback(nullptr);
 #endif
 
     if (m_pfnCoCreateInstance) {
         Hook(m_pfnCoCreateInstance, CoCreateInstanceHook);
-        m_pfnCoCreateInstance = NULL;
+        m_pfnCoCreateInstance = nullptr;
     }
     if (m_pRenderer) {
         m_pRenderer->Release();
-        m_pRenderer = NULL;
+        m_pRenderer = nullptr;
     }
     if (m_hOle32) {
         ::FreeLibrary(m_hOle32);
-        m_hOle32 = NULL;
+        m_hOle32 = nullptr;
     }
     if (m_hwnd) {
         ::DestroyWindow(m_hwnd);
-        ::UnregisterClass(OSD_COMPOSITOR_WINDOW_CLASS, ::GetModuleHandle(NULL));
-        m_hwnd = NULL;
+        ::UnregisterClass(OSD_COMPOSITOR_WINDOW_CLASS, ::GetModuleHandle(nullptr));
+        m_hwnd = nullptr;
     }
 }
 
 void COsdCompositor::OnFilterGraphInitialized(IGraphBuilder *pGraphBuilder)
 {
     if (m_hwnd && !m_pfnCoCreateInstance) {
-        IEnumFilters *pEnum = NULL;
+        IEnumFilters *pEnum = nullptr;
         HRESULT hr = pGraphBuilder->EnumFilters(&pEnum);
         if (SUCCEEDED(hr)) {
             IBaseFilter *pFilter;
-            while (pEnum->Next(1, &pFilter, NULL) == S_OK) {
+            while (pEnum->Next(1, &pFilter, nullptr) == S_OK) {
                 CLSID clsid;
                 if (SUCCEEDED(pFilter->GetClassID(&clsid))) {
                     if (IsEqualCLSID(CLSID_VideoMixingRenderer9, clsid)) {
@@ -306,14 +306,14 @@ void COsdCompositor::OnFilterGraphFinalize(IGraphBuilder *pGraphBuilder)
     if (m_hwnd && !m_pfnCoCreateInstance) {
         if (m_pRenderer) {
             m_pRenderer->Release();
-            m_pRenderer = NULL;
+            m_pRenderer = nullptr;
         }
     }
 }
 
 bool COsdCompositor::Hook(CoCreateInstanceFunc *pfnNew, CoCreateInstanceFunc *pfnOld)
 {
-    HMODULE hBase = ::GetModuleHandle(NULL);
+    HMODULE hBase = ::GetModuleHandle(nullptr);
     ULONG ulSize;
     PIMAGE_IMPORT_DESCRIPTOR pIID =
         (PIMAGE_IMPORT_DESCRIPTOR)::ImageDirectoryEntryToData(hBase, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &ulSize);
@@ -326,7 +326,7 @@ bool COsdCompositor::Hook(CoCreateInstanceFunc *pfnNew, CoCreateInstanceFunc *pf
                 DWORD dwOldProtect;
                 if (::VirtualProtect(&pITD->u1.Function, sizeof(DWORD_PTR), PAGE_EXECUTE_READWRITE, &dwOldProtect)) {
                     DWORD_PTR dwpBuf = (DWORD_PTR)pfnNew;
-                    ::WriteProcessMemory(::GetCurrentProcess(), &pITD->u1.Function, &dwpBuf, sizeof(DWORD_PTR), NULL);
+                    ::WriteProcessMemory(::GetCurrentProcess(), &pITD->u1.Function, &dwpBuf, sizeof(DWORD_PTR), nullptr);
                     ::VirtualProtect(&pITD->u1.Function, sizeof(DWORD_PTR), dwOldProtect, &dwOldProtect);
                     return true;
                 }
@@ -452,7 +452,7 @@ LRESULT CALLBACK COsdCompositor::WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
                     SetAlphaBitmap(pThis->m_pRenderer, pThis->m_RendererType, pThis->m_pD3DS9, &nrc);
                 }
                 else {
-                    SetAlphaBitmap(pThis->m_pRenderer, pThis->m_RendererType, NULL, NULL);
+                    SetAlphaBitmap(pThis->m_pRenderer, pThis->m_RendererType, nullptr, nullptr);
                 }
             }
         }
@@ -581,7 +581,7 @@ bool COsdCompositor::SetAlphaBitmap(IBaseFilter *pRenderer, RENDERER_TYPE Render
         if (SUCCEEDED(hr)) {
             VMR9AlphaBitmap ab;
             ab.dwFlags = pD3DS9 ? VMR9AlphaBitmap_EntireDDS | VMR9AlphaBitmap_FilterMode : VMR9AlphaBitmap_Disable;
-            ab.hdc = NULL;
+            ab.hdc = nullptr;
             ab.pDDS = pD3DS9;
             ab.rDest.left = pNrc ? pNrc->left : 0.0f;
             ab.rDest.top = pNrc ? pNrc->top : 0.0f;
@@ -656,19 +656,19 @@ bool COsdCompositor::CreateDevice()
                     pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
                     pp.Windowed = TRUE;
                     pp.hDeviceWindow = m_hwndContainer;
-                    hr = m_pD3D9->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, NULL,
+                    hr = m_pD3D9->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, nullptr,
                                                D3DCREATE_SOFTWARE_VERTEXPROCESSING, &pp, &m_pD3DD9);
                     if (SUCCEEDED(hr)) {
                         return true;
                     }
-                    m_pD3DD9 = NULL;
+                    m_pD3DD9 = nullptr;
                 }
                 m_pD3D9->Release();
-                m_pD3D9 = NULL;
+                m_pD3D9 = nullptr;
             }
         }
         ::FreeLibrary(m_hD3D9);
-        m_hD3D9 = NULL;
+        m_hD3D9 = nullptr;
     }
     return false;
 }
@@ -677,19 +677,19 @@ void COsdCompositor::ReleaseDevice()
 {
     if (m_pD3DS9) {
         m_pD3DS9->Release();
-        m_pD3DS9 = NULL;
+        m_pD3DS9 = nullptr;
     }
     if (m_pD3DD9) {
         m_pD3DD9->Release();
-        m_pD3DD9 = NULL;
+        m_pD3DD9 = nullptr;
     }
     if (m_pD3D9) {
         m_pD3D9->Release();
-        m_pD3D9 = NULL;
+        m_pD3D9 = nullptr;
     }
     if (m_hD3D9) {
         ::FreeLibrary(m_hD3D9);
-        m_hD3D9 = NULL;
+        m_hD3D9 = nullptr;
     }
 }
 
@@ -720,20 +720,20 @@ bool COsdCompositor::SetupSurface(int VideoWidth, int VideoHeight, RECT *pSurfac
             (int)desc.Height != rcSurface.bottom - rcSurface.top)
         {
             m_pD3DS9->Release();
-            m_pD3DS9 = NULL;
+            m_pD3DS9 = nullptr;
         }
     }
     if (!m_pD3DS9 && m_pD3DD9 && !::IsRectEmpty(&rcSurface)) {
         hr = m_pD3DD9->CreateOffscreenPlainSurface(rcSurface.right - rcSurface.left, rcSurface.bottom - rcSurface.top,
-                                                   D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &m_pD3DS9, NULL);
+                                                   D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &m_pD3DS9, nullptr);
         if (FAILED(hr)) {
-            m_pD3DS9 = NULL;
+            m_pD3DS9 = nullptr;
         }
     }
     // テクスチャをサーフェイスに合成
     if (m_pD3DS9) {
         D3DLOCKED_RECT lr;
-        hr = m_pD3DS9->LockRect(&lr, NULL, 0);
+        hr = m_pD3DS9->LockRect(&lr, nullptr, 0);
         if (SUCCEEDED(hr)) {
             //::memset(lr.pBits, 0x60, lr.Pitch * (rcSurface.bottom - rcSurface.top)); // DEBUG
             ::memset(lr.pBits, 0, lr.Pitch * (rcSurface.bottom - rcSurface.top));
@@ -761,7 +761,7 @@ bool COsdCompositor::SetupSurface(int VideoWidth, int VideoHeight, RECT *pSurfac
         }
     }
     *pSurfaceRect = rcSurface;
-    return m_pD3DS9 != NULL;
+    return m_pD3DS9 != nullptr;
 }
 
 HRESULT WINAPI COsdCompositor::CoCreateInstanceHook(REFCLSID rclsid, LPUNKNOWN pUnkOuter, DWORD dwClsContext, REFIID riid, LPVOID FAR* ppv)
@@ -780,7 +780,7 @@ HRESULT WINAPI COsdCompositor::CoCreateInstanceHook(REFCLSID rclsid, LPUNKNOWN p
                  IsEqualCLSID(CLSID_madVR, rclsid)))
             {
                 pThis->m_pRenderer->Release();
-                pThis->m_pRenderer = NULL;
+                pThis->m_pRenderer = nullptr;
             }
             hr = pThis->m_pfnCoCreateInstance(rclsid, pUnkOuter, dwClsContext, riid, ppv);
             // レンダラの生成を監視(TVTestのVideoRenderer.cpp参照)

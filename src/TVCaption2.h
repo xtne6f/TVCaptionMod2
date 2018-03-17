@@ -40,7 +40,7 @@ public:
 private:
     HWND GetFullscreenWindow();
     HWND FindVideoContainer();
-    bool GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect = NULL, RECT *pExVideoRect = NULL);
+    bool GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect = nullptr, RECT *pExVideoRect = nullptr);
     int GetVideoPid();
     bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2]);
     bool EnablePlugin(bool fEnable);
@@ -62,7 +62,7 @@ private:
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
                          SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-    void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest = NULL);
+    void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest = nullptr);
     void OnSize(STREAM_INDEX index);
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
     void ProcessPacket(BYTE *pPacket);

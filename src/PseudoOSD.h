@@ -16,7 +16,7 @@ class CPseudoOSD
 			RECT AdjustRect;
 			RECT PaintRect;
 		};
-		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_,const RECT &AdjustRect_) : Text(pszText),hbm(NULL),Width(Width_),lf(lf_),AdjustRect(AdjustRect_) {}
+		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_,const RECT &AdjustRect_) : Text(pszText),hbm(nullptr),Width(Width_),lf(lf_),AdjustRect(AdjustRect_) {}
 		STYLE_ELEM(HBITMAP hbm_,int Width_,const RECT &PaintRect_) : hbm(hbm_),Width(Width_),PaintRect(PaintRect_) {}
 	};
 	std::vector<STYLE_ELEM> m_StyleList;
@@ -44,7 +44,7 @@ class CPseudoOSD
 	void DrawImageList(HDC hdc,int MultX,int MultY) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
 	static bool AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth);
-	void UpdateLayeredWindow(HDC hdcCompose=NULL,void *pBitsCompose=NULL,int WidthCompose=0,int HeightCompose=0,bool fKeepAlpha=false);
+	void UpdateLayeredWindow(HDC hdcCompose=nullptr,void *pBitsCompose=nullptr,int WidthCompose=0,int HeightCompose=0,bool fKeepAlpha=false);
 
 	static const LPCTSTR m_pszWindowClass;
 	static HINSTANCE m_hinst;

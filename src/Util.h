@@ -139,7 +139,7 @@ namespace DrawUtil {
 
 bool Fill(HDC hdc,const RECT *pRect,COLORREF Color);
 bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
-				HBITMAP hbm,const RECT *pSrcRect=NULL,BYTE Opacity=255);
+				HBITMAP hbm,const RECT *pSrcRect=nullptr,BYTE Opacity=255);
 
 }	// namespace DrawUtil
 
