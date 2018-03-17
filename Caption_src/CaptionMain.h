@@ -7,9 +7,8 @@ class CCaptionMain
 {
 public:
 	CCaptionMain(void);
-	~CCaptionMain(void);
 
-	DWORD AddTSPacket(BYTE* pbPacket);
+	DWORD AddTSPacket(LPCBYTE pbPacket);
 	DWORD Clear();
 
 	DWORD GetTagInfo(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount);
@@ -20,8 +19,6 @@ public:
 	BOOL ResetGaijiTable(DWORD* pdwTableSize) { return m_cDec.ResetGaijiTable(pdwTableSize); }
 
 protected:
-	static const DWORD ERR_INVALID_PACKET = CP_ERR_INVALID_PACKET;
-
 	struct PAYLOAD_DATA{
 		BYTE bBuff[188];
 		WORD wSize;

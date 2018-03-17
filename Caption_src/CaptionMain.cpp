@@ -16,10 +16,6 @@ CCaptionMain::CCaptionMain(void)
 	}
 }
 
-CCaptionMain::~CCaptionMain(void)
-{
-}
-
 DWORD CCaptionMain::Clear()
 {
 	m_PayloadList.clear();
@@ -34,21 +30,19 @@ DWORD CCaptionMain::Clear()
 	return 0;
 }
 
-DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
+DWORD CCaptionMain::AddTSPacket(LPCBYTE pbPacket)
 {
 	if( pbPacket == NULL ){
 		Clear();
 		return FALSE;
 	}
-	BYTE bb[188];
-	memcpy(bb,pbPacket,188);
 
 	unsigned char ucSync = pbPacket[0];
-	unsigned char ucTsErr = (pbPacket[1]&0x80)>>7;
+	//unsigned char ucTsErr = (pbPacket[1]&0x80)>>7;
 	unsigned char ucPayloadStartFlag = (pbPacket[1]&0x40)>>6;
-	unsigned char ucPriority = (pbPacket[1]&0x20)>>5;
-	unsigned short usPID = ((unsigned short)(pbPacket[1]&0x1F))<<8 | pbPacket[2];
-	unsigned char ucScramble = (pbPacket[3]&0xC0)>>6;
+	//unsigned char ucPriority = (pbPacket[1]&0x20)>>5;
+	//unsigned short usPID = ((unsigned short)(pbPacket[1]&0x1F))<<8 | pbPacket[2];
+	//unsigned char ucScramble = (pbPacket[3]&0xC0)>>6;
 	unsigned char ucAdaptFlag = (pbPacket[3]&0x20)>>5;
 	unsigned char ucPayloadFlag = (pbPacket[3]&0x10)>>4;
 	unsigned char ucCounter = (pbPacket[3]&0x0F);
@@ -91,7 +85,7 @@ DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
 			//解析してないのに次の開始パケットがきた
 			//パケット飛んでる可能性あるのでエラー
 			Clear();
-			return ERR_INVALID_PACKET;
+			return CP_ERR_INVALID_PACKET;
 		}
 		if( dwStart >= 188 ){
 			//アダプテーションか何かでペイロードなくなった？
@@ -117,7 +111,7 @@ DWORD CCaptionMain::AddTSPacket(BYTE* pbPacket)
 					stData->bBuff[2] != 0x01 ){
 					//PESじゃないのでエラー
 					Clear();
-					return ERR_INVALID_PACKET;
+					return CP_ERR_INVALID_PACKET;
 				}
 				
 				DWORD dwSecSize = 0;
@@ -185,35 +179,35 @@ DWORD CCaptionMain::ParseListData()
 			return ParseCaption(&m_pbBuff[wStartPos], nDataSize);
 		}
 	}
-	return ERR_INVALID_PACKET;
+	return CP_ERR_INVALID_PACKET;
 }
 
 DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 {
 	if( pbBuff == NULL || dwSize < 3 ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	//字幕か文字スーパーであるか
 	if( pbBuff[0] != 0x80 && pbBuff[0] != 0x81 ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	if( pbBuff[1] != 0xFF ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	unsigned char ucHeadSize = pbBuff[2]&0x0F;
 	
 	DWORD dwStartPos = 3+ucHeadSize;
 
 	if( dwSize < dwStartPos + 5 ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	unsigned char ucDataGroupID = pbBuff[dwStartPos]>>2;
-	unsigned char ucVersion = pbBuff[dwStartPos]&0x03; //運用されない
+	//unsigned char ucVersion = pbBuff[dwStartPos]&0x03; //運用されない
 	dwStartPos+=3;
 	unsigned short usDataGroupSize = ((unsigned short)(pbBuff[dwStartPos]))<<8 | pbBuff[dwStartPos+1];
 	dwStartPos+=2;
 	if( dwSize < dwStartPos + usDataGroupSize ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	unsigned char ucDgiGroup = ucDataGroupID&0xF0;
 	unsigned char ucID = ucDataGroupID&0x0F;
@@ -272,7 +266,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
                                                vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap)
 {
 	if( pbBuff == NULL || dwSize < 2 ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	DWORD dwRet = TRUE;
 	
@@ -285,7 +279,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 	unsigned char ucOTMSSS = 0;
 	if( ucTMD == 0x02 ){
 		if( dwSize < 5+2 ){
-			return ERR_INVALID_PACKET;
+			return CP_ERR_INVALID_PACKET;
 		}
 		//OTM
 		ucOTMHH = (pbBuff[dwPos]&0xF0>>4)*10 + (pbBuff[dwPos]&0x0F);
@@ -302,7 +296,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 	
 	for( unsigned char i=0; i<ucLangNum; i++ ){
 		if( dwSize < dwPos+6 ){
-			return ERR_INVALID_PACKET;
+			return CP_ERR_INVALID_PACKET;
 		}
 		LANG_TAG_INFO_DLL Item;
 		Item.ucLangTag = pbBuff[dwPos]>>5;
@@ -326,7 +320,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 		}
 	}
 	if( dwSize < dwPos+3 ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	UINT uiUnitSize = ((UINT)(pbBuff[dwPos]))<<16 | ((UINT)(pbBuff[dwPos+1]))<<8 | pbBuff[dwPos+2];
 	dwPos+=3;
@@ -334,9 +328,9 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 		//字幕データ
 		DWORD dwReadSize = 0;
 		while( dwReadSize<uiUnitSize && dwRet==TRUE ){
-			DWORD dwSize = 0;
-			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize,&dwSize, pCaptionList, pDRCList, pDRCMap, 9);
-			dwReadSize+=dwSize;
+			DWORD dwReadUnit = 0;
+			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList, pDRCList, pDRCMap, 9);
+			dwReadSize += dwReadUnit;
 		}
 	}
 	return dwRet;
@@ -346,7 +340,7 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
                                      vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode)
 {
 	if( pbBuff == NULL || dwSize < 4 ){
-		return ERR_INVALID_PACKET;
+		return CP_ERR_INVALID_PACKET;
 	}
 	
 	DWORD dwRet = TRUE;
@@ -362,7 +356,7 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
 	
 	if( ucTMD == 0x01 || ucTMD == 0x02 ){
 		if( dwSize < 5+4 ){
-			return ERR_INVALID_PACKET;
+			return CP_ERR_INVALID_PACKET;
 		}
 		//STM
 		ucOTMHH = (pbBuff[dwPos]&0xF0>>4)*10 + (pbBuff[dwPos]&0x0F);
@@ -380,9 +374,9 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
 		//字幕データ
 		DWORD dwReadSize = 0;
 		while( dwReadSize<uiUnitSize && dwRet==TRUE ){
-			DWORD dwSize = 0;
-			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize,&dwSize, pCaptionList, pDRCList, pDRCMap, wSWFMode);
-			dwReadSize+=dwSize;
+			DWORD dwReadUnit = 0;
+			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList, pDRCList, pDRCMap, wSWFMode);
+			dwReadSize += dwReadUnit;
 		}
 
 	}
