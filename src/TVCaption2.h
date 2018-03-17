@@ -110,7 +110,7 @@ private:
     // 字幕描画
     HWND m_hwndPainting;
     HWND m_hwndContainer;
-    std::vector<CPseudoOSD*> m_pOsdList[STREAM_MAX];
+    std::vector<std::unique_ptr<CPseudoOSD>> m_pOsdList[STREAM_MAX];
     int m_osdShowCount[STREAM_MAX];
     int m_osdPrepareCount[STREAM_MAX];
     bool m_fOsdClear[STREAM_MAX];
@@ -125,7 +125,7 @@ private:
     CCaptionManager m_caption2Manager;
 
     // ストリーム解析
-    CCriticalLock m_streamLock;
+    recursive_mutex_ m_streamLock;
     DWORD m_pcr;
     DWORD m_procCapTick;
     bool m_fResetPat;

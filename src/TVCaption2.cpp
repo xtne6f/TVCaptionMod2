@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <Shlwapi.h>
 #include <vector>
+#include <memory>
 #include <algorithm>
 #include "Util.h"
 #include "PseudoOSD.h"
@@ -938,9 +939,9 @@ void CTVCaption2::HideOsds(STREAM_INDEX index)
     for (; m_osdShowCount[index] > 0; --m_osdShowCount[index]) {
         m_pOsdList[index].front()->Hide();
         // 表示待ちOSDの直後に移動
-        CPseudoOSD *p = m_pOsdList[index].front();
-        m_pOsdList[index].insert(m_pOsdList[index].begin() + m_osdShowCount[index] + m_osdPrepareCount[index], p);
-        m_pOsdList[index].erase(m_pOsdList[index].begin());
+        for (int i = 0; i < m_osdShowCount[index] + m_osdPrepareCount[index] - 1; ++i) {
+            m_pOsdList[index][i].swap(m_pOsdList[index][i + 1]);
+        }
     }
 }
 
@@ -967,10 +968,7 @@ void CTVCaption2::DestroyOsds()
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
     for (int index = 0; index < STREAM_MAX; ++index) {
-        while (!m_pOsdList[index].empty()) {
-            delete m_pOsdList[index].back();
-            m_pOsdList[index].pop_back();
-        }
+        m_pOsdList[index].clear();
         m_osdShowCount[index] = 0;
         m_osdPrepareCount[index] = 0;
         m_fOsdClear[index] = false;
@@ -1006,7 +1004,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
     while (m_osdShowCount[index] + m_osdPrepareCount[index] >= (int)m_pOsdList[index].size()) {
-        m_pOsdList[index].push_back(new CPseudoOSD);
+        m_pOsdList[index].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
     }
     CPseudoOSD &osd = *m_pOsdList[index][m_osdShowCount[index] + m_osdPrepareCount[index]++];
     osd.ClearText();
@@ -1490,7 +1488,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         pThis->m_hwndContainer = pThis->FindVideoContainer();
         if (pThis->m_hwndContainer) {
             for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
-                pThis->m_pOsdList[STREAM_CAPTION].push_back(new CPseudoOSD);
+                pThis->m_pOsdList[STREAM_CAPTION].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
                 pThis->m_pOsdList[STREAM_CAPTION].back()->Create(pThis->m_hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
             }
             pThis->m_osdCompositor.SetContainerWindow(pThis->m_hwndContainer);

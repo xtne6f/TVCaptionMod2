@@ -111,25 +111,28 @@ inline void extract_ts_header(TS_HEADER *dst, const unsigned char *packet)
     dst->continuity_counter           = packet[3] & 0x0f;
 }
 
-class CCriticalLock
+class recursive_mutex_
 {
 public:
-    CCriticalLock() { ::InitializeCriticalSection(&m_section); }
-    ~CCriticalLock() { ::DeleteCriticalSection(&m_section); }
-    void Lock() { ::EnterCriticalSection(&m_section); }
-    void Unlock() { ::LeaveCriticalSection(&m_section); }
-    //CRITICAL_SECTION &GetCriticalSection() { return m_section; }
+    recursive_mutex_() { ::InitializeCriticalSection(&m_cs); }
+    ~recursive_mutex_() { ::DeleteCriticalSection(&m_cs); }
+    void lock() { ::EnterCriticalSection(&m_cs); }
+    void unlock() { ::LeaveCriticalSection(&m_cs); }
 private:
-    CRITICAL_SECTION m_section;
+    recursive_mutex_(const recursive_mutex_&);
+    recursive_mutex_ &operator=(const recursive_mutex_&);
+    CRITICAL_SECTION m_cs;
 };
 
 class CBlockLock
 {
 public:
-    CBlockLock(CCriticalLock *pLock) : m_pLock(pLock) { m_pLock->Lock(); }
-    ~CBlockLock() { m_pLock->Unlock(); }
+    CBlockLock(recursive_mutex_ *mtx) : m_mtx(mtx) { m_mtx->lock(); }
+    ~CBlockLock() { m_mtx->unlock(); }
 private:
-    CCriticalLock *m_pLock;
+    CBlockLock(const CBlockLock&);
+    CBlockLock &operator=(const CBlockLock&);
+    recursive_mutex_ *m_mtx;
 };
 
 bool CompareLogFont(const LOGFONT *pFont1,const LOGFONT *pFont2);
