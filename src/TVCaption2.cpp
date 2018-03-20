@@ -1203,14 +1203,16 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     }
                     if (pDrcs) {
                         // もしあれば置きかえ可能な文字列を取得
-                        DRCS_PAIR e;
-                        e.str[0] = 0;
-                        if (!m_drcsStrMap.empty() && CalcMD5FromDRCSPattern(e.md5, pDrcs)) {
-                            // 2分探索
-                            std::vector<DRCS_PAIR>::const_iterator it =
-                                std::lower_bound(m_drcsStrMap.begin(), m_drcsStrMap.end(), e, DRCS_PAIR::COMPARE());
-                            if (it != m_drcsStrMap.end() && !DRCS_PAIR::COMPARE()(e, *it)) {
-                                pszDrcsStr = it->str;
+                        if (!m_drcsStrMap.empty()) {
+                            DRCS_PAIR e = {};
+                            for (int k = 0; CalcMD5FromDRCSPattern(e.md5, *pDrcs, k); ++k) {
+                                // 2分探索
+                                std::vector<DRCS_PAIR>::const_iterator it =
+                                    std::lower_bound(m_drcsStrMap.begin(), m_drcsStrMap.end(), e, DRCS_PAIR::COMPARE());
+                                if (it != m_drcsStrMap.end() && !DRCS_PAIR::COMPARE()(e, *it)) {
+                                    pszDrcsStr = it->str;
+                                    break;
+                                }
                             }
                         }
                         pszCarry = &pszShow[j+1];

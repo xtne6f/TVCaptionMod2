@@ -8,7 +8,7 @@ inline bool operator==(const CLUT_DAT_DLL &a, const CLUT_DAT_DLL &b) {
     return a.ucR == b.ucR && a.ucG == b.ucG && a.ucB == b.ucB && a.ucAlpha == b.ucAlpha;
 }
 
-BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern);
+BOOL CalcMD5FromDRCSPattern(BYTE (&bHash)[16], const DRCS_PATTERN_DLL &drcs, int nIndex);
 
 // 2ストリーム(字幕+文字スーパーなど)をまとめて扱うラッパークラス
 // 昔の名残りでこんな名前だが実装はすでにDLLではない

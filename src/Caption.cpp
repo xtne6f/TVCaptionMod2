@@ -1,31 +1,40 @@
 ﻿#include <Windows.h>
 #include "Caption.h"
 
-BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern)
+BOOL CalcMD5FromDRCSPattern(BYTE (&bHash)[16], const DRCS_PATTERN_DLL &drcs, int nIndex)
 {
-	WORD wGradation = pPattern->wGradation;
-	int nWidth = pPattern->bmiHeader.biWidth;
-	int nHeight = pPattern->bmiHeader.biHeight;
-	if( !(wGradation==2 || wGradation==4) || nWidth>DRCS_SIZE_MAX || nHeight>DRCS_SIZE_MAX ){
+	int nWidth = drcs.bmiHeader.biWidth;
+	int nHeight = drcs.bmiHeader.biHeight;
+	if( nIndex < 0 || (drcs.wGradation != 2 && drcs.wGradation != 4) || nWidth > DRCS_SIZE_MAX || nHeight > DRCS_SIZE_MAX ||
+	    /* 標準サイズを縦横2倍角に拡大(横に-2,0,2ずれ)した値も返す */
+	    (drcs.wGradation == 4 && (nIndex > 3 || (nIndex > 0 && (nWidth != DRCS_SIZE_MAX / 2 - 2 || nHeight != DRCS_SIZE_MAX / 2)))) ||
+	    /* 2階調を4階調に変換した値も返す */
+	    (drcs.wGradation == 2 && (nIndex > 7 || (nIndex > 1 && (nWidth != DRCS_SIZE_MAX / 2 - 2 || nHeight != DRCS_SIZE_MAX / 2)))) ){
 		return FALSE;
 	}
 	BYTE bData[(DRCS_SIZE_MAX*DRCS_SIZE_MAX + 3) / 4] = {};
-	const BYTE *pbBitmap = pPattern->pbBitmap;
 
-	DWORD dwDataLen = wGradation==2 ? (nWidth*nHeight+7)/8 : (nWidth*nHeight+3)/4;
-	DWORD dwSizeImage = 0;
+	int nExpand = (nIndex > 1 || (drcs.wGradation == 4 && nIndex > 0) ? 2 : 1);
+	int nPaddingL = (nExpand == 2 ? 2 * (drcs.wGradation == 4 ? nIndex - 1 : nIndex / 2 - 1) : 0);
+	int nPaddingR = (nExpand == 2 ? 4 - nPaddingL : 0);
+	int nGradationBits = (drcs.wGradation == 4 || (nIndex % 2) ? 2 : 1);
+	DWORD dwDataBits = 0;
 	for( int y=nHeight-1; y>=0; y-- ){
-		for( int x=0; x<nWidth; x++ ){
-			int nPix = x%2==0 ? pbBitmap[dwSizeImage++]>>4 :
-			                    pbBitmap[dwSizeImage-1]&0x0F;
-			int nPos = y*nWidth+x;
-			if( wGradation==2 ){
-				bData[nPos/8] |= (BYTE)((nPix/3)<<(7-nPos%8));
-			}else{
-				bData[nPos/4] |= (BYTE)(nPix<<((3-nPos%4)*2));
+		for( int j=0; j<nExpand; j++ ){
+			dwDataBits += nGradationBits * nPaddingL;
+			for( int x=0; x<nWidth; x++ ){
+				for( int i=0; i<nExpand; i++ ){
+					int nPix = drcs.pbBitmap[y * ((nWidth + 7) / 8 * 4) + x / 2] >> (x % 2 ? 0 : 4) & 0x0F;
+					if( nGradationBits == 1 ){
+						bData[dwDataBits / 8] |= (BYTE)((nPix / 3) << (7 - dwDataBits % 8));
+					}else{
+						bData[dwDataBits / 8] |= (BYTE)(nPix << (6 - dwDataBits % 8));
+					}
+					dwDataBits += nGradationBits;
+				}
 			}
+			dwDataBits += nGradationBits * nPaddingR;
 		}
-		dwSizeImage = (dwSizeImage + 3) / 4 * 4;
 	}
 
 	HCRYPTPROV hProv;
@@ -33,9 +42,9 @@ BOOL CalcMD5FromDRCSPattern(BYTE *pbHash, const DRCS_PATTERN_DLL *pPattern)
 	if( ::CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) ){
 		HCRYPTHASH hHash;
 		if( ::CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash) ){
-			DWORD dwHashLen = 16;
-			if( ::CryptHashData(hHash, bData, dwDataLen, 0) &&
-			    ::CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashLen, 0) ){
+			DWORD dwHashLen = sizeof(bHash);
+			if( ::CryptHashData(hHash, bData, (dwDataBits + 7) / 8, 0) &&
+			    ::CryptGetHashParam(hHash, HP_HASHVAL, bHash, &dwHashLen, 0) ){
 				bRet = TRUE;
 			}
 			::CryptDestroyHash(hHash);
