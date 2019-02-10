@@ -9,10 +9,18 @@ CCaptionMain::CCaptionMain(void)
 	, m_bAnalyz(TRUE)
 	, m_dwNowReadSize(0)
 	, m_dwNeedSize(0)
+	, m_debugMacroHitFile(INVALID_HANDLE_VALUE)
 {
 	for( size_t i=0; i<LANG_TAG_MAX; i++ ){
 		//ucLangTag==0xFFは当該タグが存在しないことを示す
 		m_LangTagList[i].ucLangTag = 0xFF;
+	}
+}
+
+CCaptionMain::~CCaptionMain()
+{
+	if( m_debugMacroHitFile != INVALID_HANDLE_VALUE ){
+		CloseHandle(m_debugMacroHitFile);
 	}
 }
 
@@ -27,6 +35,10 @@ DWORD CCaptionMain::Clear()
 	m_ucDgiGroup = 0xFF;
 	m_iLastCounter = -1;
 	m_bAnalyz = TRUE;
+	if( m_debugMacroHitFile != INVALID_HANDLE_VALUE ){
+		CloseHandle(m_debugMacroHitFile);
+		m_debugMacroHitFile = INVALID_HANDLE_VALUE;
+	}
 	return 0;
 }
 
@@ -60,6 +72,13 @@ DWORD CCaptionMain::AddTSPacket(LPCBYTE pbPacket)
 		if( m_iLastCounter != ucCounter ){
 			Clear();
 		}
+	}
+
+	memmove(m_debugMacroHitQueue, m_debugMacroHitQueue + 188, sizeof(m_debugMacroHitQueue) - 188);
+	memcpy(m_debugMacroHitQueue + sizeof(m_debugMacroHitQueue) - 188, pbPacket, 188);
+	if( m_debugMacroHitFile != INVALID_HANDLE_VALUE ){
+		DWORD debugWritten;
+		WriteFile(m_debugMacroHitFile, m_debugMacroHitQueue, 188, &debugWritten, NULL);
 	}
 
 	unsigned char ucAdaptLength = 0;
@@ -420,6 +439,11 @@ DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSi
 	if( uiUnitSize > 0 ){
 		if( m_cDec.Caption(pbBuff+5, uiUnitSize, pCaptionList, pDRCMap, wSWFMode) == FALSE ){
 			return FALSE;
+		}
+		if( m_cDec.m_debugMacroHit && m_debugMacroHitFile == INVALID_HANDLE_VALUE ){
+			WCHAR debugName[64];
+			wsprintf(debugName, TEXT("DebugMacroHit_%08x.dat"), GetTickCount());
+			m_debugMacroHitFile = CreateFile(debugName, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 		}
 	}
 	*pdwReadSize = 5+uiUnitSize;

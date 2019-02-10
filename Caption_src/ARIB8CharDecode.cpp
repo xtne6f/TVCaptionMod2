@@ -253,6 +253,8 @@ BOOL CARIB8CharDecode::InitCaption(void)
 //戻り値がFALSEのときpCaptionListは中途半端に更新されているので、可能ならすべてを破棄する
 BOOL CARIB8CharDecode::Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList, CDRCMap* pDRCMap, WORD wInitSWFMode )
 {
+	m_debugMacroHit = false;
+
 	if( pbSrc == NULL || dwSrcSize == 0 || pCaptionList == NULL || pDRCMap == NULL ){
 		return FALSE;
 	}
@@ -781,6 +783,9 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			DWORD dwTemp=0;
 			//マクロ
 			if( 0x60 <= (pbSrc[0]&0x7F) && (pbSrc[0]&0x7F) <= 0x6F ){
+				if( (pbSrc[0]&0x7F) == 0x62 || (pbSrc[0]&0x7F) == 0x65 ){
+					m_debugMacroHit = true;
+				}
 				if( Analyze(DefaultMacro[pbSrc[0]&0x0F], sizeof(DefaultMacro[0]), &dwTemp) == FALSE ){
 					return FALSE;
 				}

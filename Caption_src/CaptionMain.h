@@ -5,8 +5,12 @@
 
 class CCaptionMain
 {
+	HANDLE m_debugMacroHitFile;
+	BYTE m_debugMacroHitQueue[188 * 16];
+
 public:
 	CCaptionMain(void);
+	~CCaptionMain();
 
 	DWORD AddTSPacket(LPCBYTE pbPacket);
 	DWORD Clear();
