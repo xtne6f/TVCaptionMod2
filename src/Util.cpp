@@ -286,16 +286,19 @@ void extract_pmt(PMT *pmt, const unsigned char *payload, int payload_size, int u
                  stream_type == H_265_VIDEO) &&
                 pos + 5 + es_info_length <= 3 + pmt->psi.section_length - 4/*CRC32*/)
             {
+                pmt->stream_type[pmt->pid_count] = (unsigned char)stream_type;
+                pmt->pid[pmt->pid_count] = (table[pos+1]&0x1f)<<8 | table[pos+2];
                 // ストリーム識別記述子を探す(運用規定と異なり必ずしも先頭に配置されない)
+                // 映像系ストリームの情報は再生中の映像PIDとのマッチングに使うだけなので、component_tagの情報は必須でない
+                pmt->component_tag[pmt->pid_count] = 0xff;
                 for (info_pos = 0; info_pos + 2 < es_info_length; ) {
                     if (table[pos+5+info_pos] == 0x52) {
-                        pmt->stream_type[pmt->pid_count] = (unsigned char)stream_type;
-                        pmt->pid[pmt->pid_count] = (table[pos+1]&0x1f)<<8 | table[pos+2];
-                        pmt->component_tag[pmt->pid_count++] = table[pos+5+info_pos+2];
+                        pmt->component_tag[pmt->pid_count] = table[pos+5+info_pos+2];
                         break;
                     }
                     info_pos += 2 + table[pos+5+info_pos+1];
                 }
+                ++pmt->pid_count;
             }
             pos += 5 + es_info_length;
         }
