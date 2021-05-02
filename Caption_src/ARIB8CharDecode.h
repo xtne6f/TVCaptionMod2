@@ -182,6 +182,12 @@ protected:
 	vector<CAPTION_DATA>* m_pCaptionList;
 	CDRCMap* m_pDRCMap;
 	WCHAR m_GaijiTable[G_CELL_SIZE * 7][2];
+
+	static const WCHAR AsciiTable[94];
+	static const WCHAR HiraTable[94];
+	static const WCHAR KanaTable[94];
+	static const WCHAR JisXKanaTable[94];
+	static const BYTE DefaultMacro[16][20];
 protected:
 	BOOL InitCaption(void);
 	BOOL Analyze( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSize );
