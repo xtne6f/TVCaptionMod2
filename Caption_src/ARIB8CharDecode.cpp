@@ -612,7 +612,11 @@ BOOL CARIB8CharDecode::C1( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 
 BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSize, const MF_MODE* mode )
 {
-	if( dwSrcSize == 0 || (pbSrc[0]&0x7F) <= 0x20 || 0x7F <= (pbSrc[0]&0x7F) ){
+	if( dwSrcSize == 0 ){
+		return FALSE;
+	}
+	BYTE b = pbSrc[0] & 0x7F;
+	if( b < 0x21 || 0x7F <= b ){
 		return FALSE;
 	}
 
@@ -623,7 +627,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_JISX_KANA:
 				{
 				//JIS X0201片仮名
-				m_strDecode += JisXKanaTable[(pbSrc[0]&0x7F)-0x21];
+				m_strDecode += JisXKanaTable[b - 0x21];
 				ActivePositionForward(1);
 				}
 				break;
@@ -631,7 +635,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_ASCII:
 				{
 				//全角なのでテーブルからコード取得
-				m_strDecode += AsciiTable[(pbSrc[0]&0x7F)-0x21];
+				m_strDecode += AsciiTable[b - 0x21];
 				ActivePositionForward(1);
 				}
 				break;
@@ -639,7 +643,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_HIRA:
 				{
 				//Gセットのひらがな系集合
-				m_strDecode += HiraTable[(pbSrc[0]&0x7F)-0x21];
+				m_strDecode += HiraTable[b - 0x21];
 				ActivePositionForward(1);
 				}
 				break;
@@ -647,7 +651,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_KANA:
 				{
 				//Gセットのカタカナ系集合
-				m_strDecode += KanaTable[(pbSrc[0]&0x7F)-0x21];
+				m_strDecode += KanaTable[b - 0x21];
 				ActivePositionForward(1);
 				}
 				break;
@@ -665,10 +669,10 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 				if( dwSrcSize < 2 ){
 					return FALSE;
 				}
-				unsigned char ucFirst = pbSrc[0]&0x7F;
+				unsigned char ucFirst = b;
 				unsigned char ucSecond = pbSrc[1]&0x7F;
 				if( ToSJIS(&ucFirst, &ucSecond) == FALSE ){
-					AddGaijiToString(pbSrc[0]&0x7F, pbSrc[1]&0x7F);
+					AddGaijiToString(b, pbSrc[1]&0x7F);
 				}else{
 					AddSJISToString(ucFirst, ucSecond);
 				}
@@ -686,10 +690,10 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 				if( dwSrcSize < 2 ){
 					return FALSE;
 				}
-				cc = (pbSrc[0]&0x7F)<<8 | (pbSrc[1]&0x7F);
+				cc = b<<8 | (pbSrc[1]&0x7F);
 			}else{
 				//1バイトDRCSは0x01xxから0x0Fxxに符号シフト
-				cc = (BYTE)(mode->iMF-MF_DRCS_0)<<8 | (pbSrc[0]&0x7F);
+				cc = (BYTE)(mode->iMF-MF_DRCS_0)<<8 | b;
 			}
 			m_strDecode += m_pDRCMap->MapUCS(cc);
 			ActivePositionForward(1);
@@ -697,8 +701,8 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 		}else if( mode->iMF == MF_MACRO ){
 			DWORD dwTemp=0;
 			//マクロ
-			if( 0x60 <= (pbSrc[0]&0x7F) && (pbSrc[0]&0x7F) <= 0x6F ){
-				if( Analyze(DefaultMacro[pbSrc[0]&0x0F], sizeof(DefaultMacro[0]), &dwTemp) == FALSE ){
+			if( 0x60 <= b && b <= 0x6F ){
+				if( Analyze(DefaultMacro[b & 0x0F], sizeof(DefaultMacro[0]), &dwTemp) == FALSE ){
 					return FALSE;
 				}
 				m_bSpacing = FALSE;
@@ -730,7 +734,7 @@ BOOL CARIB8CharDecode::ToSJIS( unsigned char *pucFirst, unsigned char *pucSecond
 	unsigned char &ucFirst = *pucFirst;
 	unsigned char &ucSecond = *pucSecond;
 
-	if( ucFirst >= 0x75 && ucSecond >= 0x21 ){
+	if( ucFirst < 0x21 || ucFirst >= 0x21 + 84 || ucSecond < 0x21 || ucSecond >= 0x21 + 94 ){
 		return FALSE;
 	}
 	ucFirst = ucFirst - 0x21;
@@ -1168,7 +1172,6 @@ void CARIB8CharDecode::CreateCaptionData(CAPTION_DATA* pItem) const
 void CARIB8CharDecode::CreateCaptionCharData(CAPTION_CHAR_DATA* pItem) const
 {
 	pItem->strDecode = m_strDecode;
-//	OutputDebugStringA(m_strDecode.c_str());
 
 	pItem->stCharColor = DefClut[m_bCharColorIndex];
 	pItem->stBackColor = DefClut[m_bBackColorIndex];
