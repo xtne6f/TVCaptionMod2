@@ -568,12 +568,12 @@ BOOL CARIB8CharDecode::C1( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		break;
 	case 0x99:
 		//SPL アンダーライン モザイクの終了
-		m_bBold = FALSE;
+		m_bUnderLine = FALSE;
 		dwReadSize = 1;
 		break;
 	case 0x9A:
 		//STL アンダーライン モザイクの開始
-		m_bBold = TRUE;
+		m_bUnderLine = TRUE;
 		dwReadSize = 1;
 		break;
 	case 0x9D:

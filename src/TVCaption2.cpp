@@ -983,7 +983,7 @@ static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth,
     logFont.lfOrientation    = 0;
     logFont.lfWeight         = style.bBold ? FW_EXTRABOLD : FW_DONTCARE;
     logFont.lfItalic         = style.bItalic ? TRUE : FALSE;
-    logFont.lfUnderline      = style.bUnderLine ? TRUE : FALSE;
+    logFont.lfUnderline      = FALSE;
     logFont.lfStrikeOut      = 0;
     logFont.lfCharSet        = DEFAULT_CHARSET;
     logFont.lfOutPrecision   = OUT_DEFAULT_PRECIS;
@@ -1015,7 +1015,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
 
     osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*(nomalHeight+charHeight)/2,1) : m_strokeWidth*72,
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
-    osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10)!=0);
+    osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10) || style.bUnderLine);
     osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
     osd.SetFlashingInterval(style.bFlushMode==1 ? FLASHING_INTERVAL : style.bFlushMode==2 ? -FLASHING_INTERVAL : 0);
     osd.Create(hwndContainer, m_paintingMethod==2 || m_paintingMethod==3);
