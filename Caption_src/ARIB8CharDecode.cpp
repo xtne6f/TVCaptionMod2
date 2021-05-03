@@ -1089,16 +1089,13 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 			break;
 		case 0x64:
 			//MDF
-			if( wP1 == 0 ){
-				m_bBold = FALSE;
-				m_bItalic = FALSE;
-			}else if( wP1 == 1 ){
-				m_bBold = TRUE;
-			}else if( wP1 == 2 ){
-				m_bItalic = TRUE;
-			}else if( wP1 == 3 ){
-				m_bBold = TRUE;
-				m_bItalic = TRUE;
+			if( wP1 <= 3 ){
+				if( ((wP1 & 1) != 0) != m_bBold ||
+				    ((wP1 & 2) != 0) != m_bItalic ){
+					CheckModify();
+				}
+				m_bBold = (wP1 & 1) != 0;
+				m_bItalic = (wP1 & 2) != 0;
 			}
 			break;
 		case 0x66:
