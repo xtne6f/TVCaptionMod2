@@ -52,14 +52,15 @@ struct CAPTION_CHAR_DATA{
 	CLUT_DAT_DLL stCharColor;
 	CLUT_DAT_DLL stBackColor;
 	CLUT_DAT_DLL stRasterColor;
+	CLUT_DAT_DLL stORNColor;
 
 	BOOL bUnderLine;
-	BOOL bShadow;
 	BOOL bBold;
 	BOOL bItalic;
 	BYTE bFlushMode;
 	BYTE bHLC;
 	BYTE bPRA;
+	BYTE bORN;
 
 	WORD wCharW;
 	WORD wCharH;
@@ -139,14 +140,15 @@ protected:
 	BYTE m_bBackColorIndex;
 	BYTE m_bRasterColorIndex;
 	BYTE m_bDefPalette;
+	BYTE m_bORNColorIndex;
 
 	BOOL m_bUnderLine;
-	BOOL m_bShadow;
 	BOOL m_bBold;
 	BOOL m_bItalic;
 	BYTE m_bFlushMode;
 	BYTE m_bHLC;
 	BYTE m_bPRA;
+	BYTE m_bORN;
 	BOOL m_bRPC;
 	//文字繰り返しの残りカウント(ただし0x40以上のときは表示領域端まで)
 	WORD m_wRPC;

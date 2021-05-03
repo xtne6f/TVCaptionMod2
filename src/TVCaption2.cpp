@@ -37,13 +37,13 @@ static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
 // テスト字幕
 static const CAPTION_CHAR_DATA_DLL TESTCAP_CHAR_LIST[] = {
-    {nullptr,CP_STR_NORMAL,{255,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0}, // 外字例示用
-    {L"まさ",CP_STR_SMALL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
-    {L"決めた",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
-    {L"　",CP_STR_MEDIUM,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
-    {L"みんなで正の湯に行こう",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
-    {L"お～",CP_STR_NORMAL,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
-    {L"ッ！ｘ６",CP_STR_MEDIUM,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,0,0,0,0,0,36,36,4,24,0,0},
+    {nullptr,CP_STR_NORMAL,{255,255,255,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0}, // 外字例示用
+    {L"まさ",CP_STR_SMALL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
+    {L"決めた",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,255},0,0,0,0,36,36,4,24,0,1},
+    {L"　",CP_STR_MEDIUM,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
+    {L"みんなで正の湯に行こう",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
+    {L"お～",CP_STR_NORMAL,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
+    {L"ッ！ｘ６",CP_STR_MEDIUM,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
 };
 static const CAPTION_DATA_DLL TESTCAP_LIST[] = {
     {FALSE,7,170,30,620,480,170,359,0,1,nullptr,0}, // 外字例示用
@@ -86,6 +86,7 @@ CTVCaption2::CTVCaption2()
     , m_backOpacity(0)
     , m_vertAntiAliasing(0)
     , m_strokeWidth(0)
+    , m_ornStrokeWidth(0)
     , m_strokeSmoothLevel(0)
     , m_strokeByDilate(0)
     , m_paddingWidth(0)
@@ -535,7 +536,8 @@ void CTVCaption2::LoadSettings()
     m_rcGaijiAdjust.top = GetBufferedProfileInt(buf, TEXT("GaijiFontYAdjust"), 0);
     m_rcGaijiAdjust.right = GetBufferedProfileInt(buf, TEXT("GaijiFontSizeAdjust"), 100);
     m_rcGaijiAdjust.bottom = GetBufferedProfileInt(buf, TEXT("GaijiFontRatioAdjust"), 100);
-    m_strokeWidth       = GetBufferedProfileInt(buf, TEXT("StrokeWidth"), -5);
+    m_strokeWidth       = GetBufferedProfileInt(buf, TEXT("StrokeWidth"), -3);
+    m_ornStrokeWidth    = GetBufferedProfileInt(buf, TEXT("OrnStrokeWidth"), 5);
     m_strokeSmoothLevel = GetBufferedProfileInt(buf, TEXT("StrokeSmoothLevel"), 1);
     m_strokeByDilate    = GetBufferedProfileInt(buf, TEXT("StrokeByDilate"), 22);
     m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
@@ -594,6 +596,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("GaijiFontSizeAdjust"), m_rcGaijiAdjust.right, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("GaijiFontRatioAdjust"), m_rcGaijiAdjust.bottom, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("StrokeWidth"), m_strokeWidth, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("OrnStrokeWidth"), m_ornStrokeWidth, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("StrokeSmoothLevel"), m_strokeSmoothLevel, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("StrokeByDilate"), m_strokeByDilate, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("PaddingWidth"), m_paddingWidth, m_iniPath.c_str());
@@ -1013,7 +1016,12 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
                       m_backOpacity>=0 ? min(m_backOpacity,100) : style.stBackColor.ucAlpha*100/255;
     osd.SetOpacity(textOpacity, backOpacity);
 
-    osd.SetStroke(m_strokeWidth < 0 ? max(-m_strokeWidth*(nomalHeight+charHeight)/2,1) : m_strokeWidth*72,
+    int strokeWidth = m_strokeWidth < 0 ? -m_strokeWidth : m_strokeWidth;
+    if (style.bORN == 1) {
+        // 縁取り指定。着色対応は省略
+        strokeWidth = m_ornStrokeWidth;
+    }
+    osd.SetStroke(m_strokeWidth > 0 ? strokeWidth * 72 : strokeWidth > 0 ? max(strokeWidth * (nomalHeight + charHeight) / 2, 1) : 0,
                   m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10) || style.bUnderLine);
     osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
@@ -1268,6 +1276,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 charData.bItalic == nextCharData.bItalic &&
                 charData.bFlushMode == nextCharData.bFlushMode &&
                 charData.bHLC == nextCharData.bHLC &&
+                charData.bORN == nextCharData.bORN &&
                 charData.stCharColor == nextCharData.stCharColor &&
                 charData.stBackColor == nextCharData.stBackColor)
             {
@@ -1892,8 +1901,9 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_SIZE, m_rcAdjust.right, FALSE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_RATIO, m_rcAdjust.bottom, FALSE);
 
-    ::CheckDlgButton(hDlg, IDC_CHECK_STROKE_WIDTH, m_strokeWidth < 0 ? BST_CHECKED : BST_UNCHECKED);
+    ::CheckDlgButton(hDlg, IDC_CHECK_STROKE_WIDTH, m_strokeWidth <= 0 ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_STROKE_WIDTH, m_strokeWidth < 0 ? -m_strokeWidth : m_strokeWidth, FALSE);
+    ::SetDlgItemInt(hDlg, IDC_EDIT_ORN_STROKE_WIDTH, m_ornStrokeWidth, FALSE);
 
     static const LPCTSTR STROKE_LEVEL_LIST[] = { TEXT("0"), TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5"), nullptr };
     ::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_RESETCONTENT, 0, 0);
@@ -2105,11 +2115,13 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             }
             break;
         case IDC_EDIT_STROKE_WIDTH:
+        case IDC_EDIT_ORN_STROKE_WIDTH:
             if (HIWORD(wParam) != EN_CHANGE) break;
             // FALL THROUGH!
         case IDC_CHECK_STROKE_WIDTH:
             m_strokeWidth = ::GetDlgItemInt(hDlg, IDC_EDIT_STROKE_WIDTH, nullptr, FALSE);
             m_strokeWidth = ::IsDlgButtonChecked(hDlg, IDC_CHECK_STROKE_WIDTH) != BST_UNCHECKED ? -m_strokeWidth : m_strokeWidth;
+            m_ornStrokeWidth = ::GetDlgItemInt(hDlg, IDC_EDIT_ORN_STROKE_WIDTH, nullptr, FALSE);
             fSave = fReDisp = true;
             break;
         case IDC_COMBO_STROKE_LEVEL:

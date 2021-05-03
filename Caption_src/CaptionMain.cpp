@@ -496,7 +496,7 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 				pCapChar->stBackColor = jt->stBackColor;
 				pCapChar->stRasterColor = jt->stRasterColor;
 				pCapChar->bUnderLine = jt->bUnderLine;
-				pCapChar->bShadow = jt->bShadow;
+				pCapChar->stORNColor = jt->stORNColor;
 				pCapChar->bBold = jt->bBold;
 				pCapChar->bItalic = jt->bItalic;
 				pCapChar->bFlushMode = jt->bFlushMode;
@@ -506,7 +506,7 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 				pCapChar->wCharVInterval = jt->wCharVInterval;
 				pCapChar->bHLC = jt->bHLC;
 				pCapChar->bPRA = jt->bPRA;
-				pCapChar->bAlignment = 0;
+				pCapChar->bORN = jt->bORN;
 			}
 
 			pCap->bClear = it->bClear;

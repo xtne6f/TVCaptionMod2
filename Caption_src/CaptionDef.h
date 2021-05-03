@@ -46,7 +46,7 @@ typedef struct {
 	CLUT_DAT_DLL stRasterColor;
 
 	BOOL bUnderLine;
-	BOOL bShadow;
+	CLUT_DAT_DLL stORNColor;
 	BOOL bBold;
 	BOOL bItalic;
 	BYTE bFlushMode;
@@ -57,7 +57,7 @@ typedef struct {
 	WORD wCharHInterval;
 	WORD wCharVInterval;
 	BYTE bPRA; //PRA+1
-	BYTE bAlignment; //zero cleared
+	BYTE bORN;
 } CAPTION_CHAR_DATA_DLL;
 
 typedef struct {

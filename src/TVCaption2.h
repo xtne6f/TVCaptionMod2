@@ -98,6 +98,7 @@ private:
     RECT m_rcAdjust;
     RECT m_rcGaijiAdjust;
     int m_strokeWidth;
+    int m_ornStrokeWidth;
     int m_strokeSmoothLevel;
     int m_strokeByDilate;
     int m_paddingWidth;

@@ -86,15 +86,16 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_bCharColorIndex = 7;
 	m_bBackColorIndex = 8;
 	m_bRasterColorIndex = 8;
+	m_bORNColorIndex = 8;
 	m_bDefPalette = 0;
 
 	m_bUnderLine = FALSE;
-	m_bShadow = FALSE;
 	m_bBold = FALSE;
 	m_bItalic = FALSE;
 	m_bFlushMode = 0;
 	m_bHLC = 0;
 	m_bPRA = 0;
+	m_bORN = 0;
 
 	switch(m_wSWFMode){
 	case 7:
@@ -1083,8 +1084,13 @@ BOOL CARIB8CharDecode::CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSi
 			break;
 		case 0x63:
 			//ORN
-			if( wP1 == 0x02 ){
-				m_bShadow = TRUE;
+			if( wP1 <= 3 ){
+				BYTE bIndex = (BYTE)((nParam >= 2 && (wP1 == 1 || wP1 == 2) ? (wP2 / 100) << 4 | (wP2 % 100) : 8) & 0x7F);
+				if( wP1 != m_bORN || bIndex != m_bORNColorIndex ){
+					CheckModify();
+				}
+				m_bORN = (BYTE)wP1;
+				m_bORNColorIndex = bIndex;
 			}
 			break;
 		case 0x64:
@@ -1173,14 +1179,15 @@ void CARIB8CharDecode::CreateCaptionCharData(CAPTION_CHAR_DATA* pItem) const
 	pItem->stCharColor = DefClut[m_bCharColorIndex];
 	pItem->stBackColor = DefClut[m_bBackColorIndex];
 	pItem->stRasterColor = DefClut[m_bRasterColorIndex];
+	pItem->stORNColor = DefClut[m_bORNColorIndex];
 
 	pItem->bUnderLine = m_bUnderLine;
-	pItem->bShadow = m_bShadow;
 	pItem->bBold = m_bBold;
 	pItem->bItalic = m_bItalic;
 	pItem->bFlushMode = m_bFlushMode;
 	pItem->bHLC = m_bHLC<<4;
 	pItem->bPRA = m_bPRA;
+	pItem->bORN = m_bORN;
 
 	pItem->wCharW = m_wCharW;
 	pItem->wCharH = m_wCharH;
