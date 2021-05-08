@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.3
+﻿TVTest TVCaptionMod2 Plugin ver.2.4
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -7,28 +7,27 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 作成した字幕プラグインです。字幕の中央表示をしたいがために作りました。
 
 ■動作環境
-・Windows XP以降
+・Vista以降
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
-・Microsoft Visual C++ 2015 再頒布可能パッケージ Update 3 (x86/x64)
+・必要ランタイム: Visual Studio 2015、2017、および 2019 用 Visual C++ 再頒布可能パッケージ
+  ・ビルド環境: Visual Studio Express 2017 for Windows Desktop
 
 ■以前のバージョンからの移行
 TVCaptionMod2.tvtpを以前のものと置きかえてください。Caption.dllは不要です。
 デフォルトの外字テーブル(!std)をUnicode5.2ベースに更新しました。Unicode5.2に対応
 したフォントであれば基本的に外字フォントの導入は不要です。以前の外字テーブルが必
 要な場合は"gaiji.zip"の"TVCaptionMod2_Gaiji_stdpua.txt"を使ってください。
-設定キーAvoidHalfAlphaをAvoidHalfFlagsに変更しました。
 
 ■使い方
 TVTestのプラグインフォルダにTVCaptionMod2.tvtpを入れ、右クリックメニューからプラ
 グインを有効にして、字幕のある番組で字幕が表示されればOKです。
-TVCaptionMod2.tvtp_x64はx64版のTVTest利用者向けです。
 
 プラグイン設定は 右クリックメニュー→設定→プラグイン→TVCaptionMod2 から行いま
 す。各設定について詳細は後述「設定ファイルについて」の対応する項目を参照してくだ
 さい。必須ではないですが、記号の文字化けを防ぐために外字用フォントとして「和田研
 ゴシック2004ARIB」(外字テーブル名!std)や「Windows TV ゴシック」(!typebank)を導入
 ・設定しておくことをお勧めします。
-(参考)和田研フォント入手先: https://osdn.jp/projects/jis2004/
+(参考)和田研フォント入手先: https://ja.osdn.net/projects/jis2004/
 また、これらのフォントを導入する場合、添付の"gaiji.zip"フォルダにある
 "TVCaptionMod2_Gaiji_std(typebank).txt"をプラグインフォルダに入れ、外字テーブル
 名を"std"や"typebank"にしておくと、ドットの粗い文字や記号の出現をかなり抑制でき
@@ -57,6 +56,7 @@ https://www.axfc.net/u/search.pl?sha1=a75e3938b25c6426197d919a37b784f16474cbe8
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
 ・縦書き (なかなか遭遇しないのでどう表示されるかもわからない)
 ・PNG形式の字幕
+・ORN縁取り指定の着色。いまのところ背景色で縁取り
 
 ■設定ファイルについて
 設定ファイル"TVCaptionMod2.ini"は初回使用時プラグインフォルダに自動作成します。
@@ -194,6 +194,10 @@ StrokeWidth
     字幕文の縁取りの幅
     # [=0]以上のときは画面の大きさにかかわらず指定した幅で縁取ります。
     # [=0]より小さいときは画面に応じて縁取りの幅を調整します。
+OrnStrokeWidth
+    ORN縁取り指定された字幕文の縁取りの幅
+    # [=0]以上で指定します。
+    # 字幕データ内で明示的に縁取りを指示されているときの幅です。
 StrokeSmoothLevel
     縁取りをなだらかに透過させる度合い
 StrokeByDilate
