@@ -361,16 +361,23 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 		break;
 	case 0x1C:
 		//APS 動作位置指定
-		if( dwSrcSize < 3 ){
-			return FALSE;
+		{
+			if( dwSrcSize < 3 ){
+				return FALSE;
+			}
+			CheckModify();
+			m_bPosInit = TRUE;
+			//動作位置基準点は左下なので1行前進しておく(参考:mark10als)
+			WORD wPosY = m_wClientY + GetLineDirSize() * (pbSrc[1] - 0x40 + 1) - 1;
+			WORD wPosX = m_wClientX + GetCharDirSize() * (pbSrc[2] - 0x40);
+			//無意味な動作位置指定は移動とみなさない
+			if( wPosY != m_wPosY || wPosX != m_wPosX ){
+				m_wPosY = wPosY;
+				m_wPosX = wPosX;
+				m_wPosStartX = m_wPosX;
+			}
+			dwReadSize = 3;
 		}
-		CheckModify();
-		m_bPosInit = TRUE;
-		//動作位置基準点は左下なので1行前進しておく(参考:mark10als)
-		m_wPosY = m_wClientY + GetLineDirSize() * (pbSrc[1] - 0x40 + 1) - 1;
-		m_wPosX = m_wClientX + GetCharDirSize() * (pbSrc[2] - 0x40);
-		m_wPosStartX = m_wPosX;
-		dwReadSize = 3;
 		break;
 	case 0x0C:
 		//CS
