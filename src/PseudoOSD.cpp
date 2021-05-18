@@ -436,6 +436,7 @@ void CPseudoOSD::DrawImageList(HDC hdc,int MultX,int MultY) const
 
 void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 {
+	static_cast<void>(PaintRect);
 	RECT rc;
 
 	::GetClientRect(m_hwnd,&rc);

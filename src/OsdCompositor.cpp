@@ -303,6 +303,7 @@ void COsdCompositor::OnFilterGraphInitialized(IGraphBuilder *pGraphBuilder)
 
 void COsdCompositor::OnFilterGraphFinalize(IGraphBuilder *pGraphBuilder)
 {
+    static_cast<void>(pGraphBuilder);
     if (m_hwnd && !m_pfnCoCreateInstance) {
         if (m_pRenderer) {
             m_pRenderer->Release();

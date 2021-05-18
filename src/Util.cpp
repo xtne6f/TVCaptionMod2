@@ -141,6 +141,7 @@ void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList)
 
 static int CALLBACK EnumAddFaceNameProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *, int FontType, LPARAM lParam)
 {
+    static_cast<void>(FontType);
     if (lpelfe->elfLogFont.lfFaceName[0] != TEXT('@')) {
         ::SendMessage(reinterpret_cast<HWND>(lParam), CB_ADDSTRING, 0,
                       reinterpret_cast<LPARAM>(lpelfe->elfLogFont.lfFaceName));
@@ -424,6 +425,7 @@ bool CompareLogFont(const LOGFONT &lf1, const LOGFONT &lf2)
 
 static int CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPARAM lpData)
 {
+    static_cast<void>(lParam);
     if (uMsg == BFFM_INITIALIZED && reinterpret_cast<LPCTSTR>(lpData)[0]) {
         SendMessage(hwnd, BFFM_SETSELECTION, TRUE, lpData);
     }

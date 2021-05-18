@@ -698,6 +698,7 @@ bool CTVCaption2::PlayRomSound(int index) const
 // 何かイベントが起きると呼ばれる
 LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM lParam2, void *pClientData)
 {
+    static_cast<void>(lParam2);
     CTVCaption2 *pThis = static_cast<CTVCaption2*>(pClientData);
 
     switch (Event) {
@@ -916,6 +917,10 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
 // WM_CREATEは呼ばれない
 BOOL CALLBACK CTVCaption2::WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData)
 {
+    static_cast<void>(hwnd);
+    static_cast<void>(wParam);
+    static_cast<void>(lParam);
+    static_cast<void>(pResult);
     CTVCaption2 *pThis = static_cast<CTVCaption2*>(pUserData);
 
     switch (uMsg) {
@@ -1934,6 +1939,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
 
 INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    static_cast<void>(lParam);
     bool fSave = false;
     bool fConfigureGaiji = false;
     bool fReDisp = false;
