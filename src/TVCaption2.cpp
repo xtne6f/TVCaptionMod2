@@ -1202,7 +1202,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         WCHAR szHalf[2] = {};
         if (drcsCount != 0 || fSearchGaiji || fSearchHalf) {
             for (int j = 0; pszShow[j]; ++j) {
-                if (0xEC00 <= pszShow[j] && pszShow[j] <= 0xECFF) {
+                if (0xEC00 <= pszShow[j] && pszShow[j] <= 0xEFFF) {
                     // DRCS
                     for (DWORD k = 0; k < drcsCount; ++k) {
                         if (pDrcsList[k].dwUCS == pszShow[j]) {
