@@ -244,7 +244,8 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 		m_DRCMap[ucID] = m_DRCMap[0];
 		//未定義の表示書式(0b1111)はCプロファイル(14)とみなす
 		dwRet = ParseCaptionData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_CaptionList[ucID],
-		                         &m_DRCList[ucID], &m_DRCMap[ucID], m_LangTagList[ucID-1].ucFormat-1, m_LangTagList[ucID-1].ucTCS == 1);
+		                         &m_DRCList[ucID], &m_DRCMap[ucID], m_LangTagList[ucID-1].ucFormat-1,
+		                         m_LangTagList[ucID-1].szISOLangCode, m_LangTagList[ucID-1].ucTCS == 1);
 		if( dwRet == TRUE ){
 			dwRet = CP_NO_ERR_CAPTION_1 + ucID - 1;
 		}else{
@@ -291,6 +292,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 		ucOTMSSS = (pbBuff[dwPos]&0xF0>>4)*100 + (pbBuff[dwPos]&0x0F)*10 + (pbBuff[dwPos+1]&0xF0>>4);
 		dwPos+=2;
 	}
+	char szLang[4] = {};
 	BOOL bUCS = FALSE;
 	unsigned char ucLangNum = pbBuff[dwPos];
 	dwPos++;
@@ -307,10 +309,10 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 			Item.ucDC = pbBuff[dwPos];
 			dwPos++;
 		}
-		Item.szISOLangCode[0] = pbBuff[dwPos];
-		Item.szISOLangCode[1] = pbBuff[dwPos+1];
-		Item.szISOLangCode[2] = pbBuff[dwPos+2];
-		Item.szISOLangCode[3] = 0x00;
+		Item.szISOLangCode[0] = szLang[0] = pbBuff[dwPos];
+		Item.szISOLangCode[1] = szLang[1] = pbBuff[dwPos+1];
+		Item.szISOLangCode[2] = szLang[2] = pbBuff[dwPos+2];
+		Item.szISOLangCode[3] = szLang[3] = 0x00;
 		dwPos+=3;
 		Item.ucFormat = pbBuff[dwPos]>>4;
 		Item.ucTCS = (pbBuff[dwPos]&0x0C)>>2;
@@ -331,7 +333,8 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 		DWORD dwReadSize = 0;
 		while( dwReadSize<uiUnitSize && dwRet==TRUE ){
 			DWORD dwReadUnit = 0;
-			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList, pDRCList, pDRCMap, 9, bUCS);
+			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList,
+			                      pDRCList, pDRCMap, 9, szLang, bUCS);
 			dwReadSize += dwReadUnit;
 		}
 	}
@@ -339,7 +342,7 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 }
 
 DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
-                                     vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, BOOL bUCS)
+                                     vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS)
 {
 	if( pbBuff == NULL || dwSize < 4 ){
 		return CP_ERR_INVALID_PACKET;
@@ -377,7 +380,8 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
 		DWORD dwReadSize = 0;
 		while( dwReadSize<uiUnitSize && dwRet==TRUE ){
 			DWORD dwReadUnit = 0;
-			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList, pDRCList, pDRCMap, wSWFMode, bUCS);
+			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList,
+			                      pDRCList, pDRCMap, wSWFMode, pszLang, bUCS);
 			dwReadSize += dwReadUnit;
 		}
 
@@ -386,7 +390,7 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
 }
 
 DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList,
-                                  vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, BOOL bUCS)
+                                  vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS)
 {
 	if( pbBuff == NULL || dwSize < 5 || pdwReadSize == NULL ){
 		return FALSE;
@@ -420,7 +424,7 @@ DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSi
 	
 	
 	if( uiUnitSize > 0 ){
-		if( m_cDec.Caption(pbBuff+5, uiUnitSize, pCaptionList, pDRCMap, wSWFMode, bUCS) == FALSE ){
+		if( m_cDec.Caption(pbBuff+5, uiUnitSize, pCaptionList, pDRCMap, wSWFMode, pszLang, bUCS) == FALSE ){
 			return FALSE;
 		}
 	}

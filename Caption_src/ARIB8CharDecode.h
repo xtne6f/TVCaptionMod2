@@ -23,6 +23,8 @@ using std::vector;
 #define MF_PROP_HIRA  0x37 //プロポーショナル平仮名
 #define MF_PROP_KANA  0x38 //プロポーショナル片仮名
 #define MF_JISX_KANA 0x49 //JIX X0201片仮名
+#define MF_LATIN_EXTENSION 0x4B //ラテン文字拡張
+#define MF_LATIN_SPECIAL 0x4C //ラテン文字特殊
 //DRCS
 #define MF_DRCS_0 0x40 //DRCS-0
 #define MF_DRCS_1 0x41 //DRCS-1
@@ -112,7 +114,8 @@ class CARIB8CharDecode
 public:
 	CARIB8CharDecode(void);
 	//字幕を想定したワイド文字列への変換
-	BOOL Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList, CDRCMap* pDRCMap, WORD wInitSWFMode, BOOL bUCS );
+	BOOL Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList,
+	              CDRCMap* pDRCMap, WORD wInitSWFMode, const char* pszLang, BOOL bUCS );
 	//DRCSヘッダの分析(参考:mark10als)
 	static BOOL DRCSHeaderparse( const BYTE* pbSrc, DWORD dwSrcSize, vector<DRCS_PATTERN>* pDRCList, BOOL bDRCS_0 );
 	BOOL GetGaijiTable(WCHAR* pTable, DWORD* pdwTableSize) const;
@@ -160,6 +163,8 @@ protected:
 
 	//表示書式(運用規定で960x540または720x480)
 	WORD m_wSWFMode;
+	//ラテン文字(SBTVD)かどうか
+	BOOL m_bLatin;
 	//符号化方式がUCSかどうか
 	BOOL m_bUCS;
 	//初期化動作時の表示書式
@@ -196,6 +201,8 @@ protected:
 	static const WCHAR HiraTable[94];
 	static const WCHAR KanaTable[94];
 	static const WCHAR JisXKanaTable[94];
+	static const WCHAR LatinExtensionTable[94];
+	static const WCHAR LatinSpecialTable[94];
 	static const BYTE DefaultMacro[16][20];
 protected:
 	BOOL InitCaption(void);

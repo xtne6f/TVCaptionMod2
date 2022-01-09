@@ -57,7 +57,15 @@ CARIB8CharDecode::CARIB8CharDecode(void)
 //STD-B24で規定される初期化動作をおこなう
 BOOL CARIB8CharDecode::InitCaption(void)
 {
-	if( m_wSWFMode==14 ){
+	if( m_bLatin ){
+		m_G0.iMF = MF_ASCII;
+		m_G0.iMode = MF_MODE_G;
+		m_G0.iByte = 1;
+
+		m_G2.iMF = MF_LATIN_EXTENSION;
+		m_G2.iMode = MF_MODE_G;
+		m_G2.iByte = 1;
+	}else if( m_wSWFMode == 14 ){
 		m_G0.iMF = MF_DRCS_1;
 		m_G0.iMode = MF_MODE_DRCS;
 		m_G0.iByte = 1;
@@ -78,9 +86,15 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_G1.iMode = MF_MODE_G;
 	m_G1.iByte = 1;
 
-	m_G3.iMF = MF_MACRO;
-	m_G3.iMode = MF_MODE_DRCS;
-	m_G3.iByte = 1;
+	if( m_bLatin ){
+		m_G3.iMF = MF_LATIN_SPECIAL;
+		m_G3.iMode = MF_MODE_G;
+		m_G3.iByte = 1;
+	}else{
+		m_G3.iMF = MF_MACRO;
+		m_G3.iMode = MF_MODE_DRCS;
+		m_G3.iByte = 1;
+	}
 
 	m_GL = &m_G0;
 	m_GR = &m_G2;
@@ -174,7 +188,8 @@ BOOL CARIB8CharDecode::InitCaption(void)
 }
 
 //戻り値がFALSEのときpCaptionListは中途半端に更新されているので、可能ならすべてを破棄する
-BOOL CARIB8CharDecode::Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList, CDRCMap* pDRCMap, WORD wInitSWFMode, BOOL bUCS )
+BOOL CARIB8CharDecode::Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList,
+                                CDRCMap* pDRCMap, WORD wInitSWFMode, const char* pszLang, BOOL bUCS )
 {
 	if( pbSrc == NULL || dwSrcSize == 0 || pCaptionList == NULL || pDRCMap == NULL ){
 		return FALSE;
@@ -183,6 +198,7 @@ BOOL CARIB8CharDecode::Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTI
 	m_pCaptionList = pCaptionList;
 	m_pDRCMap = pDRCMap;
 	m_wSWFMode = m_wInitSWFMode = wInitSWFMode;
+	m_bLatin = !strcmp(pszLang, "por") || !strcmp(pszLang, "spa");
 	m_bUCS = bUCS;
 	InitCaption();
 
@@ -275,7 +291,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 	switch(pbSrc[0]){
 	case 0x20:
 		//SP 背景色空白
-		m_strDecode += L'　';
+		m_strDecode += m_bLatin ? L' ' : L'　';
 		ActivePositionForward(1);
 		m_bSpacing = TRUE;
 		break;
@@ -661,7 +677,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_ASCII:
 				{
 				//全角なのでテーブルからコード取得
-				m_strDecode += AsciiTable[b - 0x21];
+				m_strDecode += m_bLatin ? (WCHAR)b : AsciiTable[b - 0x21];
 				ActivePositionForward(1);
 				}
 				break;
@@ -703,6 +719,16 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 					AddSJISToString(ucFirst, ucSecond);
 				}
 				}
+				break;
+			case MF_LATIN_EXTENSION:
+				//ラテン文字拡張
+				m_strDecode += LatinExtensionTable[b - 0x21];
+				ActivePositionForward(1);
+				break;
+			case MF_LATIN_SPECIAL:
+				//ラテン文字特殊
+				m_strDecode += LatinSpecialTable[b - 0x21];
+				ActivePositionForward(1);
 				break;
 			default:
 				//モザイク等
@@ -1575,6 +1601,36 @@ const WCHAR CARIB8CharDecode::JisXKanaTable[94] = {
 	L'・', L'・', L'・', L'・', L'・', L'・', L'・', L'・',
 	L'・', L'・', L'・', L'・', L'・', L'・', L'・', L'・',
 	L'・', L'・', L'・', L'・', L'・', L'・', L'・'
+};
+
+const WCHAR CARIB8CharDecode::LatinExtensionTable[94] = {
+	0xA1, 0xA2, 0xA3, 0x20AC, 0xA5, 0x0160, L'§',
+	0x0161, 0xA9, 0xAA, 0xAB, 0xAC, 0xFF, 0xAE, 0xAF,
+	0xB0, L'±', 0xB2, 0xB3, 0x017D, L'μ', L'¶', 0xB7,
+	0x017E, 0xB9, 0xBA, 0xBB, 0x0152, 0x0153, 0x0178, 0xBF,
+	0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
+	0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF,
+	0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, L'×',
+	0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF,
+	0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+	0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+	0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, L'÷',
+	0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE
+};
+
+const WCHAR CARIB8CharDecode::LatinSpecialTable[94] = {
+	L'♪', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	0xA4, 0xA6, 0xA8, 0xB4, 0xB8, 0xBC, 0xBD, 0xBE,
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'…', 0x2588, L'‘', L'’', L'“', L'”', 0x2022, 0x2122,
+	0x215B, 0x215C, 0x215D, 0x215E, L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?', L'?',
+	L'?', L'?', L'?', L'?', L'?', L'?', L'?'
 };
 
 //デフォルトマクロ文(NULは効果がないと規定されている)

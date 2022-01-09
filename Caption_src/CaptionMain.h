@@ -52,7 +52,7 @@ protected:
 	DWORD ParseCaption(LPCBYTE pbBuff, DWORD dwSize);
 	DWORD ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap);
 	DWORD ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
-	                       vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, BOOL bUCS);
+	                       vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS);
 	DWORD ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList,
-	                    vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, BOOL bUCS);
+	                    vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS);
 };
