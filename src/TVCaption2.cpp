@@ -1468,7 +1468,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
     case WM_RESET_CAPTION:
         pThis->HideAllOsds();
         {
-            CBlockLock lock(&pThis->m_streamLock);
+            lock_recursive_mutex lock(pThis->m_streamLock);
             if (wParam != 0) {
                 // ワンセグ字幕をすばやく表示するため
                 pThis->m_fProfileC = wParam != 1;
@@ -1517,7 +1517,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
     STREAM_INDEX index = STREAM_CAPTION;
     DWORD pcr = 0;
     if (!pCaptionForTest) {
-        CBlockLock lock(&m_streamLock);
+        lock_recursive_mutex lock(m_streamLock);
         if (pCaptionManager->IsEmpty()) {
             // 次の字幕文を取得する
             pCaptionManager->Analyze(m_pcr);
@@ -1731,7 +1731,7 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
         if (adapt.pcr_flag) {
             // 参照PIDのときはPCRを取得する
             if (header.pid == m_pcrPid) {
-                CBlockLock lock(&m_streamLock);
+                lock_recursive_mutex lock(m_streamLock);
                 DWORD pcr = (DWORD)adapt.pcr_45khz;
 
                 // PCRの連続性チェック
@@ -1798,11 +1798,11 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
         !header.transport_error_indicator)
     {
         if (header.pid == m_caption1Pid) {
-            CBlockLock lock(&m_streamLock);
+            lock_recursive_mutex lock(m_streamLock);
             m_caption1Manager.AddPacket(pPacket);
         }
         else if (header.pid == m_caption2Pid) {
-            CBlockLock lock(&m_streamLock);
+            lock_recursive_mutex lock(m_streamLock);
             m_caption2Manager.AddPacket(pPacket);
         }
     }
