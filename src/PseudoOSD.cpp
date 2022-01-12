@@ -48,7 +48,6 @@ bool CPseudoOSD::Initialize(HINSTANCE hinst)
 CPseudoOSD::CPseudoOSD()
 	: m_hwnd(nullptr)
 	, m_crBackColor(RGB(16,0,16))
-	, m_crTextColor(RGB(0,255,128))
 	, m_TimerID(0)
 	, m_FlashingInterval(0)
 	, m_Opacity(80)
@@ -230,9 +229,9 @@ void CPseudoOSD::ClearText()
 
 // テキストを追加する
 // lf.lfWidth<0のときは半角テキスト間隔で描画する
-bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,const RECT &AdjustRect)
+bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect)
 {
-	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf,AdjustRect));
+	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf,cr,AdjustRect));
 	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	return true;
 }
@@ -240,9 +239,9 @@ bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,const RECT 
 
 // 画像を追加する
 // 受けとったビットマップはクラス側で破棄する
-bool CPseudoOSD::AddImage(HBITMAP hbm,int Width,const RECT &PaintRect)
+bool CPseudoOSD::AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect)
 {
-	m_StyleList.push_back(STYLE_ELEM(hbm,Width,PaintRect));
+	m_StyleList.push_back(STYLE_ELEM(hbm,Width,cr,PaintRect));
 	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	return true;
 }
@@ -285,9 +284,8 @@ void CPseudoOSD::GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) cons
 }
 
 
-void CPseudoOSD::SetTextColor(COLORREF crText,COLORREF crBack)
+void CPseudoOSD::SetBackgroundColor(COLORREF crBack)
 {
-	m_crTextColor=crText;
 	m_crBackColor=crBack;
 }
 
@@ -387,7 +385,7 @@ static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,int cw,COLORREF cr)
 	}
 }
 
-void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
+void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const
 {
 	UINT oldTa=::SetTextAlign(hdc,TA_LEFT|TA_BOTTOM|TA_NOUPDATECP);
 	int x=0;
@@ -408,11 +406,14 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY) const
 				lfLast=lf;
 			}
 			if (hfont) {
+				COLORREF crOld = RGB(0,0,0);
+				if (fSetColor) ::SetTextColor(hdc,it->cr);
 				HGDIOBJ hfontOld=::SelectObject(hdc,hfont);
 				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
 				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight)*it->AdjustRect.bottom/100;
 				TextOutMonospace(hdc,x+intvX/2+it->AdjustRect.left,m_Position.Height-1-intvY/2+it->AdjustRect.top,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
 				::SelectObject(hdc,hfontOld);
+				if (fSetColor) ::SetTextColor(hdc,crOld);
 			}
 		}
 		x+=it->Width;
@@ -443,16 +444,16 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 	DrawUtil::Fill(hdc,&rc,m_crBackColor);
 	if (m_fHideText) return;
 
-	if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,2,m_crTextColor);
-	if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,2,m_crTextColor);
-	if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_crTextColor);
-	if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,2,m_crTextColor);
+	if (!m_StyleList.empty()) {
+		if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,2,m_StyleList.front().cr);
+		if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,2,m_StyleList.front().cr);
+		if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_StyleList.front().cr);
+		if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,2,m_StyleList.front().cr);
+	}
 
-	COLORREF crOldTextColor=::SetTextColor(hdc,m_crTextColor);
 	int OldBkMode=::SetBkMode(hdc,TRANSPARENT);
-	DrawTextList(hdc,1,1);
+	DrawTextList(hdc,1,1,true);
 	::SetBkMode(hdc,OldBkMode);
-	::SetTextColor(hdc,crOldTextColor);
 
 	DrawImageList(hdc,1,1);
 }
@@ -890,26 +891,26 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	::ZeroMemory(m_pBitsMono,(AllocWidth*4+31)/32*4 * Height*MultMono);
 	rc.bottom=Height;
 
-	int rb=rc.bottom*VertMult;
-	int rr=rc.right;
-	if (m_fHLLeft) DrawLine(hdcSrc,1,rb-1,1,1,2,m_crTextColor);
-	if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rr-1,VertMult,2*VertMult,m_crTextColor);
-	if (m_fHLRight) DrawLine(hdcSrc,rr-1,1,rr-1,rb-1,2,m_crTextColor);
-	if (m_fHLBottom) DrawLine(hdcSrc,rr-1,rb-VertMult,1,rb-VertMult,2*VertMult,m_crTextColor);
+	if (!m_StyleList.empty()) {
+		int rb=rc.bottom*VertMult;
+		int rr=rc.right;
+		if (m_fHLLeft) DrawLine(hdcSrc,1,rb-1,1,1,2,m_StyleList.front().cr);
+		if (m_fHLTop) DrawLine(hdcSrc,1,VertMult,rr-1,VertMult,2*VertMult,m_StyleList.front().cr);
+		if (m_fHLRight) DrawLine(hdcSrc,rr-1,1,rr-1,rb-1,2,m_StyleList.front().cr);
+		if (m_fHLBottom) DrawLine(hdcSrc,rr-1,rb-VertMult,1,rb-VertMult,2*VertMult,m_StyleList.front().cr);
 
-	rb=rc.bottom*MultMono;
-	rr=rc.right*MultMono;
-	if (m_fHLLeft) DrawLine(hdcMono,MultMono,rb-1,MultMono,1,2*MultMono,RGB(255,255,255));
-	if (m_fHLTop) DrawLine(hdcMono,1,MultMono,rr-1,MultMono,2*MultMono,RGB(255,255,255));
-	if (m_fHLRight) DrawLine(hdcMono,rr-MultMono,1,rr-MultMono,rb-1,2*MultMono,RGB(255,255,255));
-	if (m_fHLBottom) DrawLine(hdcMono,rr-1,rb-MultMono,1,rb-MultMono,2*MultMono,RGB(255,255,255));
+		rb=rc.bottom*MultMono;
+		rr=rc.right*MultMono;
+		if (m_fHLLeft) DrawLine(hdcMono,MultMono,rb-1,MultMono,1,2*MultMono,RGB(255,255,255));
+		if (m_fHLTop) DrawLine(hdcMono,1,MultMono,rr-1,MultMono,2*MultMono,RGB(255,255,255));
+		if (m_fHLRight) DrawLine(hdcMono,rr-MultMono,1,rr-MultMono,rb-1,2*MultMono,RGB(255,255,255));
+		if (m_fHLBottom) DrawLine(hdcMono,rr-1,rb-MultMono,1,rb-MultMono,2*MultMono,RGB(255,255,255));
+	}
 
 	if (!m_fHideText) {
-		COLORREF crOldTextColor=::SetTextColor(hdcSrc,m_crTextColor);
 		int OldBkMode=::SetBkMode(hdcSrc,TRANSPARENT);
-		DrawTextList(hdcSrc,1,VertMult);
+		DrawTextList(hdcSrc,1,VertMult,true);
 		::SetBkMode(hdcSrc,OldBkMode);
-		::SetTextColor(hdcSrc,crOldTextColor);
 
 		if (!m_fStrokeByDilate) {
 			// 縁取りを描画
@@ -921,7 +922,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 					HBRUSH hbrOld=SelectBrush(hdcMono,hbr);
 					OldBkMode=::SetBkMode(hdcMono,TRANSPARENT);
 					::BeginPath(hdcMono);
-					DrawTextList(hdcMono,MultMono,MultMono);
+					DrawTextList(hdcMono,MultMono,MultMono,false);
 					::EndPath(hdcMono);
 					::StrokeAndFillPath(hdcMono);
 					::SetBkMode(hdcMono,OldBkMode);

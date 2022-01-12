@@ -6,18 +6,18 @@ class CPseudoOSD
 {
 	HWND m_hwnd;
 	COLORREF m_crBackColor;
-	COLORREF m_crTextColor;
 	struct STYLE_ELEM {
 		tstring Text;
 		HBITMAP hbm;
 		int Width;
 		LOGFONT lf;
+		COLORREF cr;
 		union {
 			RECT AdjustRect;
 			RECT PaintRect;
 		};
-		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_,const RECT &AdjustRect_) : Text(pszText),hbm(nullptr),Width(Width_),lf(lf_),AdjustRect(AdjustRect_) {}
-		STYLE_ELEM(HBITMAP hbm_,int Width_,const RECT &PaintRect_) : hbm(hbm_),Width(Width_),PaintRect(PaintRect_) {}
+		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_,COLORREF cr_,const RECT &AdjustRect_) : Text(pszText),hbm(nullptr),Width(Width_),lf(lf_),cr(cr_),AdjustRect(AdjustRect_) {}
+		STYLE_ELEM(HBITMAP hbm_,int Width_,COLORREF cr_,const RECT &PaintRect_) : hbm(hbm_),Width(Width_),cr(cr_),PaintRect(PaintRect_) {}
 	};
 	std::vector<STYLE_ELEM> m_StyleList;
 	struct {
@@ -40,7 +40,7 @@ class CPseudoOSD
 	POINT m_ParentPosition;
 
 	static int GetEntireWidth(const std::vector<STYLE_ELEM> &List);
-	void DrawTextList(HDC hdc,int MultX,int MultY) const;
+	void DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const;
 	void DrawImageList(HDC hdc,int MultX,int MultY) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
 	static bool AllocateWorkBitmap(int Width,int Height,int HeightMono,int *pAllocWidth);
@@ -69,11 +69,11 @@ public:
 	bool Hide();
 	bool IsVisible() const;
 	void ClearText();
-	bool AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,const RECT &AdjustRect);
-	bool AddImage(HBITMAP hbm,int Width,const RECT &PaintRect);
+	bool AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect);
+	bool AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect);
 	bool SetPosition(int Left,int Top,int Height);
 	void GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
-	void SetTextColor(COLORREF crText,COLORREF crBack);
+	void SetBackgroundColor(COLORREF crBack);
 	bool SetOpacity(int Opacity,int BackOpacity=50);
 	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);

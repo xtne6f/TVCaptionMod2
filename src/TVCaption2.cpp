@@ -981,8 +981,8 @@ void CTVCaption2::DestroyOsds()
     DeleteTextures();
 }
 
-static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
-                       const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style)
+void CTVCaption2::AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
+                             const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style) const
 {
     LOGFONT logFont;
     logFont.lfHeight         = -charHeight;
@@ -1000,7 +1000,7 @@ static void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth,
     logFont.lfPitchAndFamily = (faceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
     _tcscpy_s(logFont.lfFaceName, faceName);
     RECT rc = {charHeight * rcFontAdjust.left / 72, charHeight * rcFontAdjust.top / 72, rcFontAdjust.right * rcFontAdjust.bottom / 100, rcFontAdjust.right};
-    pOsd->AddText(text, width, logFont, rc);
+    pOsd->AddText(text, width, logFont, m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB), rc);
 }
 
 // 利用可能なOSDを1つだけ用意する
@@ -1013,8 +1013,7 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
     }
     CPseudoOSD &osd = *m_pOsdList[index][m_osdShowCount[index] + m_osdPrepareCount[index]++];
     osd.ClearText();
-    osd.SetTextColor(m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB),
-                     m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
+    osd.SetBackgroundColor(m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
 
     int textOpacity = m_textOpacity>=0 ? min(m_textOpacity,100) : style.stCharColor.ucAlpha*100/255;
     int backOpacity = !m_fProfileC && style.stBackColor.ucAlpha==0 ? 0 :
@@ -1282,7 +1281,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 charData.bFlushMode == nextCharData.bFlushMode &&
                 charData.bHLC == nextCharData.bHLC &&
                 charData.bORN == nextCharData.bORN &&
-                charData.stCharColor == nextCharData.stCharColor &&
+                charData.stCharColor.ucAlpha == nextCharData.stCharColor.ucAlpha &&
                 charData.stBackColor == nextCharData.stBackColor)
             {
                 fSameStyle = true;
@@ -1378,7 +1377,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     ::SetDIBits(nullptr, hbm, 0, bmi.bmiHeader.biHeight, pDrcs->pbBitmap, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
                     RECT rc;
                     ::SetRect(&rc, (int)((dirW-charW)/2*scaleX), (int)((dirH-charH)/2*scaleY), charScaleW, charScaleH);
-                    pOsdCarry->AddImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), rc);
+                    pOsdCarry->AddImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), RGB(charC.ucR, charC.ucG, charC.ucB), rc);
                     posX += dirW;
                 }
             }
