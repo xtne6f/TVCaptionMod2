@@ -1,5 +1,5 @@
 ﻿// TVTestに字幕を表示するプラグイン(based on TVCaption 2008-12-16 by odaru)
-// 最終更新: 2021-05-08
+// 最終更新: 2022-01-15
 // 署名: xt(849fa586809b0d16276cd644c6749503)
 #include <Windows.h>
 #include <memory>
@@ -31,7 +31,7 @@
 #define WM_RESET_OSDS           (WM_APP + 4)
 
 static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.2.4; based on TVCaption081216 by odaru)");
+static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.2.5; based on TVCaption081216 by odaru)");
 static const int INFO_VERSION = 14;
 static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
 
