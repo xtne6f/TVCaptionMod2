@@ -847,7 +847,7 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                 HDC hdc = ::CreateCompatibleDC(nullptr);
                 HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdc, hbm));
                 for (int i = 0; i < STREAM_MAX; ++i) {
-                    for (int j = 0; j < m_osdShowCount[i]; ++j) {
+                    for (size_t j = 0; j < m_osdShowCount[i]; ++j) {
                         int left, top;
                         m_pOsdList[i][j]->GetPosition(&left, &top, nullptr, nullptr);
                         m_pOsdList[i][j]->Compose(hdc, left - rcVideo.left, top - rcVideo.top);
@@ -944,7 +944,7 @@ void CTVCaption2::HideOsds(STREAM_INDEX index)
     for (; m_osdShowCount[index] > 0; --m_osdShowCount[index]) {
         m_pOsdList[index].front()->Hide();
         // 表示待ちOSDの直後に移動
-        for (int i = 0; i < m_osdShowCount[index] + m_osdPrepareCount[index] - 1; ++i) {
+        for (size_t i = 0; i < m_osdShowCount[index] + m_osdPrepareCount[index] - 1; ++i) {
             m_pOsdList[index][i].swap(m_pOsdList[index][i + 1]);
         }
     }
@@ -1008,9 +1008,27 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
 {
     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("()\n"));
 
-    while (m_osdShowCount[index] + m_osdPrepareCount[index] >= (int)m_pOsdList[index].size()) {
-        m_pOsdList[index].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
+    if (m_osdShowCount[index] + m_osdPrepareCount[index] >= m_pOsdList[index].size()) {
+        // OSDが足りない
+        if (m_pOsdList[index].size() >= OSD_MAX_CREATE_NUM) {
+            // 最前列から奪う
+            if (m_osdShowCount[index] > 0) {
+                --m_osdShowCount[index];
+            }
+            else {
+                --m_osdPrepareCount[index];
+            }
+            m_pOsdList[index].front()->Hide();
+            for (size_t i = 0; i < m_pOsdList[index].size() - 1; ++i) {
+                m_pOsdList[index][i].swap(m_pOsdList[index][i + 1]);
+            }
+        }
+        else {
+            // 作成
+            m_pOsdList[index].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
+        }
     }
+
     CPseudoOSD &osd = *m_pOsdList[index][m_osdShowCount[index] + m_osdPrepareCount[index]++];
     osd.ClearText();
     osd.SetBackgroundColor(m_fEnBackColor ? m_backColor : RGB(style.stBackColor.ucR, style.stBackColor.ucG, style.stBackColor.ucB));
@@ -1486,11 +1504,10 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         pThis->ProcessCaption(&pThis->m_caption2Manager);
         return 0;
     case WM_DONE_MOVE:
-        for (int i = 0; i < pThis->m_osdShowCount[STREAM_CAPTION]; ++i) {
-            pThis->m_pOsdList[STREAM_CAPTION][i]->OnParentMove();
-        }
-        for (int i = 0; i < pThis->m_osdShowCount[STREAM_SUPERIMPOSE]; ++i) {
-            pThis->m_pOsdList[STREAM_SUPERIMPOSE][i]->OnParentMove();
+        for (int index = 0; index < STREAM_MAX; ++index) {
+            for (size_t i = 0; i < pThis->m_osdShowCount[index]; ++i) {
+                pThis->m_pOsdList[index][i]->OnParentMove();
+            }
         }
         return 0;
     case WM_DONE_SIZE:
@@ -1502,7 +1519,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         pThis->DestroyOsds();
         pThis->m_hwndContainer = pThis->FindVideoContainer();
         if (pThis->m_hwndContainer) {
-            for (int i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
+            for (size_t i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
                 pThis->m_pOsdList[STREAM_CAPTION].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
                 pThis->m_pOsdList[STREAM_CAPTION].back()->Create(pThis->m_hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
             }
@@ -1647,7 +1664,7 @@ void CTVCaption2::OnSize(STREAM_INDEX index)
         RECT rc;
         if (GetVideoContainerLayout(m_hwndContainer, &rc, nullptr)) {
             // とりあえずはみ出ないようにする
-            for (int i = 0; i < m_osdShowCount[index]; ++i) {
+            for (size_t i = 0; i < m_osdShowCount[index]; ++i) {
                 int left, top, width, height;
                 m_pOsdList[index][i]->GetPosition(&left, &top, &width, &height);
                 int adjLeft = left+width>=rc.right ? rc.right-width : left;

@@ -4,8 +4,10 @@
 // プラグインクラス
 class CTVCaption2 : public TVTest::CTVTestPlugin
 {
+    // 作成できるOSDの最大数
+    static const size_t OSD_MAX_CREATE_NUM = 50;
     // 事前に作成しておくOSDの数(作成時にウィンドウが前面にくるので、気になるなら増やす)
-    static const int OSD_PRE_CREATE_NUM = 12;
+    static const size_t OSD_PRE_CREATE_NUM = 12;
     // 設定値の最大読み込み文字数
     static const int SETTING_VALUE_MAX = 2048;
     static const int GAIJI_TABLE_SIZE = G_CELL_SIZE * 7;
@@ -117,8 +119,8 @@ private:
     HWND m_hwndPainting;
     HWND m_hwndContainer;
     std::vector<std::unique_ptr<CPseudoOSD>> m_pOsdList[STREAM_MAX];
-    int m_osdShowCount[STREAM_MAX];
-    int m_osdPrepareCount[STREAM_MAX];
+    size_t m_osdShowCount[STREAM_MAX];
+    size_t m_osdPrepareCount[STREAM_MAX];
     bool m_fOsdClear[STREAM_MAX];
     bool m_fNeedtoShow;
     bool m_fFlashingFlipFlop;
