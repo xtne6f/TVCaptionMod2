@@ -24,19 +24,21 @@
 #define ASSERT assert
 #endif
 
-#define WM_RESET_CAPTION        (WM_APP + 0)
-#define WM_PROCESS_CAPTION      (WM_APP + 1)
-#define WM_DONE_MOVE            (WM_APP + 2)
-#define WM_DONE_SIZE            (WM_APP + 3)
-#define WM_RESET_OSDS           (WM_APP + 4)
+namespace
+{
+const UINT WM_APP_RESET_CAPTION = WM_APP + 0;
+const UINT WM_APP_PROCESS_CAPTION = WM_APP + 1;
+const UINT WM_APP_DONE_MOVE = WM_APP + 2;
+const UINT WM_APP_DONE_SIZE = WM_APP + 3;
+const UINT WM_APP_RESET_OSDS = WM_APP + 4;
 
-static const LPCTSTR INFO_PLUGIN_NAME = TEXT("TVCaptionMod2");
-static const LPCTSTR INFO_DESCRIPTION = TEXT("字幕を表示 (ver.2.5; based on TVCaption081216 by odaru)");
-static const int INFO_VERSION = 14;
-static const LPCTSTR TV_CAPTION2_WINDOW_CLASS = TEXT("TVTest TVCaption2");
+const TCHAR INFO_PLUGIN_NAME[] = TEXT("TVCaptionMod2");
+const TCHAR INFO_DESCRIPTION[] = TEXT("字幕を表示 (ver.2.5; based on TVCaption081216 by odaru)");
+const int INFO_VERSION = 14;
+const TCHAR TV_CAPTION2_WINDOW_CLASS[] = TEXT("TVTest TVCaption2");
 
 // テスト字幕
-static const CAPTION_CHAR_DATA_DLL TESTCAP_CHAR_LIST[] = {
+const CAPTION_CHAR_DATA_DLL TESTCAP_CHAR_LIST[] = {
     {nullptr,CP_STR_NORMAL,{255,255,255,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0}, // 外字例示用
     {L"まさ",CP_STR_SMALL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
     {L"決めた",CP_STR_NORMAL,{255,255,0,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,255},0,0,0,0,36,36,4,24,0,1},
@@ -45,21 +47,21 @@ static const CAPTION_CHAR_DATA_DLL TESTCAP_CHAR_LIST[] = {
     {L"お～",CP_STR_NORMAL,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
     {L"ッ！ｘ６",CP_STR_MEDIUM,{0,255,255,255},{0,0,0,128},{0,0,0,0},0,{0,0,0,0},0,0,0,0,36,36,4,24,0,0},
 };
-static const CAPTION_DATA_DLL TESTCAP_LIST[] = {
+const CAPTION_DATA_DLL TESTCAP_LIST[] = {
     {FALSE,7,170,30,620,480,170,359,0,1,nullptr,0}, // 外字例示用
     {FALSE,7,170,30,620,480,510,389,0,1,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[1]),0},
     {FALSE,7,170,30,620,480,210,449,0,3,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[2]),0},
     {FALSE,7,170,30,620,480,310,509,0,2,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[5]),0},
 };
 
-static const LPCTSTR ROMSOUND_EXAMPLE = TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::");
-static const LPCTSTR ROMSOUND_ENABLED = TEXT("00:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:16:17:18");
+const TCHAR ROMSOUND_EXAMPLE[] = TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::");
+const TCHAR ROMSOUND_ENABLED[] = TEXT("00:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:16:17:18");
 
 // 半角置換可能文字リスト
 // 記号はJISX0213 1面1区のうちグリフが用意されている可能性が十分高そうなものだけ
-static const LPCTSTR HALF_F_LIST = TEXT("　、。，．・：；？！＾＿／｜（［］｛｝「＋－＝＜＞＄％＃＆＊＠０Ａａ");
-static const LPCTSTR HALF_T_LIST = TEXT("　、。，．・：；？！＾＿／｜）［］｛｝」＋－＝＜＞＄％＃＆＊＠９Ｚｚ");
-static const LPCTSTR HALF_R_LIST = TEXT(" ､｡,.･:;?!^_/|([]{}｢+-=<>$%#&*@0Aa");
+const TCHAR HALF_F_LIST[] = TEXT("　、。，．・：；？！＾＿／｜（［］｛｝「＋－＝＜＞＄％＃＆＊＠０Ａａ");
+const TCHAR HALF_T_LIST[] = TEXT("　、。，．・：；？！＾＿／｜）［］｛｝」＋－＝＜＞＄％＃＆＊＠９Ｚｚ");
+const TCHAR HALF_R_LIST[] = TEXT(" ､｡,.･:;?!^_/|([]{}｢+-=<>$%#&*@0Aa");
 
 enum {
     TIMER_ID_DONE_MOVE,
@@ -73,6 +75,7 @@ enum {
     ID_COMMAND_CAPTURE,
     ID_COMMAND_SAVE,
 };
+}
 
 CTVCaption2::CTVCaption2()
     : m_settingsIndex(0)
@@ -252,7 +255,9 @@ HWND CTVCaption2::GetFullscreenWindow()
 }
 
 
-static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
+namespace
+{
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 {
     std::pair<HWND, LPCTSTR> *params = reinterpret_cast<std::pair<HWND, LPCTSTR>*>(lParam);
     TCHAR className[64];
@@ -262,6 +267,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
         return FALSE;
     }
     return TRUE;
+}
 }
 
 
@@ -716,7 +722,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
         // 全画面表示状態が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
             // オーナーが変わるので破棄する必要がある
-            ::SendMessage(pThis->m_hwndPainting, WM_RESET_OSDS, 0, 0);
+            ::SendMessage(pThis->m_hwndPainting, WM_APP_RESET_OSDS, 0, 0);
         }
         break;
     case TVTest::EVENT_CHANNELCHANGE:
@@ -726,7 +732,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
     case TVTest::EVENT_SERVICEUPDATE:
         // サービスの構成が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
-            ::SendMessage(pThis->m_hwndPainting, WM_RESET_CAPTION, 0, 0);
+            ::SendMessage(pThis->m_hwndPainting, WM_APP_RESET_CAPTION, 0, 0);
             pThis->m_videoPid = pThis->GetVideoPid();
             pThis->m_fResetPat = true;
         }
@@ -748,7 +754,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
         if (pThis->m_pApp->IsPluginEnabled()) {
             switch (static_cast<int>(lParam1)) {
             case ID_COMMAND_SWITCH_LANG:
-                ::SendMessage(pThis->m_hwndPainting, WM_RESET_CAPTION, 0, 0);
+                ::SendMessage(pThis->m_hwndPainting, WM_APP_RESET_CAPTION, 0, 0);
                 {
                     pThis->m_caption1Manager.ShowLang2(!pThis->m_caption1Manager.IsShowLang2());
                     pThis->m_caption2Manager.ShowLang2(!pThis->m_caption2Manager.IsShowLang2());
@@ -925,11 +931,11 @@ BOOL CALLBACK CTVCaption2::WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam
 
     switch (uMsg) {
     case WM_MOVE:
-        ::SendMessage(pThis->m_hwndPainting, WM_DONE_MOVE, 0, 0);
+        ::SendMessage(pThis->m_hwndPainting, WM_APP_DONE_MOVE, 0, 0);
         ::SetTimer(pThis->m_hwndPainting, TIMER_ID_DONE_MOVE, 500, nullptr);
         break;
     case WM_SIZE:
-        ::SendMessage(pThis->m_hwndPainting, WM_DONE_SIZE, 0, 0);
+        ::SendMessage(pThis->m_hwndPainting, WM_APP_DONE_SIZE, 0, 0);
         ::SetTimer(pThis->m_hwndPainting, TIMER_ID_DONE_SIZE, 500, nullptr);
         break;
     }
@@ -1053,8 +1059,10 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
 }
 
 
+namespace
+{
 // 拡縮後の文字サイズを得る
-static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const CAPTION_CHAR_DATA_DLL &charData)
+void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const CAPTION_CHAR_DATA_DLL &charData)
 {
     // デコーダの字送り計算と一致させること
     int charW = charData.wCharW;
@@ -1087,6 +1095,7 @@ static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const 
     if (pCharH) *pCharH = charH;
     if (pDirW) *pDirW = dirW;
     if (pDirH) *pDirH = dirH;
+}
 }
 
 
@@ -1453,7 +1462,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             LPCREATESTRUCT pcs = reinterpret_cast<LPCREATESTRUCT>(lParam);
             pThis = reinterpret_cast<CTVCaption2*>(pcs->lpCreateParams);
             ::SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pThis));
-            ::PostMessage(hwnd, WM_RESET_OSDS, 0, 0);
+            ::PostMessage(hwnd, WM_APP_RESET_OSDS, 0, 0);
             pThis->m_fNeedtoShow = pThis->m_pApp->GetPreview();
         }
         return 0;
@@ -1464,11 +1473,11 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
         switch (wParam) {
         case TIMER_ID_DONE_MOVE:
             ::KillTimer(hwnd, TIMER_ID_DONE_MOVE);
-            ::SendMessage(hwnd, WM_DONE_MOVE, 0, 0);
+            ::SendMessage(hwnd, WM_APP_DONE_MOVE, 0, 0);
             return 0;
         case TIMER_ID_DONE_SIZE:
             ::KillTimer(hwnd, TIMER_ID_DONE_SIZE);
-            ::SendMessage(hwnd, WM_DONE_SIZE, 0, 0);
+            ::SendMessage(hwnd, WM_APP_DONE_SIZE, 0, 0);
             return 0;
         case TIMER_ID_FLASHING_TEXTURE:
             {
@@ -1485,7 +1494,7 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             return 0;
         }
         break;
-    case WM_RESET_CAPTION:
+    case WM_APP_RESET_CAPTION:
         pThis->HideAllOsds();
         {
             lock_recursive_mutex lock(pThis->m_streamLock);
@@ -1499,23 +1508,23 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             pThis->m_caption2Manager.Clear();
         }
         return 0;
-    case WM_PROCESS_CAPTION:
+    case WM_APP_PROCESS_CAPTION:
         pThis->ProcessCaption(&pThis->m_caption1Manager);
         pThis->ProcessCaption(&pThis->m_caption2Manager);
         return 0;
-    case WM_DONE_MOVE:
+    case WM_APP_DONE_MOVE:
         for (int index = 0; index < STREAM_MAX; ++index) {
             for (size_t i = 0; i < pThis->m_osdShowCount[index]; ++i) {
                 pThis->m_pOsdList[index][i]->OnParentMove();
             }
         }
         return 0;
-    case WM_DONE_SIZE:
+    case WM_APP_DONE_SIZE:
         pThis->OnSize(STREAM_CAPTION);
         pThis->OnSize(STREAM_SUPERIMPOSE);
         return 0;
-    case WM_RESET_OSDS:
-        DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): WM_RESET_OSDS\n"));
+    case WM_APP_RESET_OSDS:
+        DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): WM_APP_RESET_OSDS\n"));
         pThis->DestroyOsds();
         pThis->m_hwndContainer = pThis->FindVideoContainer();
         if (pThis->m_hwndContainer) {
@@ -1603,7 +1612,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
         // 次行が取得できるかどうか
         if (!pCaptionForTest && pCaptionManager->GetCaption(pcr, m_fIgnorePts, 0)) {
             // 他のメッセージの遅延を減らすため次行の描画は後回しにする
-            ::PostMessage(m_hwndPainting, WM_PROCESS_CAPTION, 0, 0);
+            ::PostMessage(m_hwndPainting, WM_APP_PROCESS_CAPTION, 0, 0);
             return;
         }
     }
@@ -1689,7 +1698,9 @@ BOOL CALLBACK CTVCaption2::StreamCallback(BYTE *pData, void *pClientData)
 }
 
 
-static void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
+namespace
+{
+void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
 {
     for (size_t i = 0; i < pPat->pmt.size(); ++i) {
         const PMT *pPmt = &pPat->pmt[i];
@@ -1722,6 +1733,7 @@ static void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, i
     *pPcrPid = -1;
     *pCaption1Pid = -1;
     *pCaption2Pid = -1;
+}
 }
 
 
@@ -1756,14 +1768,14 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
                 // PCRの連続性チェック
                 if (MSB(pcr - m_pcr) || pcr - m_pcr >= 1000 * PCR_PER_MSEC) {
                     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): Discontinuous packet!\n"));
-                    ::SendNotifyMessage(m_hwndPainting, WM_RESET_CAPTION, 0, 0);
+                    ::SendNotifyMessage(m_hwndPainting, WM_APP_RESET_CAPTION, 0, 0);
                 }
                 m_pcr = pcr;
 
                 // ある程度呼び出し頻度を抑える(感覚的に遅延を感じなければOK)
                 DWORD tick = ::GetTickCount();
                 if (tick - m_procCapTick >= 100) {
-                    ::SendNotifyMessage(m_hwndPainting, WM_PROCESS_CAPTION, 0, 0);
+                    ::SendNotifyMessage(m_hwndPainting, WM_APP_PROCESS_CAPTION, 0, 0);
                     m_procCapTick = tick;
                 }
             }
@@ -1793,7 +1805,7 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
                         header.continuity_counter);
             GetPidsFromVideoPmt(&pmtPid, &m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
             if (pmtPid >= 0 && Is1SegPmtPid(pmtPid) != m_fProfileC) {
-                ::SendNotifyMessage(m_hwndPainting, WM_RESET_CAPTION, Is1SegPmtPid(pmtPid) ? 2 : 1, 0);
+                ::SendNotifyMessage(m_hwndPainting, WM_APP_RESET_CAPTION, Is1SegPmtPid(pmtPid) ? 2 : 1, 0);
             }
             return;
         }
@@ -1805,7 +1817,7 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
                             header.continuity_counter);
                 GetPidsFromVideoPmt(&pmtPid, &m_pcrPid, &m_caption1Pid, &m_caption2Pid, m_videoPid, &m_pat);
                 if (pmtPid >= 0 && Is1SegPmtPid(pmtPid) != m_fProfileC) {
-                    ::SendNotifyMessage(m_hwndPainting, WM_RESET_CAPTION, Is1SegPmtPid(pmtPid) ? 2 : 1, 0);
+                    ::SendNotifyMessage(m_hwndPainting, WM_APP_RESET_CAPTION, Is1SegPmtPid(pmtPid) ? 2 : 1, 0);
                 }
                 return;
             }
