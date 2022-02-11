@@ -411,7 +411,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const
 				HGDIOBJ hfontOld=::SelectObject(hdc,hfont);
 				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
 				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight)*it->AdjustRect.bottom/100;
-				TextOutMonospace(hdc,x+intvX/2+it->AdjustRect.left,m_Position.Height-1-intvY/2+it->AdjustRect.top,it->Text.c_str(),(int)it->Text.length(),it->Width-intvX,MultX,MultY);
+				TextOutMonospace(hdc,x+intvX/2+it->AdjustRect.left,m_Position.Height-1-intvY/2+it->AdjustRect.top,it->Text.c_str(),(int)it->Text.length(),it->Width,MultX,MultY);
 				::SelectObject(hdc,hfontOld);
 				if (fSetColor) ::SetTextColor(hdc,crOld);
 			}

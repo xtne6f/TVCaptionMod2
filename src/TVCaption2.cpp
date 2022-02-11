@@ -1038,34 +1038,37 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
 // 拡縮後の文字サイズを得る
 static void GetCharSize(int *pCharW, int *pCharH, int *pDirW, int *pDirH, const CAPTION_CHAR_DATA_DLL &charData)
 {
-    int charTransX = 2;
-    int charTransY = 2;
+    // デコーダの字送り計算と一致させること
+    int charW = charData.wCharW;
+    int charH = charData.wCharH;
+    int dirW = charW + charData.wCharHInterval;
+    int dirH = charH + charData.wCharVInterval;
     switch (charData.wCharSizeMode) {
     case CP_STR_SMALL:
-        charTransX = 1;
-        charTransY = 1;
-        break;
+        charH /= 2;
+        dirH = charH + charData.wCharVInterval / 4 * 2;
+        // FALL THROUGH!
     case CP_STR_MEDIUM:
-        charTransX = 1;
-        charTransY = 2;
+        charW /= 2;
+        dirW = charW + charData.wCharHInterval / 4 * 2;
         break;
     case CP_STR_HIGH_W:
-        charTransX = 2;
-        charTransY = 4;
-        break;
-    case CP_STR_WIDTH_W:
-        charTransX = 4;
-        charTransY = 2;
+        charH *= 2;
+        dirH *= 2;
         break;
     case CP_STR_W:
-        charTransX = 4;
-        charTransY = 4;
+        charH *= 2;
+        dirH *= 2;
+        // FALL THROUGH!
+    case CP_STR_WIDTH_W:
+        charW *= 2;
+        dirW *= 2;
         break;
     }
-    if (pCharW) *pCharW = charData.wCharW * charTransX / 2;
-    if (pCharH) *pCharH = charData.wCharH * charTransY / 2;
-    if (pDirW) *pDirW = (charData.wCharW + charData.wCharHInterval) * charTransX / 2;
-    if (pDirH) *pDirH = (charData.wCharH + charData.wCharVInterval) * charTransY / 2;
+    if (pCharW) *pCharW = charW;
+    if (pCharH) *pCharH = charH;
+    if (pDirW) *pDirW = dirW;
+    if (pDirH) *pDirH = dirH;
 }
 
 

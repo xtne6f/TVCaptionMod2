@@ -1402,22 +1402,30 @@ void CARIB8CharDecode::ActivePositionForward( int nCount )
 
 WORD CARIB8CharDecode::GetCharDirSize(void) const
 {
-	WORD wSize = m_wCharW + m_wCharHInterval;
+	WORD wSize;
 	if( m_emStrSize==CP_STR_SMALL || m_emStrSize==CP_STR_MEDIUM ){
-		wSize /= 2;
-	}else if( m_emStrSize==CP_STR_W || m_emStrSize==CP_STR_WIDTH_W ){
-		wSize *= 2;
+		//"字間隔/4の値は切り捨てとする"
+		wSize = m_wCharW / 2 + m_wCharHInterval / 4 * 2;
+	}else{
+		wSize = m_wCharW + m_wCharHInterval;
+		if( m_emStrSize==CP_STR_W || m_emStrSize==CP_STR_WIDTH_W ){
+			wSize *= 2;
+		}
 	}
 	return wSize==0 ? 1 : wSize;
 }
 
 WORD CARIB8CharDecode::GetLineDirSize(void) const
 {
-	WORD wSize = m_wCharH + m_wCharVInterval;
+	WORD wSize;
 	if( m_emStrSize==CP_STR_SMALL ){
-		wSize /= 2;
-	}else if( m_emStrSize==CP_STR_W || m_emStrSize==CP_STR_HIGH_W ){
-		wSize *= 2;
+		//"行間隔/4の値は切り捨てとする"
+		wSize = m_wCharH / 2 + m_wCharVInterval / 4 * 2;
+	}else{
+		wSize = m_wCharH + m_wCharVInterval;
+		if( m_emStrSize==CP_STR_W || m_emStrSize==CP_STR_HIGH_W ){
+			wSize *= 2;
+		}
 	}
 	return wSize==0 ? 1 : wSize;
 }
