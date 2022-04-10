@@ -6,6 +6,17 @@
 #define IDB_ICON                                110
 #define IDB_SWITCH_LANG                         111
 #define IDB_SWITCH_SETTING                      112
+#define IDW_ROM_00                              150
+#define IDW_ROM_01                              151
+#define IDW_ROM_05                              155
+#define IDW_ROM_06                              156
+#define IDW_ROM_07                              157
+#define IDW_ROM_08                              158
+#define IDW_ROM_09                              159
+#define IDW_ROM_10                              160
+#define IDW_ROM_11                              161
+#define IDW_ROM_12                              162
+#define IDW_ROM_13                              163
 #define IDC_CHECK_OSD                           1000
 #define IDC_EDIT_CAPFOLDER                      1001
 #define IDC_CAPFOLDER_BROWSE                    1002
@@ -46,3 +57,4 @@
 #define IDC_CHECK_SHRINK_SD_SCALE               1037
 #define IDC_COMBO_AVOID_HALF                    1038
 #define IDC_CHECK_SHIFT_SMALL                   1039
+#define IDC_CHECK_CUST_ROMSOUND                 1040

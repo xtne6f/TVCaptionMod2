@@ -54,8 +54,8 @@ const CAPTION_DATA_DLL TESTCAP_LIST[] = {
     {FALSE,7,170,30,620,480,310,509,0,2,const_cast<CAPTION_CHAR_DATA_DLL*>(&TESTCAP_CHAR_LIST[5]),0},
 };
 
-const TCHAR ROMSOUND_EXAMPLE[] = TEXT(";!SystemExclamation:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:!SystemAsterisk::");
-const TCHAR ROMSOUND_ENABLED[] = TEXT("00:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:16:17:18");
+const TCHAR ROMSOUND_ROM_ENABLED[] = TEXT("!00:!01:!02:!03:!04:!05:!06:!07:!08:!09:!10:!11:!12:!13:!14:!15:::");
+const TCHAR ROMSOUND_CUST_ENABLED[] = TEXT("00:01:02:03:04:05:06:07:08:09:10:11:12:13:14:15:16:17:18");
 
 // 半角置換可能文字リスト
 // 記号はJISX0213 1面1区のうちグリフが用意されている可能性が十分高そうなものだけ
@@ -554,7 +554,7 @@ void CTVCaption2::LoadSettings()
     m_fShrinkSDScale    = GetBufferedProfileInt(buf, TEXT("ShrinkSDScale"), 0) != 0;
     m_adjustViewX       = GetBufferedProfileInt(buf, TEXT("ViewXAdjust"), 0);
     m_adjustViewY       = GetBufferedProfileInt(buf, TEXT("ViewYAdjust"), 0);
-    GetBufferedProfileString(buf, TEXT("RomSoundList"), ROMSOUND_EXAMPLE, val, _countof(val));
+    GetBufferedProfileString(buf, TEXT("RomSoundList"), TEXT(""), val, _countof(val));
     m_romSoundList = val;
 
     m_fEnTextColor = textColor >= 0;
@@ -690,6 +690,22 @@ bool CTVCaption2::PlayRomSound(int index) const
 
     if (!id.empty() && id[0] == TEXT('!')) {
         // 定義済みのサウンド
+        if (id.size() == 3) {
+            LPCTSTR romFound = _tcsstr(ROMSOUND_ROM_ENABLED, id.c_str());
+            if (romFound) {
+                // 組み込みサウンド
+                size_t romIndex = (romFound - ROMSOUND_ROM_ENABLED) / 4;
+                // 今のところ2～4は組み込んでいないので1とみなす
+                if (2 <= romIndex && romIndex <= 4) {
+                    romIndex = 1;
+                }
+                if (romIndex <= 13) {
+                    return ::PlaySound(MAKEINTRESOURCE(IDW_ROM_00 + romIndex), g_hinstDLL,
+                                       SND_ASYNC|SND_NODEFAULT|SND_RESOURCE) != FALSE;
+                }
+                return false;
+            }
+        }
         return ::PlaySound(&id.c_str()[1], nullptr, SND_ASYNC|SND_NODEFAULT|SND_ALIAS) != FALSE;
     }
     else if (!id.empty()) {
@@ -1962,7 +1978,10 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::CheckDlgButton(hDlg, IDC_CHECK_SHRINK_SD_SCALE, m_fShrinkSDScale ? BST_CHECKED : BST_UNCHECKED);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_X, m_adjustViewX, TRUE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_ADJUST_VIEW_Y, m_adjustViewY, TRUE);
-    ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, !m_romSoundList.empty() && m_romSoundList[0] != TEXT(';') ? BST_CHECKED : BST_UNCHECKED);
+    bool fCheckRomSound = !m_romSoundList.empty() && m_romSoundList[0] != TEXT(';');
+    ::CheckDlgButton(hDlg, IDC_CHECK_ROMSOUND, fCheckRomSound ? BST_CHECKED : BST_UNCHECKED);
+    ::EnableWindow(::GetDlgItem(hDlg, IDC_CHECK_CUST_ROMSOUND), fCheckRomSound);
+    ::CheckDlgButton(hDlg, IDC_CHECK_CUST_ROMSOUND, fCheckRomSound && m_romSoundList != ROMSOUND_ROM_ENABLED ? BST_CHECKED : BST_UNCHECKED);
 
     ::RemoveProp(hDlg, TEXT("Ini"));
 }
@@ -2219,7 +2238,13 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             }
             break;
         case IDC_CHECK_ROMSOUND:
-            m_romSoundList = ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) != BST_UNCHECKED ? ROMSOUND_ENABLED : ROMSOUND_EXAMPLE;
+            ::EnableWindow(::GetDlgItem(hDlg, IDC_CHECK_CUST_ROMSOUND),
+                           ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) != BST_UNCHECKED);
+            // FALL THROUGH!
+        case IDC_CHECK_CUST_ROMSOUND:
+            m_romSoundList = ::IsDlgButtonChecked(hDlg, IDC_CHECK_ROMSOUND) == BST_UNCHECKED ? TEXT("") :
+                             ::IsDlgButtonChecked(hDlg, IDC_CHECK_CUST_ROMSOUND) != BST_UNCHECKED ? ROMSOUND_CUST_ENABLED :
+                             ROMSOUND_ROM_ENABLED;
             fSave = true;
             break;
         default:
