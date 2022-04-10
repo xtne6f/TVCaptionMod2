@@ -542,8 +542,8 @@ void CTVCaption2::LoadSettings()
     m_rcGaijiAdjust.top = GetBufferedProfileInt(buf, TEXT("GaijiFontYAdjust"), 0);
     m_rcGaijiAdjust.right = GetBufferedProfileInt(buf, TEXT("GaijiFontSizeAdjust"), 100);
     m_rcGaijiAdjust.bottom = GetBufferedProfileInt(buf, TEXT("GaijiFontRatioAdjust"), 100);
-    m_strokeWidth       = GetBufferedProfileInt(buf, TEXT("StrokeWidth"), -3);
-    m_ornStrokeWidth    = GetBufferedProfileInt(buf, TEXT("OrnStrokeWidth"), 5);
+    m_strokeWidth       = GetBufferedProfileInt(buf, TEXT("StrokeWidth"), -2);
+    m_ornStrokeWidth    = GetBufferedProfileInt(buf, TEXT("OrnStrokeWidth"), 4);
     m_strokeSmoothLevel = GetBufferedProfileInt(buf, TEXT("StrokeSmoothLevel"), 1);
     m_strokeByDilate    = GetBufferedProfileInt(buf, TEXT("StrokeByDilate"), 22);
     m_paddingWidth      = GetBufferedProfileInt(buf, TEXT("PaddingWidth"), 0);
