@@ -346,6 +346,22 @@ bool CTVCaption2::GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT 
 }
 
 
+// 字幕の表示方法に応じて映像サイズまたはGetVideoContainerLayout()の結果を得る
+bool CTVCaption2::GetVideoSurfaceRect(HWND hwndContainer, RECT *pVideoRect, RECT *pExVideoRect)
+{
+    if (m_paintingMethod == 3) {
+        RECT rc;
+        if (m_osdCompositor.GetSurfaceRect(&rc)) {
+            // 位置はわからないが正確な映像サイズを得た
+            if (pVideoRect) *pVideoRect = rc;
+            if (pExVideoRect) *pExVideoRect = rc;
+            return true;
+        }
+    }
+    return GetVideoContainerLayout(hwndContainer, nullptr, pVideoRect, pExVideoRect);
+}
+
+
 // 映像PIDを取得する(無い場合は-1)
 // プラグインAPIが内部でストリームをロックするので、デッドロックを完成させないように注意
 int CTVCaption2::GetVideoPid()
@@ -841,8 +857,8 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                 }
             }
 
-            RECT rc, rcVideo;
-            if (GetVideoContainerLayout(m_hwndContainer, &rc, &rcVideo)) {
+            RECT rcVideo;
+            if (GetVideoContainerLayout(m_hwndContainer, nullptr, &rcVideo)) {
                 BITMAPINFOHEADER bihRes = bih;
                 bihRes.biWidth = rcVideo.right - rcVideo.left;
                 bihRes.biHeight = rcVideo.bottom - rcVideo.top;
@@ -1596,8 +1612,8 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
                 m_shiftSmallState[index] = SHIFT_SMALL_STATE();
             }
             else {
-                RECT rcVideo;
-                if (GetVideoContainerLayout(m_hwndContainer, nullptr, nullptr, &rcVideo)) {
+                RECT rcExVideo;
+                if (GetVideoSurfaceRect(m_hwndContainer, nullptr, &rcExVideo)) {
                     const DRCS_PATTERN_DLL *pDrcsList = nullptr;
                     DWORD drcsCount = 0;
                     if (!pCaptionForTest) {
@@ -1621,7 +1637,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
                             }
                         }
                     }
-                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, m_shiftSmallState[index], m_hwndContainer, rcVideo);
+                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, m_shiftSmallState[index], m_hwndContainer, rcExVideo);
                 }
             }
         }
@@ -1655,7 +1671,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
                 int left, top;
                 m_pOsdList[index][m_osdShowCount[index]]->GetPosition(&left, &top, nullptr, nullptr);
                 RECT rcVideo;
-                if (GetVideoContainerLayout(m_hwndContainer, nullptr, &rcVideo)) {
+                if (GetVideoSurfaceRect(m_hwndContainer, &rcVideo)) {
                     // 疑似OSD系から逆変換
                     left -= rcVideo.left;
                     top -= rcVideo.top;
@@ -1685,9 +1701,9 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
 
 void CTVCaption2::OnSize(STREAM_INDEX index)
 {
-    if (m_osdShowCount[index] > 0) {
+    if (m_paintingMethod != 3 && m_osdShowCount[index] > 0) {
         RECT rc;
-        if (GetVideoContainerLayout(m_hwndContainer, &rc, nullptr)) {
+        if (GetVideoContainerLayout(m_hwndContainer, &rc)) {
             // とりあえずはみ出ないようにする
             for (size_t i = 0; i < m_osdShowCount[index]; ++i) {
                 int left, top, width, height;

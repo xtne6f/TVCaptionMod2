@@ -45,6 +45,7 @@ private:
     HWND GetFullscreenWindow();
     HWND FindVideoContainer();
     bool GetVideoContainerLayout(HWND hwndContainer, RECT *pRect, RECT *pVideoRect = nullptr, RECT *pExVideoRect = nullptr);
+    bool GetVideoSurfaceRect(HWND hwndContainer, RECT *pVideoRect = nullptr, RECT *pExVideoRect = nullptr);
     int GetVideoPid();
     bool ConfigureGaijiTable(LPCTSTR tableName, std::vector<DRCS_PAIR> *pDrcsStrMap, WCHAR (*pCustomTable)[2]);
     bool EnablePlugin(bool fEnable);
