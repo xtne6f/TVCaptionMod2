@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.5
+﻿TVTest TVCaptionMod2 Plugin ver.2.6
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
