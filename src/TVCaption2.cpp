@@ -100,6 +100,7 @@ CTVCaption2::CTVCaption2()
     , m_fShrinkSDScale(false)
     , m_adjustViewX(0)
     , m_adjustViewY(0)
+    , m_fInitializeSettingsDlg(false)
     , m_hwndPainting(nullptr)
     , m_hwndContainer(nullptr)
     , m_fNeedtoShow(false)
@@ -1879,7 +1880,19 @@ bool CTVCaption2::PluginSettings(HWND hwndOwner)
         ::MessageBox(hwndOwner, TEXT("プラグインを有効にしてください。"), INFO_PLUGIN_NAME, MB_ICONERROR | MB_OK);
         return false;
     }
-    ::DialogBoxParam(g_hinstDLL, MAKEINTRESOURCE(IDD_OPTIONS), hwndOwner, SettingsDlgProc, reinterpret_cast<LPARAM>(this));
+    if (m_pApp->QueryMessage(TVTest::MESSAGE_SHOWDIALOG)) {
+        TVTest::ShowDialogInfo info;
+        info.Flags = 0;
+        info.hinst = g_hinstDLL;
+        info.pszTemplate = MAKEINTRESOURCE(IDD_OPTIONS);
+        info.pMessageFunc = TVTestSettingsDlgProc;
+        info.pClientData = this;
+        info.hwndOwner = hwndOwner;
+        m_pApp->ShowDialog(&info);
+    }
+    else {
+        ::DialogBoxParam(g_hinstDLL, MAKEINTRESOURCE(IDD_OPTIONS), hwndOwner, SettingsDlgProc, reinterpret_cast<LPARAM>(this));
+    }
     return true;
 }
 
@@ -1895,9 +1908,16 @@ INT_PTR CALLBACK CTVCaption2::SettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wPara
 }
 
 
+// プラグインAPI経由の設定ダイアログプロシージャ
+INT_PTR CALLBACK CTVCaption2::TVTestSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam, void *pClientData)
+{
+    return static_cast<CTVCaption2*>(pClientData)->ProcessSettingsDlg(hDlg, uMsg, wParam, lParam);
+}
+
+
 void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
 {
-    ::SetProp(hDlg, TEXT("Ini"), reinterpret_cast<HANDLE>(1));
+    m_fInitializeSettingsDlg = true;
 
     ::CheckDlgButton(hDlg, IDC_CHECK_OSD,
         ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_iniPath.c_str()) != 0 ? BST_CHECKED : BST_UNCHECKED);
@@ -1999,7 +2019,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     ::EnableWindow(::GetDlgItem(hDlg, IDC_CHECK_CUST_ROMSOUND), fCheckRomSound);
     ::CheckDlgButton(hDlg, IDC_CHECK_CUST_ROMSOUND, fCheckRomSound && m_romSoundList != ROMSOUND_ROM_ENABLED ? BST_CHECKED : BST_UNCHECKED);
 
-    ::RemoveProp(hDlg, TEXT("Ini"));
+    m_fInitializeSettingsDlg = false;
 }
 
 
@@ -2016,7 +2036,7 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     case WM_COMMAND:
         // 初期化中の無駄な再帰を省く
-        if (::GetProp(hDlg, TEXT("Ini"))) {
+        if (m_fInitializeSettingsDlg) {
             break;
         }
         switch (LOWORD(wParam)) {

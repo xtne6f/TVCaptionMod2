@@ -76,6 +76,7 @@ private:
     void ProcessPacket(BYTE *pPacket);
     bool PluginSettings(HWND hwndOwner);
     static INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+    static INT_PTR CALLBACK TVTestSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam, void *pClientData);
     void InitializeSettingsDlg(HWND hDlg);
     INT_PTR ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -115,6 +116,7 @@ private:
     int m_adjustViewX;
     int m_adjustViewY;
     tstring m_romSoundList;
+    bool m_fInitializeSettingsDlg;
 
     // 字幕描画
     HWND m_hwndPainting;
