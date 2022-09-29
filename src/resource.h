@@ -3,6 +3,7 @@
 #endif
 
 #define IDD_OPTIONS                             100
+#define IDD_OPTIONS_LEGACY                      101
 #define IDB_ICON                                110
 #define IDB_SWITCH_LANG                         111
 #define IDB_SWITCH_SETTING                      112

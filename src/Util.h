@@ -21,6 +21,7 @@ void GetBufferedProfileString(LPCTSTR lpBuff, LPCTSTR lpKeyName, LPCTSTR lpDefau
 int GetBufferedProfileInt(LPCTSTR lpBuff, LPCTSTR lpKeyName, int nDefault);
 BOOL WritePrivateProfileInt(LPCTSTR lpAppName, LPCTSTR lpKeyName, int value, LPCTSTR lpFileName);
 DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize);
+bool IsWindows7OrLater();
 std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode);
 int StrlenWoLoSurrogate(LPCTSTR str);
 bool HexStringToByteArray(LPCTSTR str, BYTE *pDest, int destLen);

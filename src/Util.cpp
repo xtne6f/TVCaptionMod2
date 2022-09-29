@@ -72,6 +72,17 @@ DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
     return 0;
 }
 
+bool IsWindows7OrLater()
+{
+    OSVERSIONINFOEX vi;
+    vi.dwOSVersionInfoSize = sizeof(vi);
+    vi.dwMajorVersion = 6;
+    vi.dwMinorVersion = 1;
+    return !!::VerifyVersionInfo(&vi, VER_MAJORVERSION | VER_MINORVERSION,
+                                 ::VerSetConditionMask(::VerSetConditionMask(0, VER_MAJORVERSION, VER_GREATER_EQUAL),
+                                                       VER_MINORVERSION, VER_GREATER_EQUAL));
+}
+
 // BOM付きUTF-16テキストファイルを文字列として全て読む
 std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
 {

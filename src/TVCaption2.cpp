@@ -1884,14 +1884,15 @@ bool CTVCaption2::PluginSettings(HWND hwndOwner)
         TVTest::ShowDialogInfo info;
         info.Flags = 0;
         info.hinst = g_hinstDLL;
-        info.pszTemplate = MAKEINTRESOURCE(IDD_OPTIONS);
+        info.pszTemplate = MAKEINTRESOURCE(IsWindows7OrLater() ? IDD_OPTIONS : IDD_OPTIONS_LEGACY);
         info.pMessageFunc = TVTestSettingsDlgProc;
         info.pClientData = this;
         info.hwndOwner = hwndOwner;
         m_pApp->ShowDialog(&info);
     }
     else {
-        ::DialogBoxParam(g_hinstDLL, MAKEINTRESOURCE(IDD_OPTIONS), hwndOwner, SettingsDlgProc, reinterpret_cast<LPARAM>(this));
+        ::DialogBoxParam(g_hinstDLL, MAKEINTRESOURCE(IsWindows7OrLater() ? IDD_OPTIONS : IDD_OPTIONS_LEGACY),
+                         hwndOwner, SettingsDlgProc, reinterpret_cast<LPARAM>(this));
     }
     return true;
 }
