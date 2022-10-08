@@ -48,18 +48,23 @@ bool CPseudoOSD::Initialize(HINSTANCE hinst)
 CPseudoOSD::CPseudoOSD()
 	: m_hwnd(nullptr)
 	, m_crBackColor(RGB(16,0,16))
+	, m_OffsetX(0)
+	, m_OffsetY(0)
+	, m_ScaleX(1)
+	, m_ScaleY(1)
+	, m_wSWFMode(0)
 	, m_TimerID(0)
 	, m_FlashingInterval(0)
 	, m_Opacity(80)
 	, m_BackOpacity(50)
 	, m_StrokeWidth(0)
 	, m_StrokeSmoothLevel(0)
-	, m_fStrokeByDilate(false)
+	, m_StrokeByDilateThreshold(0)
 	, m_fHLLeft(false)
 	, m_fHLTop(false)
 	, m_fHLRight(false)
 	, m_fHLBottom(false)
-	, m_fVertAntiAliasing(false)
+	, m_VertAntiAliasingThreshold(0)
 	, m_fHideText(false)
 	, m_fWindowPrepared(false)
 	, m_fLayeredWindow(false)
@@ -84,36 +89,29 @@ CPseudoOSD::~CPseudoOSD()
 }
 
 
-int CPseudoOSD::GetEntireWidth(const std::vector<STYLE_ELEM> &List)
-{
-	int w=0;
-	for (size_t i=0; i<List.size(); w+=List[i++].Width);
-	return w;
-}
-
-
-bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow)
+bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow,bool fRenewWindow)
 {
 	if (m_hwnd) {
-		if (((fLayeredWindow && m_hwndParent==hwndParent && ::GetWindow(m_hwnd,GW_OWNER)==m_hwndOwner) ||
-		     (!fLayeredWindow && ::GetParent(m_hwnd)==hwndParent))
-				&& m_fLayeredWindow==fLayeredWindow)
+		if (!fRenewWindow && m_fLayeredWindow==fLayeredWindow &&
+		    ((fLayeredWindow && m_hwndParent==hwndParent && ::GetWindow(m_hwnd,GW_OWNER)==m_hwndOwner) ||
+		     (!fLayeredWindow && ::GetParent(m_hwnd)==hwndParent)))
 			return true;
-		Destroy();
+		::DestroyWindow(m_hwnd);
 	}
 	m_fLayeredWindow=fLayeredWindow;
 	m_hwndParent=hwndParent;
+	int x,y,w,h;
+	GetWindowPosition(&x,&y,&w,&h);
 	if (fLayeredWindow) {
 		POINT pt;
 		RECT rc;
 
-		pt.x=m_Position.Left;
-		pt.y=m_Position.Top;
+		pt.x=x;
+		pt.y=y;
 		::ClientToScreen(hwndParent,&pt);
 		if (::CreateWindowEx(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
 							 m_pszWindowClass,nullptr,WS_POPUP,
-							 pt.x,pt.y,GetEntireWidth(m_StyleList),m_Position.Height,
-							 hwndParent,nullptr,m_hinst,this)==nullptr)
+							 pt.x,pt.y,w,h,hwndParent,nullptr,m_hinst,this)==nullptr)
 			return false;
 
 		::GetWindowRect(hwndParent,&rc);
@@ -124,9 +122,7 @@ bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow)
 		return true;
 	}
 	return ::CreateWindowEx(0,m_pszWindowClass,nullptr,WS_CHILD,
-							m_Position.Left,m_Position.Top,
-							GetEntireWidth(m_StyleList),m_Position.Height,
-							hwndParent,nullptr,m_hinst,this)!=nullptr;
+							x,y,w,h,hwndParent,nullptr,m_hinst,this)!=nullptr;
 }
 
 
@@ -147,9 +143,18 @@ bool CPseudoOSD::PrepareWindow()
 
 	m_fHideText=m_FlashingInterval<0;
 	m_fWindowPrepared=true;
+
+	int x,y,w,h;
+	GetWindowPosition(&x,&y,&w,&h);
 	if (m_fLayeredWindow) {
+		POINT pt;
+		pt.x=x;
+		pt.y=y;
+		::ClientToScreen(m_hwndParent,&pt);
+		::SetWindowPos(m_hwnd,nullptr,pt.x,pt.y,w,h,SWP_NOZORDER|SWP_NOACTIVATE);
 		UpdateLayeredWindow();
-		return true;
+	} else {
+		::SetWindowPos(m_hwnd,HWND_TOP,x,y,w,h,0);
 	}
 	return true;
 }
@@ -222,65 +227,61 @@ void CPseudoOSD::ClearText()
 			if (it->hbm) ::DeleteObject(it->hbm);
 		}
 		m_StyleList.clear();
-		SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
 	}
 }
 
 
 // テキストを追加する
 // lf.lfWidth<0のときは半角テキスト間隔で描画する
-bool CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect)
+void CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect)
 {
 	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf,cr,AdjustRect));
-	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
-	return true;
 }
 
 
 // 画像を追加する
 // 受けとったビットマップはクラス側で破棄する
-bool CPseudoOSD::AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect)
+void CPseudoOSD::AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect)
 {
 	m_StyleList.push_back(STYLE_ELEM(hbm,Width,cr,PaintRect));
-	SetPosition(m_Position.Left,m_Position.Top,m_Position.Height);
-	return true;
 }
 
 
-bool CPseudoOSD::SetPosition(int Left,int Top,int Height)
+void CPseudoOSD::SetPosition(int Left,int Top,int Height)
 {
-	if (Height<=0)
-		return false;
 	m_Position.Left=Left;
 	m_Position.Top=Top;
-	m_Position.Height=Height;
-	if (m_hwnd) {
-		if (m_fLayeredWindow) {
-			POINT pt;
-
-			pt.x=Left;
-			pt.y=Top;
-			::ClientToScreen(m_hwndParent,&pt);
-			::SetWindowPos(m_hwnd,nullptr,pt.x,pt.y,GetEntireWidth(m_StyleList),Height,
-						   SWP_NOZORDER | SWP_NOACTIVATE);
-		} else {
-			::SetWindowPos(m_hwnd,HWND_TOP,Left,Top,GetEntireWidth(m_StyleList),Height,0);
-		}
-	}
-	return true;
+	m_Position.Height=max(Height,0);
 }
 
 
-void CPseudoOSD::GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const
+void CPseudoOSD::GetWindowPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const
 {
 	if (pLeft)
-		*pLeft=m_Position.Left;
+		*pLeft=(int)(m_Position.Left*m_ScaleX)+m_OffsetX;
 	if (pTop)
-		*pTop=m_Position.Top;
-	if (pWidth)
-		*pWidth=GetEntireWidth(m_StyleList);
+		*pTop=(int)(m_Position.Top*m_ScaleY)+m_OffsetY;
+	if (pWidth) {
+		int x=0;
+		for (std::vector<STYLE_ELEM>::const_iterator it=m_StyleList.begin(); it!=m_StyleList.end(); x+=(it++)->Width);
+		*pWidth=(int)((m_Position.Left+x)*m_ScaleX)-(int)(m_Position.Left*m_ScaleX);
+	}
 	if (pHeight)
-		*pHeight=m_Position.Height;
+		*pHeight=(int)((m_Position.Top+m_Position.Height)*m_ScaleY)-(int)(m_Position.Top*m_ScaleY);
+}
+
+
+void CPseudoOSD::SetWindowOffset(int X,int Y)
+{
+	m_OffsetX=X;
+	m_OffsetY=Y;
+}
+
+
+void CPseudoOSD::SetWindowScale(double X,double Y)
+{
+	m_ScaleX=max(X,0.0);
+	m_ScaleY=max(Y,0.0);
 }
 
 
@@ -298,11 +299,11 @@ bool CPseudoOSD::SetOpacity(int Opacity,int BackOpacity)
 }
 
 
-void CPseudoOSD::SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate)
+void CPseudoOSD::SetStroke(int Width,int SmoothLevel,int ByDilateThreshold)
 {
 	m_StrokeWidth=Width;
 	m_StrokeSmoothLevel=SmoothLevel;
-	m_fStrokeByDilate=fStrokeByDilate;
+	m_StrokeByDilateThreshold=ByDilateThreshold;
 }
 
 
@@ -315,9 +316,9 @@ void CPseudoOSD::SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBot
 }
 
 
-void CPseudoOSD::SetVerticalAntiAliasing(bool fVertAntiAliasing)
+void CPseudoOSD::SetVerticalAntiAliasing(int Threshold)
 {
-	m_fVertAntiAliasing=fVertAntiAliasing;
+	m_VertAntiAliasingThreshold=Threshold;
 }
 
 
@@ -396,9 +397,12 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const
 		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
 		if (lenWos > 0) {
 			LOGFONT lf=it->lf;
-			lf.lfWidth*=lf.lfWidth<0?-1:1;
-			lf.lfWidth=lf.lfWidth*it->AdjustRect.right/100*MultX;
-			lf.lfHeight=lf.lfHeight*it->AdjustRect.bottom/100*MultY;
+			int lfScaledWidth=(int)(lf.lfWidth*m_ScaleX);
+			int lfScaledHeight=(int)(lf.lfHeight*m_ScaleY);
+			int adjSize=it->AdjustRect.right;
+			int adjRatio=it->AdjustRect.bottom;
+			lf.lfWidth=lfScaledWidth*(lfScaledWidth<0?-1:1)*(adjSize*adjRatio/100)/100*MultX;
+			lf.lfHeight=lfScaledHeight*adjSize/100*MultY;
 			//フォントが変化するときだけ作る
 			if (!CompareLogFont(lf,lfLast)) {
 				if (hfont) ::DeleteObject(hfont);
@@ -409,9 +413,14 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const
 				COLORREF crOld = RGB(0,0,0);
 				if (fSetColor) ::SetTextColor(hdc,it->cr);
 				HGDIOBJ hfontOld=::SelectObject(hdc,hfont);
-				int intvX=it->Width/lenWos - (it->lf.lfWidth<0?-it->lf.lfWidth:it->lf.lfWidth*2);
-				int intvY=m_Position.Height - (it->lf.lfHeight<0?-it->lf.lfHeight:it->lf.lfHeight)*it->AdjustRect.bottom/100;
-				TextOutMonospace(hdc,x+intvX/2+it->AdjustRect.left,m_Position.Height-1-intvY/2+it->AdjustRect.top,it->Text.c_str(),(int)it->Text.length(),it->Width,MultX,MultY);
+				int w=(int)((x+it->Width)*m_ScaleX)-(int)(x*m_ScaleX);
+				int h=(int)((m_Position.Height)*m_ScaleY);
+				int intvX=w/lenWos-lfScaledWidth*(lfScaledWidth<0?-1:2);
+				int intvY=h-lfScaledHeight*(lfScaledHeight<0?-1:1)*adjSize/100;
+				int adjLeft=lfScaledHeight*(lfScaledHeight<0?-1:1)*it->AdjustRect.left/72;
+				int adjTop=lfScaledHeight*(lfScaledHeight<0?-1:1)*it->AdjustRect.top/72;
+				TextOutMonospace(hdc,(int)(x*m_ScaleX)+intvX/2+adjLeft,h-1-intvY/2+adjTop,
+				                 it->Text.c_str(),(int)it->Text.length(),w,MultX,MultY);
 				::SelectObject(hdc,hfontOld);
 				if (fSetColor) ::SetTextColor(hdc,crOld);
 			}
@@ -428,8 +437,8 @@ void CPseudoOSD::DrawImageList(HDC hdc,int MultX,int MultY) const
 	std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
 	for (; it!=m_StyleList.end(); ++it) {
 		if (it->hbm) {
-			DrawUtil::DrawBitmap(hdc,(x+it->PaintRect.left)*MultX,it->PaintRect.top*MultY,
-			                     it->PaintRect.right*MultX,it->PaintRect.bottom*MultY,it->hbm);
+			DrawUtil::DrawBitmap(hdc,(int)((x+it->PaintRect.left)*m_ScaleX)*MultX,(int)(it->PaintRect.top*m_ScaleY)*MultY,
+			                     (int)(it->PaintRect.right*m_ScaleX)*MultX,(int)(it->PaintRect.bottom*m_ScaleY)*MultY,it->hbm);
 		}
 		x+=it->Width;
 	}
@@ -462,7 +471,7 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 HBITMAP CPseudoOSD::CreateBitmap()
 {
 	int Width,Height;
-	GetPosition(nullptr,nullptr,&Width,&Height);
+	GetWindowPosition(nullptr,nullptr,&Width,&Height);
 	if (Width<1 || Height<1 || !m_fLayeredWindow) return nullptr;
 
 	// ここだけbottom-upビットマップなので注意
@@ -868,8 +877,13 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	if (Width<1 || Height<1)
 		return;
 
-	int VertMult=m_fVertAntiAliasing?4:m_fStrokeByDilate?1:2;
-	int MultMono=m_fVertAntiAliasing?4:2;
+	int ObjHeight=0;
+	if (!m_StyleList.empty()) {
+		ObjHeight=m_StyleList.front().hbm?m_StyleList.front().PaintRect.bottom:m_StyleList.front().lf.lfHeight;
+		ObjHeight=(int)(ObjHeight*(ObjHeight<0?-1:1)*m_ScaleY);
+	}
+	int VertMult=ObjHeight>m_VertAntiAliasingThreshold?4:ObjHeight>m_StrokeByDilateThreshold?2:1;
+	int MultMono=ObjHeight>m_VertAntiAliasingThreshold?4:2;
 	int AllocWidth;
 	if (!AllocateWorkBitmap(Width,Height*VertMult,Height*MultMono,&AllocWidth))
 		return;
@@ -912,9 +926,10 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		DrawTextList(hdcSrc,1,VertMult,true);
 		::SetBkMode(hdcSrc,OldBkMode);
 
-		if (!m_fStrokeByDilate) {
+		if (ObjHeight>m_StrokeByDilateThreshold) {
 			// 縁取りを描画
-			HPEN hpen=(HPEN)::CreatePen(PS_SOLID,m_StrokeWidth<=0?0:(m_StrokeWidth*2*MultMono/72+2*MultMono),RGB(255,255,255));
+			int cWidth=m_StrokeWidth==0?0:(int)(m_StrokeWidth*(m_StrokeWidth<0?-m_ScaleY:1))*2*MultMono/72+2*MultMono;
+			HPEN hpen=(HPEN)::CreatePen(PS_SOLID,cWidth,RGB(255,255,255));
 			if (hpen) {
 				HPEN hpenOld=SelectPen(hdcMono,hpen);
 				HBRUSH hbr=(HBRUSH)::GetStockObject(WHITE_BRUSH);
@@ -946,16 +961,18 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 
 	// 膨張処理による縁取り
 	bool fNeedToDilate=false;
-	if (m_fStrokeByDilate) {
+	if (ObjHeight<=m_StrokeByDilateThreshold) {
 		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
 		fNeedToDilate=true;
 	} else {
 		// 膨張処理のために画像部分だけアルファチャネルに写す
-		RECT rcImage={0,rc.top,0,rc.bottom};
+		int x=0;
 		std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
 		for (; it!=m_StyleList.end(); ++it) {
-			rcImage.left=rcImage.right;
-			rcImage.right+=it->Width;
+			RECT rcImage=rc;
+			rcImage.left=(int)(x*m_ScaleX);
+			x+=it->Width;
+			rcImage.right=(int)(x*m_ScaleX);
 			if (it->hbm) {
 				LayBitmapToAlpha(m_pBits,AllocWidth,rcImage,(BYTE)(m_Opacity*255/100),m_crBackColor);
 				fNeedToDilate=true;
@@ -969,12 +986,12 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	if (m_fHLRight) rcInner.right-=2;
 	if (m_fHLBottom) rcInner.bottom-=2;
 	if (fNeedToDilate) {
-		for (int i=0; i<(m_StrokeWidth+36)/72; i++) {
+		for (int i=0; i<((int)(m_StrokeWidth*(m_StrokeWidth<0?-m_ScaleY:1))+36)/72; i++) {
 			DilateAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_Opacity*255/100));
 		}
 	}
 	SetBitmapOpacity(MultMono,(BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,(BYTE)(m_Opacity*255/100));
-	SmoothAlpha(m_pBits,AllocWidth,rcInner,m_fHideText?0:(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(m_fStrokeByDilate?1:2));
+	SmoothAlpha(m_pBits,AllocWidth,rcInner,m_fHideText?0:(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(ObjHeight>m_StrokeByDilateThreshold?2:1));
 
 	if (hdcCompose && fKeepAlpha) {
 		for (int i=0; i<Height; i++) {

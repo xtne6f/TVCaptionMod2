@@ -29,7 +29,6 @@ namespace
 const UINT WM_APP_RESET_CAPTION = WM_APP + 0;
 const UINT WM_APP_PROCESS_CAPTION = WM_APP + 1;
 const UINT WM_APP_DONE_MOVE = WM_APP + 2;
-const UINT WM_APP_DONE_SIZE = WM_APP + 3;
 const UINT WM_APP_RESET_OSDS = WM_APP + 4;
 
 const TCHAR INFO_PLUGIN_NAME[] = TEXT("TVCaptionMod2");
@@ -754,8 +753,7 @@ LRESULT CALLBACK CTVCaption2::EventCallback(UINT Event, LPARAM lParam1, LPARAM l
     case TVTest::EVENT_FULLSCREENCHANGE:
         // 全画面表示状態が変化した
         if (pThis->m_pApp->IsPluginEnabled()) {
-            // オーナーが変わるので破棄する必要がある
-            ::SendMessage(pThis->m_hwndPainting, WM_APP_RESET_OSDS, 0, 0);
+            pThis->OnFullscreenChange();
         }
         break;
     case TVTest::EVENT_CHANNELCHANGE:
@@ -888,7 +886,7 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                 for (int i = 0; i < STREAM_MAX; ++i) {
                     for (size_t j = 0; j < m_osdShowCount[i]; ++j) {
                         int left, top;
-                        m_pOsdList[i][j]->GetPosition(&left, &top, nullptr, nullptr);
+                        m_pOsdList[i][j]->GetWindowPosition(&left, &top, nullptr, nullptr);
                         m_pOsdList[i][j]->Compose(hdc, left - rcVideo.left, top - rcVideo.top);
                     }
                 }
@@ -968,7 +966,8 @@ BOOL CALLBACK CTVCaption2::WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam
         ::SetTimer(pThis->m_hwndPainting, TIMER_ID_DONE_MOVE, 500, nullptr);
         break;
     case WM_SIZE:
-        ::SendMessage(pThis->m_hwndPainting, WM_APP_DONE_SIZE, 0, 0);
+        pThis->OnSize(STREAM_CAPTION, true);
+        pThis->OnSize(STREAM_SUPERIMPOSE, true);
         ::SetTimer(pThis->m_hwndPainting, TIMER_ID_DONE_SIZE, 500, nullptr);
         break;
     }
@@ -1038,8 +1037,7 @@ void CTVCaption2::AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int char
     logFont.lfQuality        = DRAFT_QUALITY;
     logFont.lfPitchAndFamily = (faceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
     _tcscpy_s(logFont.lfFaceName, faceName);
-    RECT rc = {charHeight * rcFontAdjust.left / 72, charHeight * rcFontAdjust.top / 72, rcFontAdjust.right * rcFontAdjust.bottom / 100, rcFontAdjust.right};
-    pOsd->AddText(text, width, logFont, m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB), rc);
+    pOsd->AddText(text, width, logFont, m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB), rcFontAdjust);
 }
 
 // 利用可能なOSDを1つだけ用意する
@@ -1077,15 +1075,15 @@ CPseudoOSD &CTVCaption2::CreateOsd(STREAM_INDEX index, HWND hwndContainer, int c
                       m_backOpacity>=0 ? min(m_backOpacity,100) : style.stBackColor.ucAlpha*100/255;
     osd.SetOpacity(textOpacity, backOpacity);
 
-    int strokeWidth = m_strokeWidth < 0 ? -m_strokeWidth : m_strokeWidth;
+    int strokeWidth = m_strokeWidth;
     if (style.bORN == 1) {
         // 縁取り指定。着色対応は省略
-        strokeWidth = m_ornStrokeWidth;
+        strokeWidth = max(m_ornStrokeWidth, 0) * (strokeWidth < 0 ? -1 : 1);
     }
-    osd.SetStroke(m_strokeWidth > 0 ? strokeWidth * 72 : strokeWidth > 0 ? max(strokeWidth * (nomalHeight + charHeight) / 2, 1) : 0,
-                  m_strokeSmoothLevel, charHeight<=m_strokeByDilate ? true : false);
+    osd.SetStroke(strokeWidth < 0 ? min(strokeWidth * (nomalHeight + charHeight) / 2, -1) : strokeWidth * 72,
+                  m_strokeSmoothLevel, m_strokeByDilate);
     osd.SetHighlightingBlock((style.bHLC&0x80)!=0, (style.bHLC&0x40)!=0, (style.bHLC&0x20)!=0, (style.bHLC&0x10) || style.bUnderLine);
-    osd.SetVerticalAntiAliasing(charHeight<=m_vertAntiAliasing ? false : true);
+    osd.SetVerticalAntiAliasing(m_vertAntiAliasing);
     osd.SetFlashingInterval(style.bFlushMode==1 ? FLASHING_INTERVAL : style.bFlushMode==2 ? -FLASHING_INTERVAL : 0);
     osd.Create(hwndContainer, m_paintingMethod==2 || m_paintingMethod==3);
     return osd;
@@ -1164,31 +1162,21 @@ void CTVCaption2::DryrunCaptionData(const CAPTION_DATA_DLL &caption, SHIFT_SMALL
 }
 
 
-// 字幕本文を1行だけ処理する
-void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
-                                  SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo)
+void CTVCaption2::SetOsdWindowOffsetAndScale(CPseudoOSD *pOsd, const RECT &rcVideo) const
 {
-#ifdef DDEBUG_OUT
-    DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): "));
-    for (DWORD i = 0; i < caption.dwListCount; ++i) {
-        DEBUG_OUT(static_cast<LPCTSTR>(caption.pstCharList[i].pszDecode));
-    }
-    DEBUG_OUT(TEXT("\n"));
-#endif
-
     // 字幕プレーンから描画ウィンドウへの変換係数を計算
     double scaleX = (double)(rcVideo.right - rcVideo.left);
     double scaleY = (double)(rcVideo.bottom - rcVideo.top);
     int offsetX = rcVideo.left;
     int offsetY = rcVideo.top;
     bool shrinkScale = false;
-    if (caption.wSWFMode==14) {
+    if (pOsd->GetSWFMode() == 14) {
         // Cプロファイル
         scaleX /= 320+20/2;
         scaleY /= 180;
         offsetY += (int)((180-24*3)*scaleY);
     }
-    else if (caption.wSWFMode==9 || caption.wSWFMode==10) {
+    else if (pOsd->GetSWFMode() == 9 || pOsd->GetSWFMode() == 10) {
         scaleX /= 720;
         scaleY /= 480;
         shrinkScale = m_fShrinkSDScale;
@@ -1209,6 +1197,22 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     }
     offsetX += (rcVideo.right - rcVideo.left) * min(max(m_adjustViewX, -99), 99) / 100;
     offsetY += (rcVideo.bottom - rcVideo.top) * min(max(m_adjustViewY, -99), 99) / 100;
+    pOsd->SetWindowOffset(offsetX, offsetY);
+    pOsd->SetWindowScale(scaleX, scaleY);
+}
+
+
+// 字幕本文を1行だけ処理する
+void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
+                                  SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo)
+{
+#ifdef DDEBUG_OUT
+    DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): "));
+    for (DWORD i = 0; i < caption.dwListCount; ++i) {
+        DEBUG_OUT(static_cast<LPCTSTR>(caption.pstCharList[i].pszDecode));
+    }
+    DEBUG_OUT(TEXT("\n"));
+#endif
 
     bool fDoneAntiPadding = false;
     int posX = caption.wPosX;
@@ -1239,10 +1243,6 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         const CAPTION_CHAR_DATA_DLL &charData = caption.pstCharList[i];
         int charW, charH, dirW, dirH;
         GetCharSize(&charW, &charH, &dirW, &dirH, charData);
-        int charScaleW = (int)(charW * scaleX);
-        int charScaleH = (int)(charH * scaleY);
-        int charNormalScaleW = (int)(charData.wCharW * scaleX);
-        int charNormalScaleH = (int)(charData.wCharH * scaleY);
         // 両端の余白幅は文字高さを基準にきめる
         int paddingW = (charData.wCharH * m_paddingWidth + 71) / 72;
 
@@ -1354,13 +1354,11 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         // 文字列を描画
         int lenWos = StrlenWoLoSurrogate(pszShow);
         if (pOsdCarry) {
-            AddOsdText(pOsdCarry, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
-                       charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+            AddOsdText(pOsdCarry, pszShow, dirW * lenWos, charW, charH, m_rcAdjust, m_szFaceName, charData);
             posX += dirW * lenWos;
             if (!fDrawSymbol && !fSameStyle) {
                 if (paddingW > 0) {
-                    AddOsdText(pOsdCarry, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
-                               charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+                    AddOsdText(pOsdCarry, TEXT(""), paddingW, charW, charH, m_rcAdjust, m_szFaceName, charData);
                     posX += paddingW;
                 }
                 if (m_paintingMethod != 3) pOsdCarry->PrepareWindow();
@@ -1373,24 +1371,22 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     posX -= paddingW;
                     fDoneAntiPadding = true;
                 }
-                CPseudoOSD &osd = CreateOsd(index, hwndContainer, charScaleH, charNormalScaleH, charData);
-                osd.SetPosition((int)(posX*scaleX) + offsetX, (int)((posY-dirH+1)*scaleY) + offsetY,
-                                (int)((posY+1)*scaleY) - (int)((posY-dirH+1)*scaleY));
+                CPseudoOSD &osd = CreateOsd(index, hwndContainer, charH, charData.wCharH, charData);
+                osd.SetSWFMode(caption.wSWFMode);
+                SetOsdWindowOffsetAndScale(&osd, rcVideo);
+                osd.SetPosition(posX, posY - dirH + 1, dirH);
                 if (paddingW > 0) {
-                    AddOsdText(&osd, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
-                               charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+                    AddOsdText(&osd, TEXT(""), paddingW, charW, charH, m_rcAdjust, m_szFaceName, charData);
                     posX += paddingW;
                 }
-                AddOsdText(&osd, pszShow, (int)((posX+dirW*lenWos)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+                AddOsdText(&osd, pszShow, dirW * lenWos, charW, charH, m_rcAdjust, m_szFaceName, charData);
                 posX += dirW * lenWos;
                 if (fDrawSymbol || fSameStyle) {
                     pOsdCarry = &osd;
                 }
                 else {
                     if (paddingW > 0) {
-                        AddOsdText(&osd, TEXT(""), (int)((posX+paddingW)*scaleX) - (int)(posX*scaleX),
-                                   charScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+                        AddOsdText(&osd, TEXT(""), paddingW, charW, charH, m_rcAdjust, m_szFaceName, charData);
                         posX += paddingW;
                     }
                     if (m_paintingMethod != 3) osd.PrepareWindow();
@@ -1439,8 +1435,8 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 if (hbm) {
                     ::SetDIBits(nullptr, hbm, 0, bmi.bmiHeader.biHeight, pDrcs->pbBitmap, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
                     RECT rc;
-                    ::SetRect(&rc, (int)((dirW-charW)/2*scaleX), (int)((dirH-charH)/2*scaleY), charScaleW, charScaleH);
-                    pOsdCarry->AddImage(hbm, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX), RGB(charC.ucR, charC.ucG, charC.ucB), rc);
+                    ::SetRect(&rc, (dirW - charW) / 2, (dirH - charH) / 2, charW, charH);
+                    pOsdCarry->AddImage(hbm, dirW, RGB(charC.ucR, charC.ucG, charC.ucB), rc);
                     posX += dirW;
                 }
             }
@@ -1450,8 +1446,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             lenWos = StrlenWoLoSurrogate(pszDrcsStr);
             if (pOsdCarry && lenWos > 0) {
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
-                AddOsdText(pOsdCarry, pszDrcsStr, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW / lenWos + 1, charScaleH,
+                AddOsdText(pOsdCarry, pszDrcsStr, dirW, charW / lenWos + 1, charH,
                            m_szGaijiFaceName[0] ? m_rcGaijiAdjust : m_rcAdjust,
                            m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
@@ -1460,16 +1455,14 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         else if (szGaiji[0]) {
             // 外字を描画
             if (pOsdCarry) {
-                AddOsdText(pOsdCarry, szGaiji, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           charScaleW, charScaleH, m_rcGaijiAdjust, m_szGaijiFaceName, charData);
+                AddOsdText(pOsdCarry, szGaiji, dirW, charW, charH, m_rcGaijiAdjust, m_szGaijiFaceName, charData);
                 posX += dirW;
             }
         }
         else if (szHalf[0]) {
             // 半角文字を描画
             if (pOsdCarry) {
-                AddOsdText(pOsdCarry, szHalf, (int)((posX+dirW)*scaleX) - (int)(posX*scaleX),
-                           -charNormalScaleW, charScaleH, m_rcAdjust, m_szFaceName, charData);
+                AddOsdText(pOsdCarry, szHalf, dirW, -charData.wCharW, charH, m_rcAdjust, m_szFaceName, charData);
                 posX += dirW;
             }
         }
@@ -1510,7 +1503,8 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             return 0;
         case TIMER_ID_DONE_SIZE:
             ::KillTimer(hwnd, TIMER_ID_DONE_SIZE);
-            ::SendMessage(hwnd, WM_APP_DONE_SIZE, 0, 0);
+            pThis->OnSize(STREAM_CAPTION);
+            pThis->OnSize(STREAM_SUPERIMPOSE);
             return 0;
         case TIMER_ID_FLASHING_TEXTURE:
             {
@@ -1552,16 +1546,12 @@ LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wPara
             }
         }
         return 0;
-    case WM_APP_DONE_SIZE:
-        pThis->OnSize(STREAM_CAPTION);
-        pThis->OnSize(STREAM_SUPERIMPOSE);
-        return 0;
     case WM_APP_RESET_OSDS:
         DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): WM_APP_RESET_OSDS\n"));
         pThis->DestroyOsds();
         pThis->m_hwndContainer = pThis->FindVideoContainer();
         if (pThis->m_hwndContainer) {
-            for (size_t i = 0; i < OSD_PRE_CREATE_NUM; ++i) {
+            while (pThis->m_pOsdList[STREAM_CAPTION].size() < OSD_PRE_CREATE_NUM) {
                 pThis->m_pOsdList[STREAM_CAPTION].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
                 pThis->m_pOsdList[STREAM_CAPTION].back()->Create(pThis->m_hwndContainer, pThis->m_paintingMethod==2 || pThis->m_paintingMethod==3);
             }
@@ -1670,7 +1660,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
             HBITMAP hbm = m_pOsdList[index][m_osdShowCount[index]]->CreateBitmap();
             if (hbm) {
                 int left, top;
-                m_pOsdList[index][m_osdShowCount[index]]->GetPosition(&left, &top, nullptr, nullptr);
+                m_pOsdList[index][m_osdShowCount[index]]->GetWindowPosition(&left, &top, nullptr, nullptr);
                 RECT rcVideo;
                 if (GetVideoSurfaceRect(m_hwndContainer, &rcVideo)) {
                     // 疑似OSD系から逆変換
@@ -1700,25 +1690,85 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
 }
 
 
-void CTVCaption2::OnSize(STREAM_INDEX index)
+void CTVCaption2::OnSize(STREAM_INDEX index, bool fFast)
 {
-    if (m_paintingMethod != 3 && m_osdShowCount[index] > 0) {
-        RECT rc;
-        if (GetVideoContainerLayout(m_hwndContainer, &rc)) {
-            // とりあえずはみ出ないようにする
+    RECT rcVideo, rcExVideo;
+    if (m_osdShowCount[index] > 0 && GetVideoSurfaceRect(m_hwndContainer, &rcVideo, &rcExVideo)) {
+        if (fFast && m_paintingMethod != 3) {
+            // はみ出るまで何もしない
             for (size_t i = 0; i < m_osdShowCount[index]; ++i) {
                 int left, top, width, height;
-                m_pOsdList[index][i]->GetPosition(&left, &top, &width, &height);
-                int adjLeft = left+width>=rc.right ? rc.right-width : left;
-                int adjTop = top+height>=rc.bottom ? rc.bottom-height : top;
-                if (adjLeft < 0 || adjTop < 0) {
-                    m_pOsdList[index][i]->Hide();
-                }
-                else if (left != adjLeft || top != adjTop) {
-                    m_pOsdList[index][i]->SetPosition(adjLeft, adjTop, height);
+                m_pOsdList[index][i]->GetWindowPosition(&left, &top, &width, &height);
+                if (left + width > rcVideo.right || top + height > rcVideo.bottom) {
+                    fFast = false;
+                    break;
                 }
             }
         }
+        if (fFast) {
+            return;
+        }
+
+        // 再描画
+        bool fTextureModified = false;
+        if (m_paintingMethod == 3) {
+            bool fDeleted;
+            fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_NORMAL);
+            fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_FLASHING) || fDeleted;
+            fDeleted = m_osdCompositor.DeleteTexture(0, index + TXGROUP_IFLASHING) || fDeleted;
+            if (fDeleted) {
+                fTextureModified = true;
+            }
+        }
+        for (size_t i = 0; i < m_osdShowCount[index]; ++i) {
+            SetOsdWindowOffsetAndScale(m_pOsdList[index][i].get(), rcExVideo);
+            if (m_paintingMethod == 3) {
+                HBITMAP hbm = m_pOsdList[index][i]->CreateBitmap();
+                if (hbm) {
+                    int left, top;
+                    m_pOsdList[index][i]->GetWindowPosition(&left, &top, nullptr, nullptr);
+                    // 疑似OSD系から逆変換
+                    left -= rcVideo.left;
+                    top -= rcVideo.top;
+                    int intv = m_pOsdList[index][i]->GetFlashingInterval();
+                    int group = intv > 0 ? TXGROUP_FLASHING : intv < 0 ? TXGROUP_IFLASHING : TXGROUP_NORMAL;
+                    if (m_osdCompositor.AddTexture(hbm, left, top, group!=TXGROUP_IFLASHING, index + group) != 0) {
+                        fTextureModified = true;
+                    }
+                    ::DeleteObject(hbm);
+                }
+            }
+            else {
+                m_pOsdList[index][i]->Show();
+            }
+        }
+        if (fTextureModified) {
+            m_osdCompositor.UpdateSurface();
+        }
+    }
+}
+
+
+void CTVCaption2::OnFullscreenChange()
+{
+    // OSDを破棄または再生成する
+    m_hwndContainer = FindVideoContainer();
+    if (m_hwndContainer) {
+        for (int index = 0; index < STREAM_MAX; ++index) {
+            m_pOsdList[index].resize(m_osdShowCount[index] + m_osdPrepareCount[index]);
+            for (size_t i = 0; i < m_pOsdList[index].size(); ++i) {
+                m_pOsdList[index][i]->Create(m_hwndContainer, m_paintingMethod==2 || m_paintingMethod==3, true);
+            }
+        }
+        while (m_pOsdList[STREAM_CAPTION].size() < OSD_PRE_CREATE_NUM) {
+            m_pOsdList[STREAM_CAPTION].push_back(std::unique_ptr<CPseudoOSD>(new CPseudoOSD));
+            m_pOsdList[STREAM_CAPTION].back()->Create(m_hwndContainer, m_paintingMethod==2 || m_paintingMethod==3);
+        }
+        m_osdCompositor.SetContainerWindow(m_hwndContainer);
+        ::SetTimer(m_hwndPainting, TIMER_ID_DONE_SIZE, 500, nullptr);
+    }
+    else {
+        DestroyOsds();
     }
 }
 

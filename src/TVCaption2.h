@@ -67,11 +67,13 @@ private:
                     const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style) const;
     CPseudoOSD &CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
     void DryrunCaptionData(const CAPTION_DATA_DLL &caption, SHIFT_SMALL_STATE &ssState);
+    void SetOsdWindowOffsetAndScale(CPseudoOSD *pOsd, const RECT &rcVideo) const;
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
                          SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest = nullptr);
-    void OnSize(STREAM_INDEX index);
+    void OnSize(STREAM_INDEX index, bool fFast = false);
+    void OnFullscreenChange();
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
     void ProcessPacket(BYTE *pPacket);
     bool PluginSettings(HWND hwndOwner);

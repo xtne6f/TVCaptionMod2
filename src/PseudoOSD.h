@@ -23,15 +23,20 @@ class CPseudoOSD
 	struct {
 		int Left,Top,Height;
 	} m_Position;
+	int m_OffsetX;
+	int m_OffsetY;
+	double m_ScaleX;
+	double m_ScaleY;
+	WORD m_wSWFMode;
 	UINT_PTR m_TimerID;
 	int m_FlashingInterval;
 	int m_Opacity;
 	int m_BackOpacity;
 	int m_StrokeWidth;
 	int m_StrokeSmoothLevel;
-	bool m_fStrokeByDilate;
+	int m_StrokeByDilateThreshold;
 	bool m_fHLLeft,m_fHLTop,m_fHLRight,m_fHLBottom;
-	bool m_fVertAntiAliasing;
+	int m_VertAntiAliasingThreshold;
 	bool m_fHideText;
 	bool m_fWindowPrepared;
 	bool m_fLayeredWindow;
@@ -39,7 +44,6 @@ class CPseudoOSD
 	HWND m_hwndOwner;
 	POINT m_ParentPosition;
 
-	static int GetEntireWidth(const std::vector<STYLE_ELEM> &List);
 	void DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const;
 	void DrawImageList(HDC hdc,int MultX,int MultY) const;
 	void Draw(HDC hdc,const RECT &PaintRect) const;
@@ -62,22 +66,26 @@ public:
 
 	CPseudoOSD();
 	~CPseudoOSD();
-	bool Create(HWND hwndParent,bool fLayeredWindow=false);
+	bool Create(HWND hwndParent,bool fLayeredWindow,bool fRenewWindow=false);
 	bool Destroy();
 	bool PrepareWindow();
 	bool Show();
 	bool Hide();
 	bool IsVisible() const;
 	void ClearText();
-	bool AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect);
-	bool AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect);
-	bool SetPosition(int Left,int Top,int Height);
-	void GetPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
+	void AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect);
+	void AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect);
+	void SetPosition(int Left,int Top,int Height);
+	void GetWindowPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
+	void SetWindowOffset(int X,int Y);
+	void SetWindowScale(double X,double Y);
+	void SetSWFMode(WORD wMode) { m_wSWFMode=wMode; }
+	WORD GetSWFMode() const { return m_wSWFMode; }
 	void SetBackgroundColor(COLORREF crBack);
 	bool SetOpacity(int Opacity,int BackOpacity=50);
-	void SetStroke(int Width,int SmoothLevel,bool fStrokeByDilate);
+	void SetStroke(int Width,int SmoothLevel,int ByDilateThreshold);
 	void SetHighlightingBlock(bool fLeft,bool fTop,bool fRight,bool fBottom);
-	void SetVerticalAntiAliasing(bool fVertAntiAliasing);
+	void SetVerticalAntiAliasing(int Threshold);
 	void SetFlashingInterval(int Interval);
 	int GetFlashingInterval() { return m_FlashingInterval; }
 	void OnParentMove();
