@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.6
+﻿TVTest TVCaptionMod2 Plugin ver.2.7
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -9,7 +9,7 @@ odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベー�
 ■動作環境
 ・Vista以降
 ・TVTest/TVH264 ver.0.7.6(たぶん) 以降
-・必要ランタイム: Visual Studio 2015、2017、および 2019 用 Visual C++ 再頒布可能パッケージ
+・必要ランタイム: 2015-2022 Visual C++ 再頒布可能パッケージ
   ・ビルド環境: Visual Studio Express 2017 for Windows Desktop
 
 ■以前のバージョンからの移行
