@@ -186,6 +186,7 @@
     </ClCompile>
     <ClCompile Include="TVCaption2.cpp" />
     <ClCompile Include="Util.cpp" />
+    <ClCompile Include="ViewerClockEstimator.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Caption.h" />
@@ -197,6 +198,7 @@
     <ClInclude Include="TVCaption2.h" />
     <ClInclude Include="TVTestPlugin.h" />
     <ClInclude Include="Util.h" />
+    <ClInclude Include="ViewerClockEstimator.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="TVCaption2.rc" />

@@ -29,7 +29,7 @@ void AddToComboBoxList(HWND hDlg, int id, const LPCTSTR *pList);
 void AddFaceNameToComboBoxList(HWND hDlg, int id);
 inline bool Is1SegPmtPid(int pid) { return 0x1FC8 <= pid && pid <= 0x1FCF; }
 
-static const DWORD PCR_PER_MSEC = 45;
+static const DWORD PCR_45KHZ_PER_MSEC = 45;
 
 #define H_262_VIDEO         0x02
 #define PES_PRIVATE_DATA    0x06

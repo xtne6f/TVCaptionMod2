@@ -6,6 +6,7 @@
 #include <utility>
 #include <algorithm>
 #include "Util.h"
+#include "ViewerClockEstimator.h"
 #include "PseudoOSD.h"
 #include "Caption.h"
 #include "CaptionManager.h"
@@ -105,7 +106,6 @@ CTVCaption2::CTVCaption2()
     , m_fNeedtoShow(false)
     , m_fFlashingFlipFlop(false)
     , m_fProfileC(false)
-    , m_pcr(0)
     , m_procCapTick(0)
     , m_fResetPat(false)
     , m_videoPid(-1)
@@ -486,6 +486,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
 
                 // コールバックの登録
                 m_pApp->SetStreamCallback(0, StreamCallback, this);
+                m_pApp->SetVideoStreamCallback(VideoStreamCallback, this);
                 m_pApp->SetWindowMessageCallback(WindowMsgCallback, this);
 
                 m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_LANG, 0);
@@ -499,6 +500,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
     else {
         // コールバックの登録解除
         m_pApp->SetWindowMessageCallback(nullptr, nullptr);
+        m_pApp->SetVideoStreamCallback(nullptr);
         m_pApp->SetStreamCallback(TVTest::STREAM_CALLBACK_REMOVE, StreamCallback);
 
         // 字幕描画ウィンドウの破棄
@@ -523,6 +525,7 @@ void CTVCaption2::LoadSettings()
 {
     std::vector<TCHAR> vbuf = GetPrivateProfileSectionBuffer(TEXT("Settings"), m_iniPath.c_str());
     TCHAR val[SETTING_VALUE_MAX];
+    m_viewerClockEstimator.SetEnabled(GetBufferedProfileInt(vbuf.data(), TEXT("EstimateViewerDelay"), 1) != 0);
     GetBufferedProfileString(vbuf.data(), TEXT("CaptureFolder"), TEXT(""), val, _countof(val));
     m_captureFolder = val;
     GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileName"), TEXT("Capture"), val, _countof(val));
@@ -585,6 +588,7 @@ void CTVCaption2::SaveSettings() const
 {
     TCHAR section[32] = TEXT("Settings");
     WritePrivateProfileInt(section, TEXT("Version"), INFO_VERSION, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("EstimateViewerDelay"), m_viewerClockEstimator.GetEnabled(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureFolder"), m_captureFolder.c_str(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureFileName"), m_captureFileName.c_str(), m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("SettingsIndex"), m_settingsIndex, m_iniPath.c_str());
@@ -1474,8 +1478,6 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
 }
 
 
-#define MSB(x) ((x) & 0x80000000)
-
 // 字幕描画のウィンドウプロシージャ
 LRESULT CALLBACK CTVCaption2::PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -1571,18 +1573,19 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
         lock_recursive_mutex lock(m_streamLock);
         if (pCaptionManager->IsEmpty()) {
             // 次の字幕文を取得する
-            pCaptionManager->Analyze(m_pcr);
+            pCaptionManager->Analyze(static_cast<DWORD>(m_viewerClockEstimator.GetStreamPcr() >> 1));
             if (pCaptionManager->IsEmpty()) {
                 return;
             }
             // 字幕か文字スーパーのどちらかが取得できた
         }
         index = pCaptionManager->IsSuperimpose() ? STREAM_SUPERIMPOSE : STREAM_CAPTION;
+        pcr = static_cast<DWORD>(m_viewerClockEstimator.GetViewerPcr() >> 1) + 450 * PCR_45KHZ_PER_MSEC;
         if (m_delayTime[index] < 0) {
-            pcr = m_pcr + static_cast<DWORD>(-max(m_delayTime[index],-5000) * PCR_PER_MSEC);
+            pcr += static_cast<DWORD>(-max(m_delayTime[index], -5000) * PCR_45KHZ_PER_MSEC);
         }
         else {
-            pcr = m_pcr - static_cast<DWORD>(min(m_delayTime[index],5000) * PCR_PER_MSEC);
+            pcr -= static_cast<DWORD>(min(m_delayTime[index], 5000) * PCR_45KHZ_PER_MSEC);
         }
     }
 
@@ -1781,6 +1784,15 @@ BOOL CALLBACK CTVCaption2::StreamCallback(BYTE *pData, void *pClientData)
 }
 
 
+// 映像ストリームのコールバック(別スレッド)
+LRESULT CALLBACK CTVCaption2::VideoStreamCallback(DWORD Format, const void *pData, SIZE_T Size, void *pClientData)
+{
+    static_cast<void>(Format);
+    static_cast<CTVCaption2*>(pClientData)->m_viewerClockEstimator.SetVideoStream(true, static_cast<const BYTE*>(pData), Size);
+    return 0;
+}
+
+
 namespace
 {
 void GetPidsFromVideoPmt(int *pPmtPid, int *pPcrPid, int *pCaption1Pid, int *pCaption2Pid, int videoPid, const PAT *pPat)
@@ -1849,11 +1861,12 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
                 DWORD pcr = (DWORD)adapt.pcr_45khz;
 
                 // PCRの連続性チェック
-                if (MSB(pcr - m_pcr) || pcr - m_pcr >= 1000 * PCR_PER_MSEC) {
+                if (pcr - static_cast<DWORD>(m_viewerClockEstimator.GetStreamPcr() >> 1) >= 1000 * PCR_45KHZ_PER_MSEC) {
                     DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): Discontinuous packet!\n"));
                     ::SendNotifyMessage(m_hwndPainting, WM_APP_RESET_CAPTION, 0, 0);
+                    m_viewerClockEstimator.Reset();
                 }
-                m_pcr = pcr;
+                m_viewerClockEstimator.SetStreamPcr(static_cast<LONGLONG>(pcr) << 1);
 
                 // ある程度呼び出し頻度を抑える(感覚的に遅延を感じなければOK)
                 DWORD tick = ::GetTickCount();
@@ -1865,12 +1878,9 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
         }
     }
 
-    // 字幕か文字スーパーとPCRのPIDを取得
-    if ((header.adaptation_field_control&1)/*1,3*/ &&
-        !header.transport_scrambling_control &&
-        !header.transport_error_indicator)
-    {
-        LPCBYTE pPayload = pPacket + 4;
+    LPCBYTE pPayload = pPacket + 188;
+    if (header.adaptation_field_control & 1) {
+        pPayload = pPacket + 4;
         if (header.adaptation_field_control == 3) {
             // アダプテーションに続けてペイロードがある
             ADAPTATION_FIELD adapt;
@@ -1878,8 +1888,14 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
             if (adapt.adaptation_field_length < 0) return;
             pPayload += adapt.adaptation_field_length + 1;
         }
-        int payloadSize = 188 - static_cast<int>(pPayload - pPacket);
+    }
+    int payloadSize = 188 - static_cast<int>(pPayload - pPacket);
 
+    // 字幕か文字スーパーとPCRのPIDを取得
+    if ((header.adaptation_field_control&1)/*1,3*/ &&
+        !header.transport_scrambling_control &&
+        !header.transport_error_indicator)
+    {
         // PAT監視
         int pmtPid;
         if (header.pid == 0) {
@@ -1919,6 +1935,12 @@ void CTVCaption2::ProcessPacket(BYTE *pPacket)
             lock_recursive_mutex lock(m_streamLock);
             m_caption2Manager.AddPacket(pPacket);
         }
+    }
+
+    if (!header.transport_scrambling_control &&
+        header.pid == m_videoPid)
+    {
+        m_viewerClockEstimator.SetVideoPes(false, !!header.payload_unit_start_indicator, pPayload, payloadSize);
     }
 }
 
@@ -1972,6 +1994,8 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
 
     ::CheckDlgButton(hDlg, IDC_CHECK_OSD,
         ::GetPrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"), 0, m_iniPath.c_str()) != 0 ? BST_CHECKED : BST_UNCHECKED);
+
+    ::CheckDlgButton(hDlg, IDC_CHECK_ESTIMATE_VIEWER_DELAY, m_viewerClockEstimator.GetEnabled() ? BST_CHECKED : BST_UNCHECKED);
 
     ::SetDlgItemText(hDlg, IDC_EDIT_CAPFOLDER, m_captureFolder.c_str());
     ::SendDlgItemMessage(hDlg, IDC_EDIT_CAPFOLDER, EM_LIMITTEXT, MAX_PATH - 1, 0);
@@ -2099,6 +2123,10 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
         case IDC_CHECK_OSD:
             WritePrivateProfileInt(TEXT("Settings"), TEXT("EnOsdCompositor"),
                 ::IsDlgButtonChecked(hDlg, IDC_CHECK_OSD) != BST_UNCHECKED, m_iniPath.c_str());
+            break;
+        case IDC_CHECK_ESTIMATE_VIEWER_DELAY:
+            m_viewerClockEstimator.SetEnabled(::IsDlgButtonChecked(hDlg, IDC_CHECK_ESTIMATE_VIEWER_DELAY) != BST_UNCHECKED);
+            fSave = true;
             break;
         case IDC_EDIT_CAPFOLDER:
             if (HIWORD(wParam) == EN_CHANGE) {

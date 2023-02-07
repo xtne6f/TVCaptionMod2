@@ -59,3 +59,4 @@
 #define IDC_COMBO_AVOID_HALF                    1038
 #define IDC_CHECK_SHIFT_SMALL                   1039
 #define IDC_CHECK_CUST_ROMSOUND                 1040
+#define IDC_CHECK_ESTIMATE_VIEWER_DELAY         1041

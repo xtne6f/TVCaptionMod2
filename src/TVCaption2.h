@@ -75,6 +75,7 @@ private:
     void OnSize(STREAM_INDEX index, bool fFast = false);
     void OnFullscreenChange();
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
+    static LRESULT CALLBACK VideoStreamCallback(DWORD Format, const void *pData, SIZE_T Size, void *pClientData);
     void ProcessPacket(BYTE *pPacket);
     bool PluginSettings(HWND hwndOwner);
     static INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -139,7 +140,6 @@ private:
 
     // ストリーム解析
     recursive_mutex_ m_streamLock;
-    DWORD m_pcr;
     DWORD m_procCapTick;
     bool m_fResetPat;
     PAT m_pat;
@@ -150,6 +150,9 @@ private:
 
     // レンダラで合成する(疑似でない)OSD
     COsdCompositor m_osdCompositor;
+
+    // ビューアPCRの推定用
+    CViewerClockEstimator m_viewerClockEstimator;
 };
 
 #endif // INCLUDE_TV_CAPTION2_H

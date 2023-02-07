@@ -72,9 +72,7 @@ void CCaptionManager::Analyze(DWORD currentPcr)
     m_drcsCount = 0;
 
     // "字幕管理データを3分以上未受信の場合は選局時の初期化動作を行う"
-    if (m_fEnLastTagInfoPcr &&
-        (MSB(currentPcr - m_lastTagInfoPcr) || currentPcr - m_lastTagInfoPcr >= 180000 * PCR_PER_MSEC))
-    {
+    if (m_fEnLastTagInfoPcr && currentPcr - m_lastTagInfoPcr >= 180000 * PCR_45KHZ_PER_MSEC) {
         DEBUG_OUT(TEXT(__FUNCTION__) TEXT("(): Clear\n"));
         Clear();
     }
@@ -171,8 +169,8 @@ const CAPTION_DATA_DLL *CCaptionManager::GetCaption(DWORD currentPcr, bool fIgno
     if (index < m_capCount) {
         const CAPTION_DATA_DLL *pCaption = &m_pCapList[index];
         // 文字スーパーは非同期PESなので字幕文取得時のPCRが表示タイミングの基準になる
-        if ((m_fSuperimpose || fIgnorePts) && MSB(m_pcr + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr) ||
-            !m_fSuperimpose && !fIgnorePts && MSB(m_pts + pCaption->dwWaitTime * PCR_PER_MSEC - currentPcr))
+        if ((m_fSuperimpose || fIgnorePts) && MSB(m_pcr + pCaption->dwWaitTime * PCR_45KHZ_PER_MSEC - currentPcr) ||
+            !m_fSuperimpose && !fIgnorePts && MSB(m_pts + pCaption->dwWaitTime * PCR_45KHZ_PER_MSEC - currentPcr))
         {
             return pCaption;
         }
