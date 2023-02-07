@@ -43,6 +43,7 @@ class CPseudoOSD
 	HWND m_hwndParent;
 	HWND m_hwndOwner;
 	POINT m_ParentPosition;
+	bool m_fHide;
 
 	void DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const;
 	void DrawImageList(HDC hdc,int MultX,int MultY) const;
@@ -89,6 +90,7 @@ public:
 	void SetFlashingInterval(int Interval);
 	int GetFlashingInterval() { return m_FlashingInterval; }
 	void OnParentMove();
+	void OnParentSize();
 	HBITMAP CreateBitmap();
 	void Compose(HDC hdc,int Left,int Top);
 private:

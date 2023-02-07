@@ -1695,6 +1695,10 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
 
 void CTVCaption2::OnSize(STREAM_INDEX index, bool fFast)
 {
+    for (size_t i = 0; i < m_pOsdList[index].size(); ++i) {
+        m_pOsdList[index][i]->OnParentSize();
+    }
+
     RECT rcVideo, rcExVideo;
     if (m_osdShowCount[index] > 0 && GetVideoSurfaceRect(m_hwndContainer, &rcVideo, &rcExVideo)) {
         if (fFast && m_paintingMethod != 3) {

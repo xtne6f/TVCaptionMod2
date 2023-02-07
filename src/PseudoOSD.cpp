@@ -70,6 +70,7 @@ CPseudoOSD::CPseudoOSD()
 	, m_fLayeredWindow(false)
 	, m_hwndParent(nullptr)
 	, m_hwndOwner(nullptr)
+	, m_fHide(true)
 {
 	m_Position.Left=0;
 	m_Position.Top=0;
@@ -100,6 +101,8 @@ bool CPseudoOSD::Create(HWND hwndParent,bool fLayeredWindow,bool fRenewWindow)
 	}
 	m_fLayeredWindow=fLayeredWindow;
 	m_hwndParent=hwndParent;
+	m_fHide=true;
+
 	int x,y,w,h;
 	GetWindowPosition(&x,&y,&w,&h);
 	if (fLayeredWindow) {
@@ -177,6 +180,7 @@ bool CPseudoOSD::Show()
 		// 実際には親子関係じゃないので自力で可視になるか判断する必要がある
 		if (::IsWindowVisible(m_hwndParent)) {
 			::ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
+			m_fHide=false;
 		}
 		::UpdateWindow(m_hwnd);
 
@@ -190,6 +194,7 @@ bool CPseudoOSD::Show()
 		::RedrawWindow(m_hwnd,nullptr,nullptr,RDW_INVALIDATE | RDW_UPDATENOW);
 	} else {
 		::ShowWindow(m_hwnd,SW_SHOW);
+		m_fHide=false;
 		::BringWindowToTop(m_hwnd);
 		::UpdateWindow(m_hwnd);
 	}
@@ -202,6 +207,7 @@ bool CPseudoOSD::Hide()
 	if (!m_hwnd)
 		return false;
 	::ShowWindow(m_hwnd,SW_HIDE);
+	m_fHide=true;
 	ClearText();
 	if (m_TimerID&TIMER_ID_FLASHING) {
 		::KillTimer(m_hwnd,TIMER_ID_FLASHING);
@@ -343,6 +349,15 @@ void CPseudoOSD::OnParentMove()
 					   SWP_NOZORDER | SWP_NOACTIVATE);
 		m_ParentPosition.x=rcParent.left;
 		m_ParentPosition.y=rcParent.top;
+	}
+}
+
+
+void CPseudoOSD::OnParentSize()
+{
+	// オーナーの最小化解除につられて復活することがあるため
+	if (m_hwnd && m_fHide && ::IsWindowVisible(m_hwnd)) {
+		::ShowWindow(m_hwnd, SW_HIDE);
 	}
 }
 
