@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.7
+﻿TVTest TVCaptionMod2 Plugin ver.2.8
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -73,6 +73,10 @@ EnOsdCompositor
 Version*
     設定ファイルのバージョン
     # デフォルト値を出力するために使います。特にユーザがいじる必要はありません。
+EstimateViewerDelay
+    表示遅延の精度を高める[=1]かどうか
+    # TVTestのバッファリングなどの影響で字幕の表示がずれるのを抑制できます。
+    # 遅延時間を450ミリ秒と指定したとき適切な遅れになるよう調整しています。
 CaptureFolder
     キー割り当て「字幕付き画像の保存」の保存先フォルダを絶対パスで指定
     # たとえば[=C:\CapFolder]とすると、そのフォルダに画像を保存します。
