@@ -1207,7 +1207,8 @@ void CTVCaption2::SetOsdWindowOffsetAndScale(CPseudoOSD *pOsd, const RECT &rcVid
 
 
 // 字幕本文を1行だけ処理する
-void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
+void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, bool fLangCodeJpn,
+                                  const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
                                   SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo)
 {
 #ifdef DDEBUG_OUT
@@ -1256,7 +1257,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
         ssState.fSmall = ssState.fSmall && dirH == ssState.dirH && m_fShiftSmall && charData.wCharSizeMode == CP_STR_SMALL;
 
-        LPCTSTR pszShow = m_fIgnoreSmall && charData.wCharSizeMode == CP_STR_SMALL ? TEXT("") :
+        LPCTSTR pszShow = fLangCodeJpn && m_fIgnoreSmall && charData.wCharSizeMode == CP_STR_SMALL ? TEXT("") :
                           pszCarry ? pszCarry : static_cast<LPCTSTR>(charData.pszDecode);
         pszCarry = nullptr;
 
@@ -1605,9 +1606,11 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
     }
     else {
         int dmf = 10;
+        bool fLangCodeJpn = true;
         if (!pCaptionForTest) {
             const LANG_TAG_INFO_DLL *pLangTag = pCaptionManager->GetLangTag();
             dmf = pLangTag ? pLangTag->ucDMF : 16;
+            fLangCodeJpn = !pLangTag || !strncmp(pLangTag->szISOLangCode, "jpn", 3);
         }
         if (m_fNeedtoShow && ((m_showFlags[index]>>dmf)&1)) {
             if (pCaption->bClear) {
@@ -1640,7 +1643,7 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
                             }
                         }
                     }
-                    ShowCaptionData(index, *pCaption, pDrcsList, drcsCount, m_shiftSmallState[index], m_hwndContainer, rcExVideo);
+                    ShowCaptionData(index, *pCaption, fLangCodeJpn, pDrcsList, drcsCount, m_shiftSmallState[index], m_hwndContainer, rcExVideo);
                 }
             }
         }
