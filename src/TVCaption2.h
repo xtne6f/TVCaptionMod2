@@ -63,7 +63,7 @@ private:
     void DeleteTextures();
     void HideAllOsds();
     void DestroyOsds();
-    void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
+    void AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int originalWidth, int charWidth, int charHeight,
                     const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style) const;
     CPseudoOSD &CreateOsd(STREAM_INDEX index, HWND hwndContainer, int charHeight, int nomalHeight, const CAPTION_CHAR_DATA_DLL &style);
     void DryrunCaptionData(const CAPTION_DATA_DLL &caption, SHIFT_SMALL_STATE &ssState);

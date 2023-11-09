@@ -73,6 +73,7 @@ CPseudoOSD::CPseudoOSD()
 	, m_fHide(true)
 {
 	m_Position.Left=0;
+	m_Position.OriginalLeft=0;
 	m_Position.Top=0;
 	m_Position.Height=0;
 	m_ParentPosition.x=0;
@@ -239,9 +240,9 @@ void CPseudoOSD::ClearText()
 
 // テキストを追加する
 // lf.lfWidth<0のときは半角テキスト間隔で描画する
-void CPseudoOSD::AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect)
+void CPseudoOSD::AddText(LPCTSTR pszText,int Width,int OriginalWidth,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect)
 {
-	m_StyleList.push_back(STYLE_ELEM(pszText,Width,lf,cr,AdjustRect));
+	m_StyleList.push_back(STYLE_ELEM(pszText,Width,OriginalWidth,lf,cr,AdjustRect));
 }
 
 
@@ -253,11 +254,27 @@ void CPseudoOSD::AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRec
 }
 
 
-void CPseudoOSD::SetPosition(int Left,int Top,int Height)
+void CPseudoOSD::SetPosition(int Left,int OriginalLeft,int Top,int Height)
 {
 	m_Position.Left=Left;
+	m_Position.OriginalLeft=OriginalLeft;
 	m_Position.Top=Top;
 	m_Position.Height=max(Height,0);
+}
+
+
+void CPseudoOSD::GetOriginalPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const
+{
+	if (pLeft)
+		*pLeft=m_Position.OriginalLeft;
+	if (pTop)
+		*pTop=m_Position.Top;
+	if (pWidth) {
+		*pWidth=0;
+		for (std::vector<STYLE_ELEM>::const_iterator it=m_StyleList.begin(); it!=m_StyleList.end(); *pWidth+=(it++)->OriginalWidth);
+	}
+	if (pHeight)
+		*pHeight=m_Position.Height;
 }
 
 

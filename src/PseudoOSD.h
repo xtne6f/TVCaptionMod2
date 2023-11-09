@@ -10,18 +10,21 @@ class CPseudoOSD
 		tstring Text;
 		HBITMAP hbm;
 		int Width;
+		int OriginalWidth;
 		LOGFONT lf;
 		COLORREF cr;
 		union {
 			RECT AdjustRect;
 			RECT PaintRect;
 		};
-		STYLE_ELEM(LPCTSTR pszText,int Width_,const LOGFONT &lf_,COLORREF cr_,const RECT &AdjustRect_) : Text(pszText),hbm(nullptr),Width(Width_),lf(lf_),cr(cr_),AdjustRect(AdjustRect_) {}
-		STYLE_ELEM(HBITMAP hbm_,int Width_,COLORREF cr_,const RECT &PaintRect_) : hbm(hbm_),Width(Width_),cr(cr_),PaintRect(PaintRect_) {}
+		STYLE_ELEM(LPCTSTR pszText,int Width_,int OriginalWidth_,const LOGFONT &lf_,COLORREF cr_,const RECT &AdjustRect_)
+			: Text(pszText),hbm(nullptr),Width(Width_),OriginalWidth(OriginalWidth_),lf(lf_),cr(cr_),AdjustRect(AdjustRect_) {}
+		STYLE_ELEM(HBITMAP hbm_,int Width_,COLORREF cr_,const RECT &PaintRect_)
+			: hbm(hbm_),Width(Width_),OriginalWidth(Width_),cr(cr_),PaintRect(PaintRect_) {}
 	};
 	std::vector<STYLE_ELEM> m_StyleList;
 	struct {
-		int Left,Top,Height;
+		int Left,OriginalLeft,Top,Height;
 	} m_Position;
 	int m_OffsetX;
 	int m_OffsetY;
@@ -74,9 +77,10 @@ public:
 	bool Hide();
 	bool IsVisible() const;
 	void ClearText();
-	void AddText(LPCTSTR pszText,int Width,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect);
+	void AddText(LPCTSTR pszText,int Width,int OriginalWidth,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect);
 	void AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect);
-	void SetPosition(int Left,int Top,int Height);
+	void SetPosition(int Left,int OriginalLeft,int Top,int Height);
+	void GetOriginalPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
 	void GetWindowPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
 	void SetWindowOffset(int X,int Y);
 	void SetWindowScale(double X,double Y);

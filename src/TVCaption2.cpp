@@ -1023,7 +1023,7 @@ void CTVCaption2::DestroyOsds()
     DeleteTextures();
 }
 
-void CTVCaption2::AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int charWidth, int charHeight,
+void CTVCaption2::AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int originalWidth, int charWidth, int charHeight,
                              const RECT &rcFontAdjust, LPCTSTR faceName, const CAPTION_CHAR_DATA_DLL &style) const
 {
     LOGFONT logFont;
@@ -1041,7 +1041,7 @@ void CTVCaption2::AddOsdText(CPseudoOSD *pOsd, LPCTSTR text, int width, int char
     logFont.lfQuality        = DRAFT_QUALITY;
     logFont.lfPitchAndFamily = (faceName[0]?DEFAULT_PITCH:FIXED_PITCH) | FF_DONTCARE;
     _tcscpy_s(logFont.lfFaceName, faceName);
-    pOsd->AddText(text, width, logFont, m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB), rcFontAdjust);
+    pOsd->AddText(text, width, originalWidth, logFont, m_fEnTextColor ? m_textColor : RGB(style.stCharColor.ucR, style.stCharColor.ucG, style.stCharColor.ucB), rcFontAdjust);
 }
 
 // 利用可能なOSDを1つだけ用意する
@@ -1221,6 +1221,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
     bool fDoneAntiPadding = false;
     int posX = caption.wPosX;
     int posY = caption.wPosY;
+    int originalPosX = posX;
 
     if (posY < ssState.posY) {
         // 前回よりも上方なのでリセット
@@ -1358,11 +1359,13 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         // 文字列を描画
         int lenWos = StrlenWoLoSurrogate(pszShow);
         if (pOsdCarry) {
-            AddOsdText(pOsdCarry, pszShow, dirW * lenWos, charW, charH, m_rcAdjust, m_szFaceName, charData);
-            posX += dirW * lenWos;
+            int width = dirW * lenWos;
+            AddOsdText(pOsdCarry, pszShow, width, width, charW, charH, m_rcAdjust, m_szFaceName, charData);
+            posX += width;
+            originalPosX += width;
             if (!fDrawSymbol && !fSameStyle) {
                 if (paddingW > 0) {
-                    AddOsdText(pOsdCarry, TEXT(""), paddingW, charW, charH, m_rcAdjust, m_szFaceName, charData);
+                    AddOsdText(pOsdCarry, TEXT(""), paddingW, 0, charW, charH, m_rcAdjust, m_szFaceName, charData);
                     posX += paddingW;
                 }
                 if (m_paintingMethod != 3) pOsdCarry->PrepareWindow();
@@ -1378,19 +1381,21 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                 CPseudoOSD &osd = CreateOsd(index, hwndContainer, charH, charData.wCharH, charData);
                 osd.SetSWFMode(caption.wSWFMode);
                 SetOsdWindowOffsetAndScale(&osd, rcVideo);
-                osd.SetPosition(posX, posY - dirH + 1, dirH);
+                osd.SetPosition(posX, originalPosX, posY - dirH + 1, dirH);
                 if (paddingW > 0) {
-                    AddOsdText(&osd, TEXT(""), paddingW, charW, charH, m_rcAdjust, m_szFaceName, charData);
+                    AddOsdText(&osd, TEXT(""), paddingW, 0, charW, charH, m_rcAdjust, m_szFaceName, charData);
                     posX += paddingW;
                 }
-                AddOsdText(&osd, pszShow, dirW * lenWos, charW, charH, m_rcAdjust, m_szFaceName, charData);
-                posX += dirW * lenWos;
+                int width = dirW * lenWos;
+                AddOsdText(&osd, pszShow, width, width, charW, charH, m_rcAdjust, m_szFaceName, charData);
+                posX += width;
+                originalPosX += width;
                 if (fDrawSymbol || fSameStyle) {
                     pOsdCarry = &osd;
                 }
                 else {
                     if (paddingW > 0) {
-                        AddOsdText(&osd, TEXT(""), paddingW, charW, charH, m_rcAdjust, m_szFaceName, charData);
+                        AddOsdText(&osd, TEXT(""), paddingW, 0, charW, charH, m_rcAdjust, m_szFaceName, charData);
                         posX += paddingW;
                     }
                     if (m_paintingMethod != 3) osd.PrepareWindow();
@@ -1442,6 +1447,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                     ::SetRect(&rc, (dirW - charW) / 2, (dirH - charH) / 2, charW, charH);
                     pOsdCarry->AddImage(hbm, dirW, RGB(charC.ucR, charC.ucG, charC.ucB), rc);
                     posX += dirW;
+                    originalPosX += dirW;
                 }
             }
         }
@@ -1450,24 +1456,27 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
             lenWos = StrlenWoLoSurrogate(pszDrcsStr);
             if (pOsdCarry && lenWos > 0) {
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
-                AddOsdText(pOsdCarry, pszDrcsStr, dirW, charW / lenWos + 1, charH,
+                AddOsdText(pOsdCarry, pszDrcsStr, dirW, dirW, charW / lenWos + 1, charH,
                            m_szGaijiFaceName[0] ? m_rcGaijiAdjust : m_rcAdjust,
                            m_szGaijiFaceName[0] ? m_szGaijiFaceName : m_szFaceName, charData);
                 posX += dirW;
+                originalPosX += dirW;
             }
         }
         else if (szGaiji[0]) {
             // 外字を描画
             if (pOsdCarry) {
-                AddOsdText(pOsdCarry, szGaiji, dirW, charW, charH, m_rcGaijiAdjust, m_szGaijiFaceName, charData);
+                AddOsdText(pOsdCarry, szGaiji, dirW, dirW, charW, charH, m_rcGaijiAdjust, m_szGaijiFaceName, charData);
                 posX += dirW;
+                originalPosX += dirW;
             }
         }
         else if (szHalf[0]) {
             // 半角文字を描画
             if (pOsdCarry) {
-                AddOsdText(pOsdCarry, szHalf, dirW, -charData.wCharW, charH, m_rcAdjust, m_szFaceName, charData);
+                AddOsdText(pOsdCarry, szHalf, dirW, dirW, -charData.wCharW, charH, m_rcAdjust, m_szFaceName, charData);
                 posX += dirW;
+                originalPosX += dirW;
             }
         }
 
@@ -1643,8 +1652,34 @@ void CTVCaption2::ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION
         }
     }
 
+    bool fClear = m_fOsdClear[index];
+    if (!fClear) {
+        // 表示中のOSDが表示待ちOSDによってすべて隠れる場合はクリアする
+        // 判定アルゴリズムとしては完全ではないが補助的なもの
+        for (size_t i = 0; i < m_osdShowCount[index]; ++i) {
+            fClear = false;
+            int left, top, width, height;
+            m_pOsdList[index][i]->GetOriginalPosition(&left, &top, &width, &height);
+            RECT rcSub;
+            ::SetRect(&rcSub, left, top, left + width, top + height);
+            for (size_t j = m_osdShowCount[index]; j < m_osdShowCount[index] + m_osdPrepareCount[index]; ++j) {
+                m_pOsdList[index][j]->GetOriginalPosition(&left, &top, &width, &height);
+                RECT rc = rcSub;
+                RECT rc2;
+                ::SetRect(&rc2, left, top, left + width, top + height);
+                if (!::SubtractRect(&rcSub, &rc, &rc2)) {
+                    fClear = true;
+                    break;
+                }
+            }
+            if (!fClear) {
+                break;
+            }
+        }
+    }
+
     bool fTextureModified = false;
-    if (m_fOsdClear[index]) {
+    if (fClear) {
         m_fOsdClear[index] = false;
         HideOsds(index);
         if (m_paintingMethod == 3) {
