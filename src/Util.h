@@ -143,6 +143,9 @@ private:
 bool CompareLogFont(const LOGFONT &lf1, const LOGFONT &lf2);
 bool BrowseFolderDialog(HWND hwndOwner, TCHAR (&szDirectory)[MAX_PATH], LPCTSTR pszTitle);
 
+bool SaveImageAsBmp(LPCTSTR fileName, const BITMAPINFOHEADER &bih, const void *pBits);
+bool SaveImageAsPngOrJpeg(HMODULE hTVTestImage, LPCTSTR fileName, bool pngOrJpeg, int compressionLevelOrQuality, const BITMAPINFOHEADER &bih, const void *pBits);
+
 namespace DrawUtil {
 
 bool Fill(HDC hdc,const RECT *pRect,COLORREF Color);

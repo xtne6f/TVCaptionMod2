@@ -465,6 +465,57 @@ bool BrowseFolderDialog(HWND hwndOwner, TCHAR (&szDirectory)[MAX_PATH], LPCTSTR 
     return false;
 }
 
+bool SaveImageAsBmp(LPCTSTR fileName, const BITMAPINFOHEADER &bih, const void *pBits)
+{
+    if (bih.biBitCount == 24) {
+        HANDLE hFile = ::CreateFile(fileName, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            BITMAPFILEHEADER bmfHeader = {};
+            bmfHeader.bfType = 0x4D42;
+            bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(bih);
+            bmfHeader.bfSize = bmfHeader.bfOffBits + (bih.biWidth * 3 + 3) / 4 * 4 * bih.biHeight;
+            DWORD dwWritten;
+            ::WriteFile(hFile, &bmfHeader, sizeof(bmfHeader), &dwWritten, nullptr);
+            ::WriteFile(hFile, &bih, sizeof(bih), &dwWritten, nullptr);
+            ::WriteFile(hFile, pBits, bmfHeader.bfSize - bmfHeader.bfOffBits, &dwWritten, nullptr);
+            ::CloseHandle(hFile);
+            return true;
+        }
+    }
+    return false;
+}
+
+struct ImageSaveInfo
+{
+    LPCTSTR pszFileName;
+    LPCTSTR pszFormat;
+    LPCTSTR pszOption;
+    const BITMAPINFO *pbmi;
+    const void *pBits;
+    LPCTSTR pszComment;
+};
+
+bool SaveImageAsPngOrJpeg(HMODULE hTVTestImage, LPCTSTR fileName, bool pngOrJpeg, int compressionLevelOrQuality, const BITMAPINFOHEADER &bih, const void *pBits)
+{
+    BOOL (WINAPI *pfnSaveImage)(const ImageSaveInfo *) =
+        reinterpret_cast<BOOL (WINAPI *)(const ImageSaveInfo *)>(::GetProcAddress(hTVTestImage, "SaveImage"));
+    if (pfnSaveImage) {
+        ImageSaveInfo info;
+        info.pszFileName = fileName;
+        info.pszFormat = pngOrJpeg ? TEXT("PNG") : TEXT("JPEG");
+        TCHAR option[16];
+        _stprintf_s(option, TEXT("%d"), min(max(compressionLevelOrQuality, 0), pngOrJpeg ? 9 : 100));
+        info.pszOption = option;
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader = bih;
+        info.pbmi = &bmi;
+        info.pBits = pBits;
+        info.pszComment = nullptr;
+        return !!pfnSaveImage(&info);
+    }
+    return false;
+}
+
 #if 1 // From: TVTest_0.7.23_Src/DrawUtil.cpp
 
 namespace DrawUtil {

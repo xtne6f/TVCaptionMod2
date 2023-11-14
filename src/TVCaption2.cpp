@@ -78,7 +78,9 @@ enum {
 }
 
 CTVCaption2::CTVCaption2()
-    : m_settingsIndex(0)
+    : m_jpegQuality(0)
+    , m_pngCompressionLevel(0)
+    , m_settingsIndex(0)
     , m_paintingMethod(0)
     , m_fIgnorePts(false)
     , m_fEnTextColor(false)
@@ -101,6 +103,7 @@ CTVCaption2::CTVCaption2()
     , m_adjustViewX(0)
     , m_adjustViewY(0)
     , m_fInitializeSettingsDlg(false)
+    , m_hTVTestImage(nullptr)
     , m_hwndPainting(nullptr)
     , m_hwndContainer(nullptr)
     , m_fNeedtoShow(false)
@@ -113,6 +116,7 @@ CTVCaption2::CTVCaption2()
     , m_caption1Pid(-1)
     , m_caption2Pid(-1)
 {
+    m_szCaptureSaveFormat[0] = 0;
     m_szFaceName[0] = 0;
     m_szGaijiFaceName[0] = 0;
     m_szGaijiTableName[0] = 0;
@@ -511,6 +515,11 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
         // 内蔵音再生停止
         ::PlaySound(nullptr, nullptr, 0);
 
+        if (m_hTVTestImage) {
+            ::FreeLibrary(m_hTVTestImage);
+            m_hTVTestImage = nullptr;
+        }
+
         m_captionDll.UnInitialize();
 
         m_pApp->SetPluginCommandState(ID_COMMAND_SWITCH_LANG, TVTest::PLUGIN_COMMAND_STATE_DISABLED);
@@ -530,6 +539,9 @@ void CTVCaption2::LoadSettings()
     m_captureFolder = val;
     GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileName"), TEXT("Capture"), val, _countof(val));
     m_captureFileName = val;
+    GetBufferedProfileString(vbuf.data(), TEXT("CaptureSaveFormat"), TEXT("BMP"), m_szCaptureSaveFormat, _countof(m_szCaptureSaveFormat));
+    m_jpegQuality = GetBufferedProfileInt(vbuf.data(), TEXT("JpegQuality"), 90);
+    m_pngCompressionLevel = GetBufferedProfileInt(vbuf.data(), TEXT("PngCompressionLevel"), 6);
     m_settingsIndex = GetBufferedProfileInt(vbuf.data(), TEXT("SettingsIndex"), 0);
 
     // ここからはセクション固有
@@ -591,6 +603,9 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("EstimateViewerDelay"), m_viewerClockEstimator.GetEnabled(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureFolder"), m_captureFolder.c_str(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureFileName"), m_captureFileName.c_str(), m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("CaptureSaveFormat"), m_szCaptureSaveFormat, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("JpegQuality"), m_jpegQuality, m_iniPath.c_str());
+    WritePrivateProfileInt(section, TEXT("PngCompressionLevel"), m_pngCompressionLevel, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("SettingsIndex"), m_settingsIndex, m_iniPath.c_str());
 
     // ここからはセクション固有
@@ -908,24 +923,35 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                     ::GetLocalTime(&st);
                     TCHAR t[64];
                     _stprintf_s(t, TEXT("%d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-                    TCHAR ext[16] = TEXT(".bmp");
-                    for (int i = 1; i <= 10; ++i) {
+                    LPCTSTR ext = !_tcsicmp(m_szCaptureSaveFormat, TEXT("JPEG")) ? TEXT(".jpg") :
+                                  !_tcsicmp(m_szCaptureSaveFormat, TEXT("PNG")) ? TEXT(".png") : TEXT(".bmp");
+                    TCHAR suffix[4] = {};
+                    bool fSaved = false;
+                    for (int i = 1; i <= 30; ++i) {
                         // ファイルがなければ書きこむ
-                        HANDLE hFile = ::CreateFile((m_captureFolder + sep + m_captureFileName + t + ext).c_str(),
-                                                    GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-                        if (hFile != INVALID_HANDLE_VALUE) {
-                            BITMAPFILEHEADER bmfHeader = {};
-                            bmfHeader.bfType = 0x4D42;
-                            bmfHeader.bfOffBits = sizeof(bmfHeader) + sizeof(bih);
-                            bmfHeader.bfSize = bmfHeader.bfOffBits + sizeImage;
-                            DWORD dwWritten;
-                            ::WriteFile(hFile, &bmfHeader, sizeof(bmfHeader), &dwWritten, nullptr);
-                            ::WriteFile(hFile, &bih, sizeof(bih), &dwWritten, nullptr);
-                            ::WriteFile(hFile, pBits, sizeImage, &dwWritten, nullptr);
-                            ::CloseHandle(hFile);
+                        tstring path = m_captureFolder + sep + m_captureFileName + t + suffix + ext;
+                        if (::GetFileAttributes(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                            if (ext[1] == TEXT('b')) {
+                                fSaved = SaveImageAsBmp(path.c_str(), bih, pBits);
+                            }
+                            else {
+                                if (!m_hTVTestImage) {
+                                    m_hTVTestImage = ::LoadLibrary(TEXT("TVTest_Image.dll"));
+                                }
+                                if (!m_hTVTestImage) {
+                                    m_pApp->AddLog(L"TVTest_Image.dllの読み込みに失敗しました。");
+                                }
+                                else {
+                                    fSaved = SaveImageAsPngOrJpeg(m_hTVTestImage, path.c_str(), ext[1] == TEXT('p'),
+                                                                  ext[1] == TEXT('p') ? m_pngCompressionLevel : m_jpegQuality, bih, pBits);
+                                }
+                            }
                             break;
                         }
-                        _stprintf_s(ext, TEXT("-%d.bmp"), i);
+                        _stprintf_s(suffix, TEXT("-%d"), i);
+                    }
+                    if (!fSaved) {
+                        m_pApp->AddLog(L"字幕付き画像の保存に失敗しました。");
                     }
                 }
             }

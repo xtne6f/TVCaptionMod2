@@ -88,6 +88,9 @@ private:
     tstring m_iniPath;
     tstring m_captureFolder;
     tstring m_captureFileName;
+    TCHAR m_szCaptureSaveFormat[8];
+    int m_jpegQuality;
+    int m_pngCompressionLevel;
     TCHAR m_szFaceName[LF_FACESIZE];
     TCHAR m_szGaijiFaceName[LF_FACESIZE];
     TCHAR m_szGaijiTableName[LF_FACESIZE];
@@ -121,6 +124,9 @@ private:
     int m_adjustViewY;
     tstring m_romSoundList;
     bool m_fInitializeSettingsDlg;
+
+    // キャプチャ
+    HMODULE m_hTVTestImage;
 
     // 字幕描画
     HWND m_hwndPainting;
