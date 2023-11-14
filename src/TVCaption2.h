@@ -88,6 +88,7 @@ private:
     tstring m_iniPath;
     tstring m_captureFolder;
     tstring m_captureFileName;
+    tstring m_captureFileNameFormat;
     TCHAR m_szCaptureSaveFormat[8];
     int m_jpegQuality;
     int m_pngCompressionLevel;

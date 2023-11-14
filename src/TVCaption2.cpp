@@ -539,6 +539,8 @@ void CTVCaption2::LoadSettings()
     m_captureFolder = val;
     GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileName"), TEXT("Capture"), val, _countof(val));
     m_captureFileName = val;
+    GetBufferedProfileString(vbuf.data(), TEXT("CaptureFileNameFormat"), TEXT(""), val, _countof(val));
+    m_captureFileNameFormat = val;
     GetBufferedProfileString(vbuf.data(), TEXT("CaptureSaveFormat"), TEXT("BMP"), m_szCaptureSaveFormat, _countof(m_szCaptureSaveFormat));
     m_jpegQuality = GetBufferedProfileInt(vbuf.data(), TEXT("JpegQuality"), 90);
     m_pngCompressionLevel = GetBufferedProfileInt(vbuf.data(), TEXT("PngCompressionLevel"), 6);
@@ -603,6 +605,7 @@ void CTVCaption2::SaveSettings() const
     WritePrivateProfileInt(section, TEXT("EstimateViewerDelay"), m_viewerClockEstimator.GetEnabled(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureFolder"), m_captureFolder.c_str(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureFileName"), m_captureFileName.c_str(), m_iniPath.c_str());
+    ::WritePrivateProfileString(section, TEXT("CaptureFileNameFormat"), m_captureFileNameFormat.c_str(), m_iniPath.c_str());
     ::WritePrivateProfileString(section, TEXT("CaptureSaveFormat"), m_szCaptureSaveFormat, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("JpegQuality"), m_jpegQuality, m_iniPath.c_str());
     WritePrivateProfileInt(section, TEXT("PngCompressionLevel"), m_pngCompressionLevel, m_iniPath.c_str());
@@ -919,17 +922,31 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                 // ファイルに保存
                 if (!m_captureFolder.empty()) {
                     LPCTSTR sep = m_captureFolder.back() == TEXT('/') || m_captureFolder.back() == TEXT('\\') ? TEXT("") : TEXT("\\");
-                    SYSTEMTIME st;
-                    ::GetLocalTime(&st);
-                    TCHAR t[64];
-                    _stprintf_s(t, TEXT("%d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                    tstring fileName;
+                    if (!m_captureFileNameFormat.empty()) {
+                        // 現在のコンテキストでファイル名をフォーマット
+                        TVTest::VarStringFormatInfo info = {};
+                        info.Flags = TVTest::VAR_STRING_FORMAT_FLAG_FILENAME;
+                        info.pszFormat = m_captureFileNameFormat.c_str();
+                        if (m_pApp->FormatVarString(&info)) {
+                            fileName = info.pszResult;
+                            m_pApp->MemoryFree(info.pszResult);
+                        }
+                    }
+                    if (fileName.empty()) {
+                        SYSTEMTIME st;
+                        ::GetLocalTime(&st);
+                        TCHAR t[64];
+                        _stprintf_s(t, TEXT("%d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                        fileName = m_captureFileName + t;
+                    }
                     LPCTSTR ext = !_tcsicmp(m_szCaptureSaveFormat, TEXT("JPEG")) ? TEXT(".jpg") :
                                   !_tcsicmp(m_szCaptureSaveFormat, TEXT("PNG")) ? TEXT(".png") : TEXT(".bmp");
                     TCHAR suffix[4] = {};
                     bool fSaved = false;
                     for (int i = 1; i <= 30; ++i) {
                         // ファイルがなければ書きこむ
-                        tstring path = m_captureFolder + sep + m_captureFileName + t + suffix + ext;
+                        tstring path = m_captureFolder + sep + fileName + suffix + ext;
                         if (::GetFileAttributes(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
                             if (ext[1] == TEXT('b')) {
                                 fSaved = SaveImageAsBmp(path.c_str(), bih, pBits);
