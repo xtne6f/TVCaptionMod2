@@ -739,16 +739,16 @@ bool CTVCaption2::PlayRomSound(int index) const
                 }
                 if (romIndex <= 13) {
                     return ::PlaySound(MAKEINTRESOURCE(IDW_ROM_00 + romIndex), g_hinstDLL,
-                                       SND_ASYNC|SND_NODEFAULT|SND_RESOURCE) != FALSE;
+                                       SND_ASYNC | SND_NODEFAULT | SND_RESOURCE) != FALSE;
                 }
                 return false;
             }
         }
-        return ::PlaySound(&id.c_str()[1], nullptr, SND_ASYNC|SND_NODEFAULT|SND_ALIAS) != FALSE;
+        return ::PlaySound(&id.c_str()[1], nullptr, SND_ASYNC | SND_NODEFAULT | SND_ALIAS) != FALSE;
     }
     else if (!id.empty()) {
         tstring path = m_iniPath.substr(0, m_iniPath.rfind(TEXT('.'))) + TEXT('\\') + id + TEXT(".wav");
-        return ::PlaySound(path.c_str(), nullptr, SND_ASYNC|SND_NODEFAULT|SND_FILENAME) != FALSE;
+        return ::PlaySound(path.c_str(), nullptr, SND_ASYNC | SND_NODEFAULT | SND_FILENAME) != FALSE;
     }
     return false;
 }
@@ -856,7 +856,7 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
     if (!pPackDib) return;
 
     BITMAPINFOHEADER *pBih = static_cast<BITMAPINFOHEADER*>(pPackDib);
-    if (pBih->biWidth>0 && pBih->biHeight>0 && (pBih->biBitCount==24 || pBih->biBitCount==32)) {
+    if (pBih->biWidth > 0 && pBih->biHeight > 0 && (pBih->biBitCount == 24 || pBih->biBitCount == 32)) {
         // 常に24bitビットマップにする
         BITMAPINFOHEADER bih = *pBih;
         bih.biBitCount = 24;
@@ -869,10 +869,10 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
             }
             else {
                 // 32-24bit変換
-                for (int y=0; y<bih.biHeight; ++y) {
-                    BYTE *pDest = static_cast<BYTE*>(pBits) + (bih.biWidth*3+3) / 4 * 4 * y;
+                for (int y = 0; y < bih.biHeight; ++y) {
+                    BYTE *pDest = static_cast<BYTE*>(pBits) + (bih.biWidth * 3 + 3) / 4 * 4 * y;
                     BYTE *pSrc = pBitmap + bih.biWidth * 4 * y;
-                    for (int x=0; x<bih.biWidth; ++x) {
+                    for (int x = 0; x < bih.biWidth; ++x) {
                         ::memcpy(&pDest[3 * x], &pSrc[4 * x], 3);
                     }
                 }
@@ -884,8 +884,8 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
                 bihRes.biWidth = rcVideo.right - rcVideo.left;
                 bihRes.biHeight = rcVideo.bottom - rcVideo.top;
                 // キャプチャ画像が表示中の動画サイズと異なるときは動画サイズのビットマップに変換する
-                if (bih.biWidth < bihRes.biWidth-3 || bihRes.biWidth+3 < bih.biWidth ||
-                    bih.biHeight < bihRes.biHeight-3 || bihRes.biHeight+3 < bih.biHeight)
+                if (bih.biWidth < bihRes.biWidth - 3 || bihRes.biWidth + 3 < bih.biWidth ||
+                    bih.biHeight < bihRes.biHeight - 3 || bihRes.biHeight + 3 < bih.biHeight)
                 {
                     void *pBitsRes;
                     HBITMAP hbmRes = ::CreateDIBSection(nullptr, reinterpret_cast<BITMAPINFO*>(&bihRes), DIB_RGB_COLORS, &pBitsRes, nullptr, 0);
@@ -917,7 +917,7 @@ void CTVCaption2::OnCapture(bool fSaveToFile)
             }
 
             ::GdiFlush();
-            int sizeImage = (bih.biWidth*3+3) / 4 * 4 * bih.biHeight;
+            int sizeImage = (bih.biWidth * 3 + 3) / 4 * 4 * bih.biHeight;
             if (fSaveToFile) {
                 // ファイルに保存
                 if (!m_captureFolder.empty()) {
@@ -2129,7 +2129,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     static const LPCTSTR METHOD_LIST[] = { TEXT("1-通常ウィンドウ"), TEXT("2-レイヤードウィンドウ"), TEXT("3-映像と合成"), nullptr };
     ::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_RESETCONTENT, 0, 0);
     AddToComboBoxList(hDlg, IDC_COMBO_METHOD, METHOD_LIST);
-    ::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_SETCURSEL, min(max(m_paintingMethod-1,0),2), 0);
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_SETCURSEL, min(max(m_paintingMethod - 1, 0), 2), 0);
 
     ::CheckDlgButton(hDlg, IDC_CHECK_CAPTION, m_showFlags[STREAM_CAPTION] ? BST_CHECKED : BST_UNCHECKED);
     ::CheckDlgButton(hDlg, IDC_CHECK_SUPERIMPOSE, m_showFlags[STREAM_SUPERIMPOSE] ? BST_CHECKED : BST_UNCHECKED);
@@ -2156,7 +2156,7 @@ void CTVCaption2::InitializeSettingsDlg(HWND hDlg)
     static const LPCTSTR STROKE_LEVEL_LIST[] = { TEXT("0"), TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5"), nullptr };
     ::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_RESETCONTENT, 0, 0);
     AddToComboBoxList(hDlg, IDC_COMBO_STROKE_LEVEL, STROKE_LEVEL_LIST);
-    ::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_SETCURSEL, min(max(m_strokeSmoothLevel,0),5), 0);
+    ::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_SETCURSEL, min(max(m_strokeSmoothLevel, 0), 5), 0);
 
     ::SetDlgItemInt(hDlg, IDC_EDIT_BY_DILATE, m_strokeByDilate, FALSE);
     ::SetDlgItemInt(hDlg, IDC_EDIT_VERT_ANTI, m_vertAntiAliasing, FALSE);
@@ -2296,7 +2296,7 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
             if (HIWORD(wParam) == CBN_SELCHANGE) {
                 HideAllOsds();
                 m_paintingMethod = static_cast<int>(::SendDlgItemMessage(hDlg, IDC_COMBO_METHOD, CB_GETCURSEL, 0, 0));
-                m_paintingMethod = min(max(m_paintingMethod,0),2) + 1;
+                m_paintingMethod = min(max(m_paintingMethod, 0), 2) + 1;
                 fSave = fReDisp = true;
             }
             break;
@@ -2383,7 +2383,7 @@ INT_PTR CTVCaption2::ProcessSettingsDlg(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
         case IDC_COMBO_STROKE_LEVEL:
             if (HIWORD(wParam) == CBN_SELCHANGE) {
                 m_strokeSmoothLevel = static_cast<int>(::SendDlgItemMessage(hDlg, IDC_COMBO_STROKE_LEVEL, CB_GETCURSEL, 0, 0));
-                m_strokeSmoothLevel = min(max(m_strokeSmoothLevel,0),5);
+                m_strokeSmoothLevel = min(max(m_strokeSmoothLevel, 0), 5);
                 fSave = fReDisp = true;
             }
             break;
