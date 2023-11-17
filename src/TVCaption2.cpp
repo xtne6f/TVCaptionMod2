@@ -465,11 +465,7 @@ bool CTVCaption2::EnablePlugin(bool fEnable)
     if (fEnable) {
         // 設定の読み込み
         LoadSettings();
-        int iniVer = ::GetPrivateProfileInt(TEXT("Settings"), TEXT("Version"), 0, m_iniPath.c_str());
-        if (iniVer < INFO_VERSION) {
-            // デフォルトの設定キーを出力するため
-            SaveSettings();
-        }
+
         if (m_captionDll.Initialize()) {
             if (!ConfigureGaijiTable(m_szGaijiTableName, &m_drcsStrMap, m_szGaijiFaceName[0] ? m_customGaijiTable : nullptr)) {
                 m_pApp->AddLog(L"外字テーブルの設定に失敗しました。");
@@ -534,6 +530,7 @@ void CTVCaption2::LoadSettings()
 {
     std::vector<TCHAR> vbuf = GetPrivateProfileSectionBuffer(TEXT("Settings"), m_iniPath.c_str());
     TCHAR val[SETTING_VALUE_MAX];
+    int iniVer = GetBufferedProfileInt(vbuf.data(), TEXT("Version"), 0);
     m_viewerClockEstimator.SetEnabled(GetBufferedProfileInt(vbuf.data(), TEXT("EstimateViewerDelay"), 1) != 0);
     GetBufferedProfileString(vbuf.data(), TEXT("CaptureFolder"), TEXT(""), val, _countof(val));
     m_captureFolder = val;
@@ -594,6 +591,11 @@ void CTVCaption2::LoadSettings()
     m_textColor = RGB(textColor/1000000%1000, textColor/1000%1000, textColor%1000);
     m_fEnBackColor = backColor >= 0;
     m_backColor = RGB(backColor/1000000%1000, backColor/1000%1000, backColor%1000);
+
+    if (iniVer < INFO_VERSION) {
+        // デフォルトの設定キーを出力するため
+        SaveSettings();
+    }
 }
 
 
