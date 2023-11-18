@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.8
+﻿TVTest TVCaptionMod2 Plugin ver.2.9
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -84,6 +84,22 @@ CaptureFolder
 CaptureFileName*
     「字幕付き画像の保存」の画像ファイル名
     # たとえば[=Capture]とすると、"Capture20121231-235959.bmp"のようになります。
+CaptureFileNameFormat*
+    変数使用可能な「字幕付き画像の保存」の画像ファイル名
+    # こちらはTVTest本体のキャプチャ設定のファイル名のように変数を使用できます。
+    # TVTest ver.0.9.0未満は未対応です。
+    # たとえば[=Capture_%date%-%time%]とすると、"Capture_20121231-235959.bmp"の
+    # ようになります。
+CaptureSaveFormat*
+    「字幕付き画像の保存」の保存形式
+    # [=BMP]か[=JPEG]か[=PNG]を指定してください。
+    # JPEGやPNGの保存にはTVTest_Image.dllが必要です。
+JpegQuality*
+    JPEG品質
+    # [=0]から[=100]まで。
+PngCompressionLevel*
+    PNG圧縮レベル
+    # [=0]から[=9]まで。
 SettingsIndex
     現在選択中の表示設定の番号
     # このキーより下の設定は実行中に切り替え(TVTest設定→キー割り当て→表示設定
