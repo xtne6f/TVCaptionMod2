@@ -10,10 +10,14 @@ public:
     void Clear();
     void AddPacket(LPCBYTE pPacket);
     void Analyze(DWORD currentPcr);
-    const CAPTION_DATA_DLL *PopCaption(DWORD currentPcr, bool fIgnorePts);
-    const CAPTION_DATA_DLL *GetCaption(DWORD currentPcr, bool fIgnorePts, DWORD index) const;
+    bool PopCaptionOrBitmap(const CAPTION_DATA_DLL **ppCaption, const BITMAP_DATA_DLL **ppBitmapData,
+                            DWORD currentPcr, bool fIgnorePts);
+    bool GetCaptionOrBitmap(const CAPTION_DATA_DLL **ppCaption, const BITMAP_DATA_DLL **ppBitmapData,
+                            DWORD currentPcr, bool fIgnorePts, DWORD index) const;
     bool IsSuperimpose() const { return m_fSuperimpose; }
-    bool IsEmpty() const { return m_capCount == 0; }
+    bool IsEmpty() const { return m_popCount >= m_capCount &&
+                                  (m_bitmapPopCount >= m_bitmapDataCount ||
+                                   m_pBitmapDataList[m_bitmapPopCount].wAppearanceOrder != m_popCount); }
     void GetDrcsList(const DRCS_PATTERN_DLL **ppList, DWORD *pCount) const { *ppList=m_pDrcsList; *pCount=m_drcsCount; }
     bool IsShowLang2() const { return m_fShowLang2; }
     void ShowLang2(bool fShowLang2) { m_fShowLang2 = fShowLang2; }
@@ -32,8 +36,12 @@ private:
     DWORD m_pts;
     CAPTION_DATA_DLL *m_pCapList;
     DRCS_PATTERN_DLL *m_pDrcsList;
+    BITMAP_DATA_DLL *m_pBitmapDataList;
     DWORD m_capCount;
+    DWORD m_popCount;
     DWORD m_drcsCount;
+    DWORD m_bitmapDataCount;
+    DWORD m_bitmapPopCount;
     LANG_TAG_INFO_DLL m_lang1, m_lang2;
     bool m_fEnLastTagInfoPcr;
     DWORD m_lastTagInfoPcr;

@@ -12,8 +12,9 @@ CCaptionMain::CCaptionMain(void)
 {
 	for( size_t i=0; i<LANG_TAG_MAX; i++ ){
 		//ucLangTag==0xFFは当該タグが存在しないことを示す
-		m_LangTagList[i].ucLangTag = 0xFF;
+		m_LangContext[i].LangTag.ucLangTag = 0xFF;
 	}
+	m_ManagementContext.LangTag.ucLangTag = 0xFF;
 }
 
 DWORD CCaptionMain::Clear()
@@ -21,7 +22,7 @@ DWORD CCaptionMain::Clear()
 	m_PayloadList.clear();
 
 	for( size_t i=0; i<LANG_TAG_MAX; i++ ){
-		m_LangTagList[i].ucLangTag = 0xFF;
+		m_LangContext[i].LangTag.ucLangTag = 0xFF;
 	}
 
 	m_ucDgiGroup = 0xFF;
@@ -219,7 +220,7 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 	}else if( ucDgiGroup != m_ucDgiGroup && 1 <= ucID && ucID <= LANG_TAG_MAX ){
 		//組が字幕管理と異なる字幕は処理しない
 		dwRet = TRUE;
-	}else if( 1 <= ucID && ucID <= LANG_TAG_MAX && m_LangTagList[ucID-1].ucLangTag != ucID-1 ){
+	}else if( 1 <= ucID && ucID <= LANG_TAG_MAX && m_LangContext[ucID-1].LangTag.ucLangTag != ucID-1 ){
 		//リストにない字幕も処理しない
 		dwRet = TRUE;
 	}else if( ucID == 0 ){
@@ -227,32 +228,34 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 		m_ucDgiGroup = ucDgiGroup;
 		for( size_t i=0; i<LANG_TAG_MAX; i++ ){
 			//字幕データもクリアする
-			m_LangTagList[i].ucLangTag = 0xFF;
+			m_LangContext[i].LangTag.ucLangTag = 0xFF;
 		}
-		m_CaptionList[0].clear();
-		m_DRCList[0].clear();
-		m_DRCMap[0].Clear();
+		m_ManagementContext.CaptionList.clear();
+		m_ManagementContext.bHasStatementBody = FALSE;
+		m_ManagementContext.DRCList.clear();
+		m_ManagementContext.DRCMap.Clear();
 		//usDataGroupSizeはCRC_16の2バイト分を含まないので-2すべきでない
-		dwRet = ParseCaptionManagementData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_CaptionList[0], &m_DRCList[0], &m_DRCMap[0]);
+		dwRet = ParseCaptionManagementData(pbBuff+dwStartPos,usDataGroupSize/*-2*/);
 		if( dwRet == TRUE ){
 			dwRet = CP_CHANGE_VERSION;
 		}
 	}else if( 1 <= ucID && ucID <= LANG_TAG_MAX ){
 		//字幕データ
-		m_CaptionList[ucID] = m_CaptionList[0];
-		m_DRCList[ucID] = m_DRCList[0];
-		m_DRCMap[ucID] = m_DRCMap[0];
+		m_LangContext[ucID-1].CaptionList = m_ManagementContext.CaptionList;
+		m_LangContext[ucID-1].bHasStatementBody = FALSE;
+		m_LangContext[ucID-1].DRCList = m_ManagementContext.DRCList;
+		m_LangContext[ucID-1].DRCMap = m_ManagementContext.DRCMap;
+		m_LangContext[ucID-1].BitmapDataList.clear();
 		//未定義の表示書式(0b1111)はCプロファイル(14)とみなす
-		dwRet = ParseCaptionData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_CaptionList[ucID],
-		                         &m_DRCList[ucID], &m_DRCMap[ucID], m_LangTagList[ucID-1].ucFormat-1,
-		                         m_LangTagList[ucID-1].szISOLangCode, m_LangTagList[ucID-1].ucTCS == 1);
+		dwRet = ParseCaptionData(pbBuff+dwStartPos,usDataGroupSize/*-2*/, &m_LangContext[ucID-1]);
 		if( dwRet == TRUE ){
 			dwRet = CP_NO_ERR_CAPTION_1 + ucID - 1;
 		}else{
 			::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported Caption Data!\n"));
-			m_CaptionList[ucID].clear();
-			m_DRCList[ucID].clear();
-			m_DRCMap[ucID].Clear();
+			m_LangContext[ucID-1].CaptionList.clear();
+			m_LangContext[ucID-1].DRCList.clear();
+			m_LangContext[ucID-1].DRCMap.Clear();
+			m_LangContext[ucID-1].BitmapDataList.clear();
 			dwRet = TRUE;
 		}
 	}else{
@@ -263,8 +266,7 @@ DWORD CCaptionMain::ParseCaption(LPCBYTE pbBuff, DWORD dwSize)
 }
 
 
-DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
-                                               vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap)
+DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize)
 {
 	if( pbBuff == NULL || dwSize < 2 ){
 		return CP_ERR_INVALID_PACKET;
@@ -292,8 +294,11 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 		ucOTMSSS = (pbBuff[dwPos]&0xF0>>4)*100 + (pbBuff[dwPos]&0x0F)*10 + (pbBuff[dwPos+1]&0xF0>>4);
 		dwPos+=2;
 	}
-	char szLang[4] = {};
-	BOOL bUCS = FALSE;
+	//LangTagのフィールドはParseUnitData()が参照する項目のみ設定する
+	char* pszLang = m_ManagementContext.LangTag.szISOLangCode;
+	pszLang[0] = 0;
+	m_ManagementContext.LangTag.ucFormat = 10;
+	m_ManagementContext.LangTag.ucTCS = 0;
 	unsigned char ucLangNum = pbBuff[dwPos];
 	dwPos++;
 	
@@ -309,19 +314,19 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 			Item.ucDC = pbBuff[dwPos];
 			dwPos++;
 		}
-		Item.szISOLangCode[0] = szLang[0] = pbBuff[dwPos];
-		Item.szISOLangCode[1] = szLang[1] = pbBuff[dwPos+1];
-		Item.szISOLangCode[2] = szLang[2] = pbBuff[dwPos+2];
-		Item.szISOLangCode[3] = szLang[3] = 0x00;
+		Item.szISOLangCode[0] = pszLang[0] = pbBuff[dwPos];
+		Item.szISOLangCode[1] = pszLang[1] = pbBuff[dwPos+1];
+		Item.szISOLangCode[2] = pszLang[2] = pbBuff[dwPos+2];
+		Item.szISOLangCode[3] = pszLang[3] = 0;
 		dwPos+=3;
 		Item.ucFormat = pbBuff[dwPos]>>4;
 		Item.ucTCS = (pbBuff[dwPos]&0x0C)>>2;
 		Item.ucRollupMode = pbBuff[dwPos]&0x03;
 		dwPos++;
 		if( Item.ucLangTag < LANG_TAG_MAX ){
-			m_LangTagList[Item.ucLangTag] = Item;
+			m_LangContext[Item.ucLangTag].LangTag = Item;
 		}
-		bUCS = Item.ucTCS == 1;
+		m_ManagementContext.LangTag.ucTCS = Item.ucTCS;
 	}
 	if( dwSize < dwPos+3 ){
 		return CP_ERR_INVALID_PACKET;
@@ -333,16 +338,14 @@ DWORD CCaptionMain::ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vec
 		DWORD dwReadSize = 0;
 		while( dwReadSize<uiUnitSize && dwRet==TRUE ){
 			DWORD dwReadUnit = 0;
-			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList,
-			                      pDRCList, pDRCMap, 9, szLang, bUCS);
+			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, &m_ManagementContext);
 			dwReadSize += dwReadUnit;
 		}
 	}
 	return dwRet;
 }
 
-DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
-                                     vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS)
+DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, LANG_CONTEXT* pLangContext)
 {
 	if( pbBuff == NULL || dwSize < 4 ){
 		return CP_ERR_INVALID_PACKET;
@@ -380,8 +383,7 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
 		DWORD dwReadSize = 0;
 		while( dwReadSize<uiUnitSize && dwRet==TRUE ){
 			DWORD dwReadUnit = 0;
-			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pCaptionList,
-			                      pDRCList, pDRCMap, wSWFMode, pszLang, bUCS);
+			dwRet = ParseUnitData(pbBuff+dwPos+dwReadSize, uiUnitSize-dwReadSize, &dwReadUnit, pLangContext);
 			dwReadSize += dwReadUnit;
 		}
 
@@ -389,8 +391,7 @@ DWORD CCaptionMain::ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTIO
 	return dwRet;
 }
 
-DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList,
-                                  vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS)
+DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, LANG_CONTEXT* pLangContext)
 {
 	if( pbBuff == NULL || dwSize < 5 || pdwReadSize == NULL ){
 		return FALSE;
@@ -405,27 +406,50 @@ DWORD CCaptionMain::ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSi
 	if( dwSize < 5+uiUnitSize ){
 		return FALSE;
 	}
-	if( pbBuff[1] != 0x20 ){
-		//字幕文(本文)以外
-		if( pbBuff[1] == 0x30 || pbBuff[1] == 0x31 ){
-			//DRCS処理
-			if( uiUnitSize > 0 ){
-				if( CARIB8CharDecode::DRCSHeaderparse(pbBuff+5, uiUnitSize, pDRCList, pbBuff[1]==0x31?TRUE:FALSE ) == FALSE ){
-					::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported DRCS!\n"));
-					//return FALSE;
-				}
+	BYTE bUnitParameter = pbBuff[1];
+	if( bUnitParameter == 0x20 ){
+		//字幕文(本文)
+		if( uiUnitSize > 0 ){
+			if( m_cDec.Caption(pbBuff + 5, uiUnitSize, &pLangContext->CaptionList, &pLangContext->DRCMap,
+			                   pLangContext->LangTag.ucFormat - 1, pLangContext->LangTag.szISOLangCode,
+			                   pLangContext->LangTag.ucTCS == 1) == FALSE ){
+				return FALSE;
+			}
+			pLangContext->bHasStatementBody = TRUE;
+			m_cDec.GetCaptionDataFields(&pLangContext->LastCaptionDataFields);
+		}
+	}else if( bUnitParameter == 0x30 || bUnitParameter == 0x31 ){
+		//DRCS
+		if( uiUnitSize > 0 ){
+			if( CARIB8CharDecode::DRCSHeaderparse(pbBuff + 5, uiUnitSize, &pLangContext->DRCList, bUnitParameter == 0x31) == FALSE ){
+				::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported DRCS!\n"));
+				//return FALSE;
 			}
 		}
-		// odaru modified.
-		//*pdwReadSize = dwSize;
-		*pdwReadSize = uiUnitSize + 5;
-		return TRUE;
-	}
-	
-	
-	if( uiUnitSize > 0 ){
-		if( m_cDec.Caption(pbBuff+5, uiUnitSize, pCaptionList, pDRCMap, wSWFMode, pszLang, bUCS) == FALSE ){
-			return FALSE;
+	}else if( bUnitParameter == 0x35 ){
+		//ビットマップ図形
+		if( pLangContext->LangTag.ucLangTag != 0xFF ){
+			pLangContext->BitmapDataList.resize(pLangContext->BitmapDataList.size() + 1);
+			BITMAP_DATA* pData = &pLangContext->BitmapDataList.back();
+			pData->wAppearanceOrder = (WORD)pLangContext->CaptionList.size();
+			if( CARIB8CharDecode::ParseBitmapData(pbBuff + 5, uiUnitSize, &pData->iPosX, &pData->iPosY, &pData->FlushColor, &pData->Image) == FALSE ){
+				::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Unsupported bitmap data!\n"));
+				pLangContext->BitmapDataList.pop_back();
+			}else if( pLangContext->bHasStatementBody ){
+				pData->wSWFMode = pLangContext->LastCaptionDataFields.wSWFMode;
+				pData->wClientX = pLangContext->LastCaptionDataFields.wClientX;
+				pData->wClientY = pLangContext->LastCaptionDataFields.wClientY;
+				pData->wClientW = pLangContext->LastCaptionDataFields.wClientW;
+				pData->wClientH = pLangContext->LastCaptionDataFields.wClientH;
+				//厳密には字幕管理の本文の表示領域も利用すべき
+			}else if( CARIB8CharDecode::GetDisplayAreaFromSWFMode(&pData->wClientW, &pData->wClientH, pLangContext->LangTag.ucFormat - 1) ){
+				pData->wSWFMode = pLangContext->LangTag.ucFormat - 1;
+				pData->wClientX = 0;
+				pData->wClientY = 0;
+			}else{
+				::OutputDebugString(TEXT(__FUNCTION__) TEXT("(): Undetermined display area of bitmap data!\n"));
+				pLangContext->BitmapDataList.pop_back();
+			}
 		}
 	}
 	*pdwReadSize = 5+uiUnitSize;
@@ -451,8 +475,8 @@ DWORD CCaptionMain::GetTagInfo(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount)
 
 	DWORD j = 0;
 	for( size_t i=0; i<LANG_TAG_MAX; i++ ){
-		if( m_LangTagList[i].ucLangTag == i ){
-			m_LangTagDllList[j++] = m_LangTagList[i];
+		if( m_LangContext[i].LangTag.ucLangTag == i ){
+			m_LangTagDllList[j++] = m_LangContext[i].LangTag;
 		}
 	}
 	if( j > 0 ){
@@ -472,10 +496,10 @@ DWORD CCaptionMain::GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** p
 	}
 
 	if( ucLangTag < LANG_TAG_MAX &&
-		m_LangTagList[ucLangTag].ucLangTag == ucLangTag &&
-		m_CaptionList[ucLangTag+1].size() > 0 )
+	    m_LangContext[ucLangTag].LangTag.ucLangTag == ucLangTag &&
+	    m_LangContext[ucLangTag].CaptionList.size() > 0 )
 	{
-		const vector<CAPTION_DATA> &List = m_CaptionList[ucLangTag+1];
+		const vector<CAPTION_DATA> &List = m_LangContext[ucLangTag].CaptionList;
 
 		//まずバッファを作る
 		DWORD dwCapCharPoolNeed = 0;
@@ -540,10 +564,10 @@ BOOL CCaptionMain::GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** pp
 	}
 
 	if( ucLangTag < LANG_TAG_MAX &&
-		m_LangTagList[ucLangTag].ucLangTag == ucLangTag &&
-		m_DRCList[ucLangTag+1].size() > 0 )
+	    m_LangContext[ucLangTag].LangTag.ucLangTag == ucLangTag &&
+	    m_LangContext[ucLangTag].DRCList.size() > 0 )
 	{
-		const vector<DRCS_PATTERN> &List = m_DRCList[ucLangTag+1];
+		const vector<DRCS_PATTERN> &List = m_LangContext[ucLangTag].DRCList;
 
 		//まずバッファを作る
 		m_pDRCList.resize(List.size());
@@ -552,7 +576,7 @@ BOOL CCaptionMain::GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** pp
 		vector<DRCS_PATTERN>::const_iterator it = List.begin();
 		for( ; it != List.end(); ++it ){
 			//UCSにマップされていない=字幕文に一度も現れていない
-			wchar_t wc = m_DRCMap[ucLangTag+1].GetUCS(it->wDRCCode);
+			wchar_t wc = m_LangContext[ucLangTag].DRCMap.GetUCS(it->wDRCCode);
 			if( wc != L'\0' ){
 				m_pDRCList[dwCount].dwDRCCode = it->wDRCCode;
 				m_pDRCList[dwCount].dwUCS = wc;
@@ -560,12 +584,51 @@ BOOL CCaptionMain::GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** pp
 				m_pDRCList[dwCount].wReserved = 0;
 				m_pDRCList[dwCount].dwReserved = 0;
 				m_pDRCList[dwCount].bmiHeader = it->bmiHeader;
-				m_pDRCList[dwCount].pbBitmap = it->bBitmap;
+				m_pDRCList[dwCount].pbBitmap = it->Bitmap.data();
 				dwCount++;
 			}
 		}
 		*pdwListCount = dwCount;
 		*ppList = &m_pDRCList[0];
+		return TRUE;
+	}
+	return FALSE;
+}
+
+BOOL CCaptionMain::GetBitmapData(unsigned char ucLangTag, BITMAP_DATA_DLL** ppList, DWORD* pdwListCount)
+{
+	if( ppList == NULL || pdwListCount == NULL ){
+		return FALSE;
+	}
+
+	if( ucLangTag < LANG_TAG_MAX &&
+	    m_LangContext[ucLangTag].LangTag.ucLangTag == ucLangTag &&
+	    m_LangContext[ucLangTag].BitmapDataList.size() > 0 )
+	{
+		const vector<BITMAP_DATA> &List = m_LangContext[ucLangTag].BitmapDataList;
+
+		//まずバッファを作る
+		m_pBitmapDataList.resize(List.size());
+
+		for( size_t i = 0; i < List.size(); i++ ){
+			m_pBitmapDataList[i].wAppearanceOrder = List[i].wAppearanceOrder;
+			m_pBitmapDataList[i].wSWFMode = List[i].wSWFMode;
+			m_pBitmapDataList[i].wClientX = List[i].wClientX;
+			m_pBitmapDataList[i].wClientY = List[i].wClientY;
+			m_pBitmapDataList[i].wClientW = List[i].wClientW;
+			m_pBitmapDataList[i].wClientH = List[i].wClientH;
+			//とりあえず透明
+			CLUT_DAT_DLL stTransparent = {};
+			m_pBitmapDataList[i].stRasterColor = stTransparent;
+			m_pBitmapDataList[i].iPosX = List[i].iPosX;
+			m_pBitmapDataList[i].iPosY = List[i].iPosY;
+			m_pBitmapDataList[i].dwFlushColorCount = (DWORD)List[i].FlushColor.size();
+			m_pBitmapDataList[i].dwImageSize = (DWORD)List[i].Image.size();
+			m_pBitmapDataList[i].pstFlushColorList = List[i].FlushColor.data();
+			m_pBitmapDataList[i].pbImage = List[i].Image.data();
+		}
+		*pdwListCount = (DWORD)List.size();
+		*ppList = &m_pBitmapDataList[0];
 		return TRUE;
 	}
 	return FALSE;

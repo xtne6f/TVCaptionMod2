@@ -57,6 +57,7 @@ private:
     int GetSettingsCount() const;
     bool PlayRomSound(int index) const;
     static LRESULT CALLBACK EventCallback(UINT Event, LPARAM lParam1, LPARAM lParam2, void *pClientData);
+    bool LoadTVTestImageLibrary();
     void OnCapture(bool fSaveToFile);
     static BOOL CALLBACK WindowMsgCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *pResult, void *pUserData);
     void HideOsds(STREAM_INDEX index);
@@ -71,6 +72,7 @@ private:
     void ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &caption, bool fLangCodeJpn,
                          const DRCS_PATTERN_DLL *pDrcsList, DWORD drcsCount,
                          SHIFT_SMALL_STATE &ssState, HWND hwndContainer, const RECT &rcVideo);
+    void ShowBitmapData(STREAM_INDEX index, const BITMAP_DATA_DLL &bitmapData, HWND hwndContainer, const RECT &rcVideo);
     static LRESULT CALLBACK PaintingWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     void ProcessCaption(CCaptionManager *pCaptionManager, const CAPTION_DATA_DLL *pCaptionForTest = nullptr);
     void OnSize(STREAM_INDEX index, bool fFast = false);
@@ -126,7 +128,8 @@ private:
     tstring m_romSoundList;
     bool m_fInitializeSettingsDlg;
 
-    // キャプチャ
+    // キャプチャなど
+    bool m_fDoneLoadTVTestImage;
     HMODULE m_hTVTestImage;
 
     // 字幕描画

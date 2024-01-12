@@ -16,8 +16,12 @@ CCaptionManager::CCaptionManager()
     , m_pts(0)
     , m_pCapList(nullptr)
     , m_pDrcsList(nullptr)
+    , m_pBitmapDataList(nullptr)
     , m_capCount(0)
+    , m_popCount(0)
     , m_drcsCount(0)
+    , m_bitmapDataCount(0)
+    , m_bitmapPopCount(0)
     , m_fEnLastTagInfoPcr(false)
     , m_lastTagInfoPcr(0)
     , m_queueFront(0)
@@ -39,7 +43,10 @@ void CCaptionManager::Clear()
     m_fSuperimpose = false;
     m_fEnPts = false;
     m_capCount = 0;
+    m_popCount = 0;
     m_drcsCount = 0;
+    m_bitmapDataCount = 0;
+    m_bitmapPopCount = 0;
     m_lang1.ucLangTag = 0xFF;
     m_lang2.ucLangTag = 0xFF;
     m_fEnLastTagInfoPcr = false;
@@ -64,12 +71,15 @@ void CCaptionManager::AddPacket(LPCBYTE pPacket)
 
 // キューにある字幕ストリームから次の字幕文を取得する
 // キューが空になるか字幕文を得る(m_capCount!=0)と返る
-// PopCaption()やGetDrcsList()で返されたバッファは無効になる
+// PopCaptionOrBitmap()やGetDrcsList()で返されたバッファは無効になる
 void CCaptionManager::Analyze(DWORD currentPcr)
 {
     if (!m_pCaptionDll) return;
     m_capCount = 0;
+    m_popCount = 0;
     m_drcsCount = 0;
+    m_bitmapDataCount = 0;
+    m_bitmapPopCount = 0;
 
     // "字幕管理データを3分以上未受信の場合は選局時の初期化動作を行う"
     if (m_fEnLastTagInfoPcr && currentPcr - m_lastTagInfoPcr >= 180000 * PCR_45KHZ_PER_MSEC) {
@@ -123,6 +133,10 @@ void CCaptionManager::Analyze(DWORD currentPcr)
                 if (m_pCaptionDll->GetDRCSPattern(m_dwIndex, ucLangTag, &m_pDrcsList, &m_drcsCount) != TRUE) {
                     m_drcsCount = 0;
                 }
+                // ビットマップ図形データ(あれば)
+                if (m_pCaptionDll->GetBitmapData(m_dwIndex, ucLangTag, &m_pBitmapDataList, &m_bitmapDataCount) != TRUE) {
+                    m_bitmapDataCount = 0;
+                }
                 m_pcr = currentPcr;
                 break;
             }
@@ -152,28 +166,65 @@ void CCaptionManager::Analyze(DWORD currentPcr)
     }
 }
 
-// 表示タイミングに達した字幕本文を1つだけとり出す
-const CAPTION_DATA_DLL *CCaptionManager::PopCaption(DWORD currentPcr, bool fIgnorePts)
+// 表示タイミングに達した字幕本文かビットマップ図形を1つだけとり出す
+bool CCaptionManager::PopCaptionOrBitmap(const CAPTION_DATA_DLL **ppCaption, const BITMAP_DATA_DLL **ppBitmapData,
+                                         DWORD currentPcr, bool fIgnorePts)
 {
-    const CAPTION_DATA_DLL *pCaption = GetCaption(currentPcr, fIgnorePts, 0);
-    if (pCaption) {
-        ++m_pCapList;
-        --m_capCount;
+    const CAPTION_DATA_DLL *pCaption;
+    if (GetCaptionOrBitmap(&pCaption, ppBitmapData, currentPcr, fIgnorePts, 0)) {
+        if (pCaption) {
+            ++m_popCount;
+        }
+        else {
+            ++m_bitmapPopCount;
+        }
+        if (ppCaption) {
+            *ppCaption = pCaption;
+        }
+        return true;
     }
-    return pCaption;
+    return false;
 }
 
-// 表示タイミングに達した字幕本文を取得する
-const CAPTION_DATA_DLL *CCaptionManager::GetCaption(DWORD currentPcr, bool fIgnorePts, DWORD index) const
+// 表示タイミングに達した字幕本文かビットマップ図形を取得する
+bool CCaptionManager::GetCaptionOrBitmap(const CAPTION_DATA_DLL **ppCaption, const BITMAP_DATA_DLL **ppBitmapData,
+                                         DWORD currentPcr, bool fIgnorePts, DWORD index) const
 {
-    if (index < m_capCount) {
-        const CAPTION_DATA_DLL *pCaption = &m_pCapList[index];
-        // 文字スーパーは非同期PESなので字幕文取得時のPCRが表示タイミングの基準になる
-        if ((m_fSuperimpose || fIgnorePts) && MSB(m_pcr + pCaption->dwWaitTime * PCR_45KHZ_PER_MSEC - currentPcr) ||
-            !m_fSuperimpose && !fIgnorePts && MSB(m_pts + pCaption->dwWaitTime * PCR_45KHZ_PER_MSEC - currentPcr))
-        {
-            return pCaption;
+    DWORD popCount = m_popCount;
+    DWORD bitmapPopCount = m_bitmapPopCount;
+    for (;;) {
+        const CAPTION_DATA_DLL *pCaption = nullptr;
+        const BITMAP_DATA_DLL *pBitmapData = nullptr;
+        DWORD dwWaitTime;
+        if (bitmapPopCount < m_bitmapDataCount && m_pBitmapDataList[bitmapPopCount].wAppearanceOrder == popCount) {
+            pBitmapData = &m_pBitmapDataList[bitmapPopCount++];
+            dwWaitTime = popCount > 0 ? m_pCapList[popCount - 1].dwWaitTime : 0;
         }
+        else if (popCount < m_capCount) {
+            pCaption = &m_pCapList[popCount++];
+            dwWaitTime = pCaption->dwWaitTime;
+        }
+        else {
+            break;
+        }
+        // 文字スーパーは非同期PESなので字幕文取得時のPCRが表示タイミングの基準になる
+        if ((m_fSuperimpose || fIgnorePts) && MSB(m_pcr + dwWaitTime * PCR_45KHZ_PER_MSEC - currentPcr) ||
+            !m_fSuperimpose && !fIgnorePts && MSB(m_pts + dwWaitTime * PCR_45KHZ_PER_MSEC - currentPcr))
+        {
+            if (index == 0) {
+                if (ppCaption) {
+                    *ppCaption = pCaption;
+                }
+                if (ppBitmapData) {
+                    *ppBitmapData = pBitmapData;
+                }
+                return true;
+            }
+        }
+        else {
+            break;
+        }
+        --index;
     }
-    return nullptr;
+    return false;
 }

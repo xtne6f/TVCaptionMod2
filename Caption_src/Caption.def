@@ -12,3 +12,4 @@ EXPORTS
 	SetGaijiCP	@11
 	GetGaijiCP	@12
 	SwitchStreamCP	@13
+	GetBitmapDataCP	@14

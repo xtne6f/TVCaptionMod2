@@ -90,8 +90,7 @@ struct DRCS_PATTERN{
 	WORD wDRCCode;
 	WORD wGradation;
 	BITMAPINFOHEADER bmiHeader;
-	BYTE bBitmap[(DRCS_SIZE_MAX*4+31)/32*4 * DRCS_SIZE_MAX];
-	DRCS_PATTERN() {}
+	vector<BYTE> Bitmap;
 };
 
 //参考:up0511mod
@@ -116,8 +115,14 @@ public:
 	//字幕を想定したワイド文字列への変換
 	BOOL Caption( const BYTE* pbSrc, DWORD dwSrcSize, vector<CAPTION_DATA>* pCaptionList,
 	              CDRCMap* pDRCMap, WORD wInitSWFMode, const char* pszLang, BOOL bUCS );
+	//Caption()が成功したとき、その時点の表示書式や表示領域の情報を取得
+	void GetCaptionDataFields(CAPTION_DATA* pItem) const { CreateCaptionData(pItem); }
 	//DRCSヘッダの分析(参考:mark10als)
 	static BOOL DRCSHeaderparse( const BYTE* pbSrc, DWORD dwSrcSize, vector<DRCS_PATTERN>* pDRCList, BOOL bDRCS_0 );
+	//ビットマップ図形の分析
+	static BOOL ParseBitmapData(const BYTE* pbSrc, DWORD dwSrcSize, int* pPosX, int* pPosY,
+	                            vector<CLUT_DAT_DLL>* pFlushColor, vector<BYTE>* pImage);
+	static BOOL GetDisplayAreaFromSWFMode(WORD* pwClientW, WORD* pwClientH, WORD wSWFMode);
 	BOOL GetGaijiTable(WCHAR* pTable, DWORD* pdwTableSize) const;
 	BOOL SetGaijiTable(const WCHAR* pTable, DWORD* pdwTableSize);
 	BOOL ResetGaijiTable(DWORD* pdwTableSize);

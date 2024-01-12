@@ -48,12 +48,13 @@ bool CPseudoOSD::Initialize(HINSTANCE hinst)
 CPseudoOSD::CPseudoOSD()
 	: m_hwnd(nullptr)
 	, m_crBackColor(RGB(16,0,16))
+	, m_fSingle(false)
+	, m_hbmSingleFlush(nullptr)
 	, m_OffsetX(0)
 	, m_OffsetY(0)
 	, m_ScaleX(1)
 	, m_ScaleY(1)
 	, m_wSWFMode(0)
-	, m_TimerID(0)
 	, m_FlashingInterval(0)
 	, m_Opacity(80)
 	, m_BackOpacity(50)
@@ -65,7 +66,7 @@ CPseudoOSD::CPseudoOSD()
 	, m_fHLRight(false)
 	, m_fHLBottom(false)
 	, m_VertAntiAliasingThreshold(0)
-	, m_fHideText(false)
+	, m_fFlushing(false)
 	, m_fWindowPrepared(false)
 	, m_fLayeredWindow(false)
 	, m_hwndParent(nullptr)
@@ -145,7 +146,7 @@ bool CPseudoOSD::PrepareWindow()
 	if (!m_hwnd)
 		return false;
 
-	m_fHideText=m_FlashingInterval<0;
+	m_fFlushing=m_FlashingInterval<0;
 	m_fWindowPrepared=true;
 
 	int x,y,w,h;
@@ -174,8 +175,8 @@ bool CPseudoOSD::Show()
 		return false;
 
 	if (m_FlashingInterval!=0) {
-		m_TimerID|=::SetTimer(m_hwnd,TIMER_ID_FLASHING,
-		                      m_FlashingInterval<0?-m_FlashingInterval:m_FlashingInterval,nullptr);
+		::SetTimer(m_hwnd,TIMER_ID_FLASHING,
+		           m_FlashingInterval<0?-m_FlashingInterval:m_FlashingInterval,nullptr);
 	}
 	if (m_fLayeredWindow) {
 		// 実際には親子関係じゃないので自力で可視になるか判断する必要がある
@@ -210,10 +211,7 @@ bool CPseudoOSD::Hide()
 	::ShowWindow(m_hwnd,SW_HIDE);
 	m_fHide=true;
 	ClearText();
-	if (m_TimerID&TIMER_ID_FLASHING) {
-		::KillTimer(m_hwnd,TIMER_ID_FLASHING);
-		m_TimerID&=~TIMER_ID_FLASHING;
-	}
+	::KillTimer(m_hwnd,TIMER_ID_FLASHING);
 	return true;
 }
 
@@ -235,6 +233,11 @@ void CPseudoOSD::ClearText()
 		}
 		m_StyleList.clear();
 	}
+	m_fSingle = false;
+	if (m_hbmSingleFlush) {
+		::DeleteObject(m_hbmSingleFlush);
+		m_hbmSingleFlush = nullptr;
+	}
 }
 
 
@@ -242,7 +245,9 @@ void CPseudoOSD::ClearText()
 // lf.lfWidth<0のときは半角テキスト間隔で描画する
 void CPseudoOSD::AddText(LPCTSTR pszText,int Width,int OriginalWidth,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect)
 {
-	m_StyleList.push_back(STYLE_ELEM(pszText,Width,OriginalWidth,lf,cr,AdjustRect));
+	if (!m_fSingle) {
+		m_StyleList.push_back(STYLE_ELEM(pszText,Width,OriginalWidth,lf,cr,AdjustRect));
+	}
 }
 
 
@@ -250,7 +255,26 @@ void CPseudoOSD::AddText(LPCTSTR pszText,int Width,int OriginalWidth,const LOGFO
 // 受けとったビットマップはクラス側で破棄する
 void CPseudoOSD::AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect)
 {
-	m_StyleList.push_back(STYLE_ELEM(hbm,Width,cr,PaintRect));
+	if (!m_fSingle) {
+		m_StyleList.push_back(STYLE_ELEM(hbm,Width,cr,PaintRect));
+	}
+}
+
+
+// アルファ値つき32bitDIBビットマップを指定する
+// 受けとったビットマップはクラス側で破棄する
+void CPseudoOSD::SetSingleImage(HBITMAP hbm,HBITMAP hbmFlush,int Left,int Top)
+{
+	BITMAP bm;
+	if (::GetObject(hbm,sizeof(BITMAP),&bm)) {
+		ClearText();
+		m_fSingle = true;
+		m_hbmSingleFlush = hbmFlush;
+		RECT rc;
+		::SetRect(&rc,0,0,bm.bmWidth,bm.bmHeight);
+		m_StyleList.push_back(STYLE_ELEM(hbm,bm.bmWidth,RGB(0,0,0),rc));
+		SetPosition(Left,Left,Top,bm.bmHeight);
+	}
 }
 
 
@@ -468,9 +492,10 @@ void CPseudoOSD::DrawImageList(HDC hdc,int MultX,int MultY) const
 	int x=0;
 	std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
 	for (; it!=m_StyleList.end(); ++it) {
-		if (it->hbm) {
+		HBITMAP hbm = m_fFlushing?m_hbmSingleFlush:it->hbm;
+		if (hbm) {
 			DrawUtil::DrawBitmap(hdc,(int)((x+it->PaintRect.left)*m_ScaleX)*MultX,(int)(it->PaintRect.top*m_ScaleY)*MultY,
-			                     (int)(it->PaintRect.right*m_ScaleX)*MultX,(int)(it->PaintRect.bottom*m_ScaleY)*MultY,it->hbm);
+			                     (int)(it->PaintRect.right*m_ScaleX)*MultX,(int)(it->PaintRect.bottom*m_ScaleY)*MultY,hbm);
 		}
 		x+=it->Width;
 	}
@@ -483,18 +508,19 @@ void CPseudoOSD::Draw(HDC hdc,const RECT &PaintRect) const
 
 	::GetClientRect(m_hwnd,&rc);
 	DrawUtil::Fill(hdc,&rc,m_crBackColor);
-	if (m_fHideText) return;
 
-	if (!m_StyleList.empty()) {
-		if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,2,m_StyleList.front().cr);
-		if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,2,m_StyleList.front().cr);
-		if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_StyleList.front().cr);
-		if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,2,m_StyleList.front().cr);
+	if (!m_fFlushing) {
+		if (!m_StyleList.empty()) {
+			if (m_fHLLeft) DrawLine(hdc,1,rc.bottom-1,1,1,2,m_StyleList.front().cr);
+			if (m_fHLTop) DrawLine(hdc,1,1,rc.right-1,1,2,m_StyleList.front().cr);
+			if (m_fHLRight) DrawLine(hdc,rc.right-1,1,rc.right-1,rc.bottom-1,2,m_StyleList.front().cr);
+			if (m_fHLBottom) DrawLine(hdc,rc.right-1,rc.bottom-1,1,rc.bottom-1,2,m_StyleList.front().cr);
+		}
+
+		int OldBkMode=::SetBkMode(hdc,TRANSPARENT);
+		DrawTextList(hdc,1,1,true);
+		::SetBkMode(hdc,OldBkMode);
 	}
-
-	int OldBkMode=::SetBkMode(hdc,TRANSPARENT);
-	DrawTextList(hdc,1,1,true);
-	::SetBkMode(hdc,OldBkMode);
 
 	DrawImageList(hdc,1,1);
 }
@@ -678,6 +704,25 @@ static void SetBitmapOpacity(int Mult, BYTE* __restrict pBits,int Width,const RE
 		SetBitmapOpacityQuarter(pBits,Width,Rect,pBitsMono,Opacity);
 	} else if (Mult==2) {
 		SetBitmapOpacityHalf(pBits,Width,Rect,pBitsMono,Opacity);
+	}
+}
+
+// アルファ値つき32bitDIBビットマップを描画する
+static void DrawBitmap(void *pBits,int Width,RECT Rect,HBITMAP hbm)
+{
+	BITMAP bm;
+	if (::GetObject(hbm,sizeof(BITMAP),&bm) && bm.bmBitsPixel==32 && bm.bmWidthBytes%4==0 &&
+	    bm.bmWidth>0 && bm.bmHeight>0 && bm.bmWidth<4096 && bm.bmHeight<4096) {
+		int w=Rect.right-Rect.left;
+		int h=Rect.bottom-Rect.top;
+		for (int y=Rect.top;y<Rect.bottom;y++) {
+			DWORD *p=static_cast<DWORD*>(pBits)+y*Width+Rect.left;
+			DWORD *q=static_cast<DWORD*>(bm.bmBits)+bm.bmWidthBytes/4*(bm.bmHeight-1-bm.bmHeight*(y-Rect.top)/h);
+			for (int x=Rect.left;x<Rect.right;x++) {
+				*p=q[bm.bmWidth*(x-Rect.left)/w];
+				p++;
+			}
+		}
 	}
 }
 
@@ -914,8 +959,8 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		ObjHeight=m_StyleList.front().hbm?m_StyleList.front().PaintRect.bottom:m_StyleList.front().lf.lfHeight;
 		ObjHeight=(int)(ObjHeight*(ObjHeight<0?-1:1)*m_ScaleY);
 	}
-	int VertMult=ObjHeight>m_VertAntiAliasingThreshold?4:ObjHeight>m_StrokeByDilateThreshold?2:1;
-	int MultMono=ObjHeight>m_VertAntiAliasingThreshold?4:2;
+	int VertMult=m_fSingle?1:ObjHeight>m_VertAntiAliasingThreshold?4:ObjHeight>m_StrokeByDilateThreshold?2:1;
+	int MultMono=m_fSingle?1:ObjHeight>m_VertAntiAliasingThreshold?4:2;
 	int AllocWidth;
 	if (!AllocateWorkBitmap(Width,Height*VertMult,Height*MultMono,&AllocWidth))
 		return;
@@ -953,7 +998,7 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 		if (m_fHLBottom) DrawLine(hdcMono,rr-1,rb-MultMono,1,rb-MultMono,2*MultMono,RGB(255,255,255));
 	}
 
-	if (!m_fHideText) {
+	if (!m_fSingle && !m_fFlushing) {
 		int OldBkMode=::SetBkMode(hdcSrc,TRANSPARENT);
 		DrawTextList(hdcSrc,1,VertMult,true);
 		::SetBkMode(hdcSrc,OldBkMode);
@@ -983,47 +1028,53 @@ void CPseudoOSD::UpdateLayeredWindow(HDC hdcCompose,void *pBitsCompose,int Width
 	}
 	::GdiFlush();
 
-	// 縦方向アンチエイリアス
-	if (VertMult==4) {
-		ShrinkBitmap(m_pBits,AllocWidth,rc);
-	} else if (VertMult==2) {
-		ShrinkBitmapHalf(m_pBits,AllocWidth,rc);
+	if (m_fSingle) {
+		// アルファ値つきビットマップをそのまま描画
+		DrawBitmap(m_pBits,AllocWidth,rc,m_fFlushing&&m_hbmSingleFlush?m_hbmSingleFlush:m_StyleList.front().hbm);
 	}
-	ClearBitmapAlpha((BYTE*)m_pBits,AllocWidth,rc,m_fHideText?0:(BYTE)(m_BackOpacity*255/100));
+	else {
+		// 縦方向アンチエイリアス
+		if (VertMult==4) {
+			ShrinkBitmap(m_pBits,AllocWidth,rc);
+		} else if (VertMult==2) {
+			ShrinkBitmapHalf(m_pBits,AllocWidth,rc);
+		}
+		ClearBitmapAlpha((BYTE*)m_pBits,AllocWidth,rc,m_fFlushing?0:(BYTE)(m_BackOpacity*255/100));
 
-	// 膨張処理による縁取り
-	bool fNeedToDilate=false;
-	if (ObjHeight<=m_StrokeByDilateThreshold) {
-		LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
-		fNeedToDilate=true;
-	} else {
-		// 膨張処理のために画像部分だけアルファチャネルに写す
-		int x=0;
-		std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
-		for (; it!=m_StyleList.end(); ++it) {
-			RECT rcImage=rc;
-			rcImage.left=(int)(x*m_ScaleX);
-			x+=it->Width;
-			rcImage.right=(int)(x*m_ScaleX);
-			if (it->hbm) {
-				LayBitmapToAlpha(m_pBits,AllocWidth,rcImage,(BYTE)(m_Opacity*255/100),m_crBackColor);
-				fNeedToDilate=true;
+		// 膨張処理による縁取り
+		bool fNeedToDilate=false;
+		if (ObjHeight<=m_StrokeByDilateThreshold) {
+			LayBitmapToAlpha(m_pBits,AllocWidth,rc,(BYTE)(m_Opacity*255/100),m_crBackColor);
+			fNeedToDilate=true;
+		} else {
+			// 膨張処理のために画像部分だけアルファチャネルに写す
+			int x=0;
+			std::vector<STYLE_ELEM>::const_iterator it = m_StyleList.begin();
+			for (; it!=m_StyleList.end(); ++it) {
+				RECT rcImage=rc;
+				rcImage.left=(int)(x*m_ScaleX);
+				x+=it->Width;
+				rcImage.right=(int)(x*m_ScaleX);
+				if (it->hbm) {
+					LayBitmapToAlpha(m_pBits,AllocWidth,rcImage,(BYTE)(m_Opacity*255/100),m_crBackColor);
+					fNeedToDilate=true;
+				}
 			}
 		}
-	}
-	// 囲い部分は処理しない
-	RECT rcInner=rc;
-	if (m_fHLLeft) rcInner.left+=2;
-	if (m_fHLTop) rcInner.top+=2;
-	if (m_fHLRight) rcInner.right-=2;
-	if (m_fHLBottom) rcInner.bottom-=2;
-	if (fNeedToDilate) {
-		for (int i=0; i<((int)(m_StrokeWidth*(m_StrokeWidth<0?-m_ScaleY:1))+36)/72; i++) {
-			DilateAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_Opacity*255/100));
+		// 囲い部分は処理しない
+		RECT rcInner=rc;
+		if (m_fHLLeft) rcInner.left+=2;
+		if (m_fHLTop) rcInner.top+=2;
+		if (m_fHLRight) rcInner.right-=2;
+		if (m_fHLBottom) rcInner.bottom-=2;
+		if (fNeedToDilate) {
+			for (int i=0; i<((int)(m_StrokeWidth*(m_StrokeWidth<0?-m_ScaleY:1))+36)/72; i++) {
+				DilateAlpha(m_pBits,AllocWidth,rcInner,(BYTE)(m_Opacity*255/100));
+			}
 		}
+		SetBitmapOpacity(MultMono,(BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,(BYTE)(m_Opacity*255/100));
+		SmoothAlpha(m_pBits,AllocWidth,rcInner,m_fFlushing?0:(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(ObjHeight>m_StrokeByDilateThreshold?2:1));
 	}
-	SetBitmapOpacity(MultMono,(BYTE*)m_pBits,AllocWidth,rc,(BYTE*)m_pBitsMono,(BYTE)(m_Opacity*255/100));
-	SmoothAlpha(m_pBits,AllocWidth,rcInner,m_fHideText?0:(BYTE)(m_BackOpacity*255/100),m_StrokeSmoothLevel-(ObjHeight>m_StrokeByDilateThreshold?2:1));
 
 	if (hdcCompose && fKeepAlpha) {
 		for (int i=0; i<Height; i++) {
@@ -1095,7 +1146,7 @@ LRESULT CALLBACK CPseudoOSD::WndProc(HWND hwnd,UINT uMsg,
 
 			switch (wParam) {
 			case TIMER_ID_FLASHING:
-				pThis->m_fHideText=!pThis->m_fHideText;
+				pThis->m_fFlushing=!pThis->m_fFlushing;
 				if (pThis->m_fLayeredWindow) {
 					if (::IsWindowVisible(hwnd))
 						pThis->UpdateLayeredWindow();
@@ -1141,7 +1192,6 @@ LRESULT CALLBACK CPseudoOSD::WndProc(HWND hwnd,UINT uMsg,
 	case WM_DESTROY:
 		{
 			CPseudoOSD *pThis=GetThis(hwnd);
-			pThis->m_TimerID=0;
 			pThis->m_hwnd=nullptr;
 		}
 		return 0;

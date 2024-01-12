@@ -198,6 +198,14 @@ DWORD WINAPI GetDRCSPatternCP(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList
 	return g_sys->GetDRCSPattern(ucLangTag, ppList, pdwListCount);
 }
 
+DWORD WINAPI GetBitmapDataCP(unsigned char ucLangTag, BITMAP_DATA_DLL** ppList, DWORD* pdwListCount)
+{
+	if( g_sys == NULL ){
+		return CP_ERR_NOT_INIT;
+	}
+	return g_sys->GetBitmapData(ucLangTag, ppList, pdwListCount);
+}
+
 DWORD WINAPI SetGaijiCP(DWORD dwCommand, const WCHAR* pTable, DWORD* pdwTableSize)
 {
 	if( g_sys == NULL ){

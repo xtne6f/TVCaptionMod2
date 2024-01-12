@@ -95,4 +95,20 @@ typedef struct {
 	const BYTE* pbBitmap;
 }DRCS_PATTERN_DLL;
 
+typedef struct {
+	WORD wAppearanceOrder;
+	WORD wSWFMode;
+	WORD wClientX;
+	WORD wClientY;
+	WORD wClientW;
+	WORD wClientH;
+	CLUT_DAT_DLL stRasterColor;
+	int iPosX;
+	int iPosY;
+	DWORD dwFlushColorCount;
+	DWORD dwImageSize;
+	const CLUT_DAT_DLL* pstFlushColorList;
+	const BYTE* pbImage;
+}BITMAP_DATA_DLL;
+
 #endif

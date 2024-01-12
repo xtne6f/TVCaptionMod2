@@ -23,6 +23,8 @@ class CPseudoOSD
 			: hbm(hbm_),Width(Width_),OriginalWidth(Width_),cr(cr_),PaintRect(PaintRect_) {}
 	};
 	std::vector<STYLE_ELEM> m_StyleList;
+	bool m_fSingle;
+	HBITMAP m_hbmSingleFlush;
 	struct {
 		int Left,OriginalLeft,Top,Height;
 	} m_Position;
@@ -31,7 +33,6 @@ class CPseudoOSD
 	double m_ScaleX;
 	double m_ScaleY;
 	WORD m_wSWFMode;
-	UINT_PTR m_TimerID;
 	int m_FlashingInterval;
 	int m_Opacity;
 	int m_BackOpacity;
@@ -40,7 +41,7 @@ class CPseudoOSD
 	int m_StrokeByDilateThreshold;
 	bool m_fHLLeft,m_fHLTop,m_fHLRight,m_fHLBottom;
 	int m_VertAntiAliasingThreshold;
-	bool m_fHideText;
+	bool m_fFlushing;
 	bool m_fWindowPrepared;
 	bool m_fLayeredWindow;
 	HWND m_hwndParent;
@@ -79,6 +80,7 @@ public:
 	void ClearText();
 	void AddText(LPCTSTR pszText,int Width,int OriginalWidth,const LOGFONT &lf,COLORREF cr,const RECT &AdjustRect);
 	void AddImage(HBITMAP hbm,int Width,COLORREF cr,const RECT &PaintRect);
+	void SetSingleImage(HBITMAP hbm,HBITMAP hbmFlush,int Left,int Top);
 	void SetPosition(int Left,int OriginalLeft,int Top,int Height);
 	void GetOriginalPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;
 	void GetWindowPosition(int *pLeft,int *pTop,int *pWidth,int *pHeight) const;

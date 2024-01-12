@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <tchar.h>
+#include "../Caption_src/CaptionDef.h"
 
 #ifdef _DEBUG
 #define DEBUG_OUT(x) ::OutputDebugString(x)
@@ -145,12 +146,14 @@ bool BrowseFolderDialog(HWND hwndOwner, TCHAR (&szDirectory)[MAX_PATH], LPCTSTR 
 
 bool SaveImageAsBmp(LPCTSTR fileName, const BITMAPINFOHEADER &bih, const void *pBits);
 bool SaveImageAsPngOrJpeg(HMODULE hTVTestImage, LPCTSTR fileName, bool pngOrJpeg, int compressionLevelOrQuality, const BITMAPINFOHEADER &bih, const void *pBits);
+HBITMAP LoadAribPngAsDIBSection(HMODULE hTVTestImage, const BYTE *pPngData, size_t dataSize, void **ppBits, RECT *pCropRect = nullptr);
+HBITMAP CopyDIBSectionWithTransparency(HBITMAP hbmSrc, const CLUT_DAT_DLL *pTransparentColorList, size_t colorLen, void **ppBits);
 
 namespace DrawUtil {
 
 bool Fill(HDC hdc,const RECT *pRect,COLORREF Color);
 bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
-				HBITMAP hbm,const RECT *pSrcRect=nullptr,BYTE Opacity=255);
+				HBITMAP hbm,const RECT *pSrcRect=nullptr);
 
 }	// namespace DrawUtil
 

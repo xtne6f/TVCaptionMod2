@@ -86,6 +86,12 @@ DWORD WINAPI GetCaptionDataCPW(unsigned char ucLangTag, CAPTION_DATA_DLL** ppLis
 CAPTION_DLLEXPORT
 DWORD WINAPI GetDRCSPatternCP(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList, DWORD* pdwListCount);
 
+//ビットマップ図形取得
+//戻り値：エラーコード
+//ERR_NOT_INIT:初期化されていない, FALSE:失敗, TRUE:成功(*pdwListCount>=1)
+CAPTION_DLLEXPORT
+DWORD WINAPI GetBitmapDataCP(unsigned char ucLangTag, BITMAP_DATA_DLL** ppList, DWORD* pdwListCount);
+
 //外字変換テーブル設定
 //戻り値：エラーコード
 //ERR_NOT_INIT:初期化されていない, FALSE:失敗, TRUE:成功

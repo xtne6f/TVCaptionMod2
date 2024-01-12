@@ -50,6 +50,9 @@ public:
     DWORD GetDRCSPattern(DWORD dwIndex, unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList, DWORD* pdwListCount) const {
         return SwitchStream(dwIndex) ? GetDRCSPatternCP(ucLangTag, ppList, pdwListCount) : FALSE;
     }
+    DWORD GetBitmapData(DWORD dwIndex, unsigned char ucLangTag, BITMAP_DATA_DLL** ppList, DWORD* pdwListCount) const {
+        return SwitchStream(dwIndex) ? GetBitmapDataCP(ucLangTag, ppList, pdwListCount) : FALSE;
+    }
     bool SetGaiji(DWORD dwCommand, const WCHAR* ppTable, DWORD* pdwTableSize) const {
         DWORD dwTableSize = *pdwTableSize;
         return SwitchStream(1) && SetGaijiCP(dwCommand, ppTable, &dwTableSize) == TRUE &&

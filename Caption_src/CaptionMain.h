@@ -14,6 +14,7 @@ public:
 	DWORD GetTagInfo(LANG_TAG_INFO_DLL** ppList, DWORD* pdwListCount);
 	DWORD GetCaptionData(unsigned char ucLangTag, CAPTION_DATA_DLL** ppList, DWORD* pdwListCount);
 	BOOL GetDRCSPattern(unsigned char ucLangTag, DRCS_PATTERN_DLL** ppList, DWORD* pdwListCount);
+	BOOL GetBitmapData(unsigned char ucLangTag, BITMAP_DATA_DLL** ppList, DWORD* pdwListCount);
 	BOOL GetGaijiTable(WCHAR* pTable, DWORD* pdwTableSize) const { return m_cDec.GetGaijiTable(pTable, pdwTableSize); }
 	BOOL SetGaijiTable(const WCHAR* pTable, DWORD* pdwTableSize) { return m_cDec.SetGaijiTable(pTable, pdwTableSize); }
 	BOOL ResetGaijiTable(DWORD* pdwTableSize) { return m_cDec.ResetGaijiTable(pdwTableSize); }
@@ -26,11 +27,30 @@ protected:
 	};
 	vector<PAYLOAD_DATA> m_PayloadList;
 
-	LANG_TAG_INFO_DLL m_LangTagList[LANG_TAG_MAX];
-	vector<CAPTION_DATA> m_CaptionList[LANG_TAG_MAX + 1];
+	struct BITMAP_DATA{
+		WORD wAppearanceOrder;
+		WORD wSWFMode;
+		WORD wClientX;
+		WORD wClientY;
+		WORD wClientW;
+		WORD wClientH;
+		int iPosX;
+		int iPosY;
+		vector<CLUT_DAT_DLL> FlushColor;
+		vector<BYTE> Image;
+	};
 
-	vector<DRCS_PATTERN> m_DRCList[LANG_TAG_MAX + 1];
-	CDRCMap m_DRCMap[LANG_TAG_MAX + 1];
+	struct LANG_CONTEXT{
+		LANG_TAG_INFO_DLL LangTag;
+		vector<CAPTION_DATA> CaptionList;
+		BOOL bHasStatementBody;
+		CAPTION_DATA LastCaptionDataFields;
+		vector<DRCS_PATTERN> DRCList;
+		CDRCMap DRCMap;
+		vector<BITMAP_DATA> BitmapDataList;
+	};
+	LANG_CONTEXT m_LangContext[LANG_TAG_MAX];
+	LANG_CONTEXT m_ManagementContext;
 
 	unsigned char m_ucDgiGroup;
 
@@ -43,6 +63,7 @@ protected:
 	vector<CAPTION_DATA_DLL> m_pCapList;
 	vector<CAPTION_CHAR_DATA_DLL> m_pCapCharPool;
 	vector<DRCS_PATTERN_DLL> m_pDRCList;
+	vector<BITMAP_DATA_DLL> m_pBitmapDataList;
 	vector<BYTE> m_pbBuff;
 
 	CARIB8CharDecode m_cDec;
@@ -50,9 +71,7 @@ protected:
 protected:
 	DWORD ParseListData();
 	DWORD ParseCaption(LPCBYTE pbBuff, DWORD dwSize);
-	DWORD ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList, vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap);
-	DWORD ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, vector<CAPTION_DATA>* pCaptionList,
-	                       vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS);
-	DWORD ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, vector<CAPTION_DATA>* pCaptionList,
-	                    vector<DRCS_PATTERN>* pDRCList, CDRCMap* pDRCMap, WORD wSWFMode, const char* pszLang, BOOL bUCS);
+	DWORD ParseCaptionManagementData(LPCBYTE pbBuff, DWORD dwSize);
+	DWORD ParseCaptionData(LPCBYTE pbBuff, DWORD dwSize, LANG_CONTEXT* pLangContext);
+	DWORD ParseUnitData(LPCBYTE pbBuff, DWORD dwSize, DWORD* pdwReadSize, LANG_CONTEXT* pLangContext);
 };
