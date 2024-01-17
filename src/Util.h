@@ -149,11 +149,11 @@ bool SaveImageAsPngOrJpeg(HMODULE hTVTestImage, LPCTSTR fileName, bool pngOrJpeg
 HBITMAP LoadAribPngAsDIBSection(HMODULE hTVTestImage, const BYTE *pPngData, size_t dataSize, void **ppBits, RECT *pCropRect = nullptr);
 HBITMAP CopyDIBSectionWithTransparency(HBITMAP hbmSrc, const CLUT_DAT_DLL *pTransparentColorList, size_t colorLen, void **ppBits);
 
+bool StretchDrawBitmap(HDC hdc, int x, int y, int width, int height, HBITMAP hbm, int stretchMode = STRETCH_HALFTONE, int halfSizeStretchMode = 0);
+
 namespace DrawUtil {
 
 bool Fill(HDC hdc,const RECT *pRect,COLORREF Color);
-bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
-				HBITMAP hbm,const RECT *pSrcRect=nullptr);
 
 }	// namespace DrawUtil
 

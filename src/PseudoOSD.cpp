@@ -494,8 +494,8 @@ void CPseudoOSD::DrawImageList(HDC hdc,int MultX,int MultY) const
 	for (; it!=m_StyleList.end(); ++it) {
 		HBITMAP hbm = m_fFlushing?m_hbmSingleFlush:it->hbm;
 		if (hbm) {
-			DrawUtil::DrawBitmap(hdc,(int)((x+it->PaintRect.left)*m_ScaleX)*MultX,(int)(it->PaintRect.top*m_ScaleY)*MultY,
-			                     (int)(it->PaintRect.right*m_ScaleX)*MultX,(int)(it->PaintRect.bottom*m_ScaleY)*MultY,hbm);
+			StretchDrawBitmap(hdc,(int)((x+it->PaintRect.left)*m_ScaleX)*MultX,(int)(it->PaintRect.top*m_ScaleY)*MultY,
+			                  (int)(it->PaintRect.right*m_ScaleX)*MultX,(int)(it->PaintRect.bottom*m_ScaleY)*MultY,hbm);
 		}
 		x+=it->Width;
 	}

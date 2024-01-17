@@ -595,7 +595,28 @@ HBITMAP CopyDIBSectionWithTransparency(HBITMAP hbmSrc, const CLUT_DAT_DLL *pTran
     return nullptr;
 }
 
-#if 1 // From: TVTest_0.7.23_Src/DrawUtil.cpp (一部改変)
+bool StretchDrawBitmap(HDC hdc, int x, int y, int width, int height, HBITMAP hbm, int stretchMode, int halfSizeStretchMode)
+{
+    BITMAP bm;
+    if (::GetObject(hbm, sizeof(BITMAP), &bm)) {
+        HDC hdcSrc = ::CreateCompatibleDC(hdc);
+        if (hdcSrc) {
+            HBITMAP hbmOld = static_cast<HBITMAP>(::SelectObject(hdcSrc, hbm));
+            int oldStretchMode = ::SetStretchBltMode(hdc,
+                bm.bmWidth == width && bm.bmHeight == height ? STRETCH_DELETESCANS :
+                (bm.bmWidth == width || bm.bmWidth == width * 2) &&
+                (bm.bmHeight == height || bm.bmHeight == height * 2) && halfSizeStretchMode ? halfSizeStretchMode : stretchMode);
+            bool fRet = !!::StretchBlt(hdc, x, y, width, height, hdcSrc, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
+            ::SetStretchBltMode(hdc, oldStretchMode);
+            ::SelectObject(hdcSrc, hbmOld);
+            ::DeleteDC(hdcSrc);
+            return fRet;
+        }
+    }
+    return false;
+}
+
+#if 1 // From: TVTest_0.7.23_Src/DrawUtil.cpp
 
 namespace DrawUtil {
 
@@ -608,50 +629,6 @@ bool Fill(HDC hdc,const RECT *pRect,COLORREF Color)
 		return false;
 	::FillRect(hdc,pRect,hbr);
 	::DeleteObject(hbr);
-	return true;
-}
-
-// ビットマップを描画する
-bool DrawBitmap(HDC hdc,int DstX,int DstY,int DstWidth,int DstHeight,
-				HBITMAP hbm,const RECT *pSrcRect)
-{
-	if (!hdc || !hbm)
-		return false;
-
-	int SrcX,SrcY,SrcWidth,SrcHeight;
-	if (pSrcRect) {
-		SrcX=pSrcRect->left;
-		SrcY=pSrcRect->top;
-		SrcWidth=pSrcRect->right-pSrcRect->left;
-		SrcHeight=pSrcRect->bottom-pSrcRect->top;
-	} else {
-		BITMAP bm;
-		if (::GetObject(hbm,sizeof(BITMAP),&bm)!=sizeof(BITMAP))
-			return false;
-		SrcX=SrcY=0;
-		SrcWidth=bm.bmWidth;
-		SrcHeight=bm.bmHeight;
-	}
-
-	HDC hdcMemory=::CreateCompatibleDC(hdc);
-	if (!hdcMemory)
-		return false;
-	HBITMAP hbmOld=static_cast<HBITMAP>(::SelectObject(hdcMemory,hbm));
-
-	{
-		if (SrcWidth==DstWidth && SrcHeight==DstHeight) {
-			::BitBlt(hdc,DstX,DstY,DstWidth,DstHeight,
-					 hdcMemory,SrcX,SrcY,SRCCOPY);
-		} else {
-			int OldStretchMode=::SetStretchBltMode(hdc,STRETCH_HALFTONE);
-			::StretchBlt(hdc,DstX,DstY,DstWidth,DstHeight,
-						 hdcMemory,SrcX,SrcY,SrcWidth,SrcHeight,SRCCOPY);
-			::SetStretchBltMode(hdc,OldStretchMode);
-		}
-	}
-
-	::SelectObject(hdcMemory,hbmOld);
-	::DeleteDC(hdcMemory);
 	return true;
 }
 
