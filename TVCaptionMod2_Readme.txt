@@ -1,4 +1,4 @@
-﻿TVTest TVCaptionMod2 Plugin ver.2.9
+﻿TVTest TVCaptionMod2 Plugin ver.3.0
 
 ■概要
 odaruさんが公開された「字幕 Plugin For TVTest(20081216)」をベースに、mark10alsさ
@@ -36,6 +36,8 @@ TVTestのプラグインフォルダにTVCaptionMod2.tvtpを入れ、右クリ�
 緊急地震速報の文字スーパー等で音を出したいときは、設定の「内蔵音再生する」を有効
 にしてください。
 
+PNG形式の字幕の表示にはTVTest.exeのあるフォルダにTVTest_Image.dllが必要です。
+
 字幕表示時の負荷により他プラグインのオンスクリーン表示がカクつく場合は「垂直方向
 アンチエイリアスしない」の項目を999ドットにしてみてください(「設定ファイルについ
 て」VertAntiAliasingを参照)。
@@ -54,7 +56,6 @@ https://www.axfc.net/u/search.pl?sha1=a75e3938b25c6426197d919a37b784f16474cbe8
 ■既知の不具合
 たぶん色々な字幕形式に未対応です。以下思いつくもの:
 ・縦書き (なかなか遭遇しないのでどう表示されるかもわからない)
-・PNG形式の字幕
 ・ORN縁取り指定の着色。いまのところ背景色で縁取り
 
 ■設定ファイルについて
