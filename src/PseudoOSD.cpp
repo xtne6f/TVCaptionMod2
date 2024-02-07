@@ -403,24 +403,38 @@ void CPseudoOSD::OnParentSize()
 }
 
 
-static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,UINT cbCount,int Width,int MultX,int MultY)
+static BOOL TextOutMonospace(HDC hdc,int x,int y,LPCTSTR lpString,int Width,int MultX,int MultY)
 {
 	INT dx[1024];
-	cbCount=min(cbCount,lengthof(dx));
-	UINT cbCountWos=0;
-	for (UINT i=0; i<cbCount; i++) {
-		if ((lpString[i] & 0xFC00) != 0xDC00) cbCountWos++;
-	}
-	for (UINT i=0; i<cbCount; i++) {
-		if ((lpString[i] & 0xFC00) != 0xDC00) {
-			dx[i]=Width/cbCountWos*MultX;
+	TCHAR sz[1024];
+	::_tcsncpy_s(sz,lpString,_TRUNCATE);
+	UINT cbCountWos=StrlenWoLoSurrogateOrNonSpacing(sz);
+	UINT i=0,j=0;
+	for (; sz[i]; i++) {
+		if ((sz[i] & 0xFC00) == 0xDC00) {
+			if (j > 0) {
+				dx[j++]=0;
+			}
+		} else if (IsNonSpacingCharacter(sz[i])) {
+			if (j > 0) {
+				// ノンスペーシング文字は重ね打ちで表現する
+				sz[i]=sz[i]==0x0301?TEXT('´'):sz[i]==0x0300?TEXT('｀'):sz[i]==0x0308?TEXT('¨'):
+				      sz[i]==0x0302?TEXT('＾'):sz[i]==0x0305?TEXT('￣'):sz[i]==0x0332?TEXT('＿'):TEXT('◯');
+				if ((sz[i-1] & 0xFC00) == 0xDC00) {
+					dx[j-1]=dx[j-2];
+					dx[j-2]=0;
+				}
+				dx[j]=dx[j-1];
+				dx[j-1]=0;
+				j++;
+			}
+		} else {
+			dx[j++]=Width/cbCountWos*MultX;
 			Width-=Width/cbCountWos;
 			cbCountWos--;
-		} else {
-			dx[i]=0;
 		}
 	}
-	return ::ExtTextOut(hdc,x*MultX,y*MultY,0,nullptr,lpString,cbCount,dx);
+	return ::ExtTextOut(hdc,x*MultX,y*MultY,0,nullptr,sz+i-j,j,dx);
 }
 
 static void DrawLine(HDC hdc,int bx,int by,int ex,int ey,int cw,COLORREF cr)
@@ -450,7 +464,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const
 	LOGFONT lfLast={};
 	HFONT hfont=nullptr;
 	for (; it!=m_StyleList.end(); ++it) {
-		int lenWos=StrlenWoLoSurrogate(it->Text.c_str());
+		int lenWos=StrlenWoLoSurrogateOrNonSpacing(it->Text.c_str());
 		if (lenWos > 0) {
 			LOGFONT lf=it->lf;
 			int lfScaledWidth=(int)(lf.lfWidth*m_ScaleX);
@@ -476,7 +490,7 @@ void CPseudoOSD::DrawTextList(HDC hdc,int MultX,int MultY,bool fSetColor) const
 				int adjLeft=lfScaledHeight*(lfScaledHeight<0?-1:1)*it->AdjustRect.left/72;
 				int adjTop=lfScaledHeight*(lfScaledHeight<0?-1:1)*it->AdjustRect.top/72;
 				TextOutMonospace(hdc,(int)(x*m_ScaleX)+intvX/2+adjLeft,h-1-intvY/2+adjTop,
-				                 it->Text.c_str(),(int)it->Text.length(),w,MultX,MultY);
+				                 it->Text.c_str(),w,MultX,MultY);
 				::SelectObject(hdc,hfontOld);
 				if (fSetColor) ::SetTextColor(hdc,crOld);
 			}

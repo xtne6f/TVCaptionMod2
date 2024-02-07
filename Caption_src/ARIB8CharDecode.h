@@ -143,6 +143,8 @@ protected:
 
 	//デコードした文字列
 	wstring m_strDecode;
+	//保留中のノンスペーシング文字列
+	wstring m_strPending;
 	//文字サイズ
 	CP_STRING_SIZE m_emStrSize;
 
@@ -232,6 +234,7 @@ protected:
 	BOOL CSI( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSize );
 
 	void AddSJISToString( unsigned char ucFirst, unsigned char ucSecond );
+	void AddDecodedCharacters( WCHAR cFirst, WCHAR cSecond = 0 );
 	void ActivePositionForward( int nCount );
 	WORD GetCharDirSize(void) const;
 	WORD GetLineDirSize(void) const;

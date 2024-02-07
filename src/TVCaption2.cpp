@@ -1461,7 +1461,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
                         break;
                     }
                 }
-                else if (fSearchHalf) {
+                else if (fSearchHalf && !IsNonSpacingCharacter(pszShow[j+1])) {
                     for (int k = 0; HALF_F_LIST[k]; ++k) {
                         TCHAR r = HALF_R_LIST[k];
                         if ((!(m_avoidHalfFlags & 1) || r != TEXT('A') && r != TEXT('a')) &&
@@ -1509,7 +1509,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
 
         // 文字列を描画
-        int lenWos = StrlenWoLoSurrogate(pszShow);
+        int lenWos = StrlenWoLoSurrogateOrNonSpacing(pszShow);
         if (pOsdCarry) {
             int width = dirW * lenWos;
             AddOsdText(pOsdCarry, pszShow, width, width, charW, charH, m_rcAdjust, m_szFaceName, charData);
@@ -1605,7 +1605,7 @@ void CTVCaption2::ShowCaptionData(STREAM_INDEX index, const CAPTION_DATA_DLL &ca
         }
         else if (pDrcs && pszDrcsStr) {
             // DRCSを文字列で描画
-            lenWos = StrlenWoLoSurrogate(pszDrcsStr);
+            lenWos = StrlenWoLoSurrogateOrNonSpacing(pszDrcsStr);
             if (pOsdCarry && lenWos > 0) {
                 // レイアウト維持のため、何文字であっても1文字幅に詰める
                 AddOsdText(pOsdCarry, pszDrcsStr, dirW, dirW, charW / lenWos + 1, charH,

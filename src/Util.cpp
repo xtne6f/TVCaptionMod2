@@ -114,11 +114,18 @@ std::vector<WCHAR> ReadTextFileToEnd(LPCTSTR fileName, DWORD dwShareMode)
     return ret;
 }
 
-int StrlenWoLoSurrogate(LPCTSTR str)
+bool IsNonSpacingCharacter(TCHAR c)
+{
+    // 「´｀¨＾￣＿◯」の結合文字
+    return c == 0x0301 || c == 0x0300 || c == 0x0308 || c == 0x0302 ||
+           c == 0x0305 || c == 0x0332 || c == 0x20DD;
+}
+
+int StrlenWoLoSurrogateOrNonSpacing(LPCTSTR str)
 {
     int len = 0;
     for (; *str; ++str) {
-        if ((*str & 0xFC00) != 0xDC00) ++len;
+        if ((*str & 0xFC00) != 0xDC00 && !IsNonSpacingCharacter(*str)) ++len;
     }
     return len;
 }

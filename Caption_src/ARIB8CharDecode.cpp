@@ -100,6 +100,7 @@ BOOL CARIB8CharDecode::InitCaption(void)
 	m_GR = &m_G2;
 
 	m_strDecode = L"";
+	m_strPending = L"";
 	m_emStrSize = CP_STR_NORMAL;
 
 	m_bCharColorIndex = 7;
@@ -258,9 +259,13 @@ BOOL CARIB8CharDecode::Analyze( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRe
 			if( m_wRPC != 0 && --m_wRPC == 0 ){
 				//文字繰り返し終了
 				m_bRPC = FALSE;
+				m_strPending = L"";
 				dwReadSize += dwReadBuff;
 			}
 		}else{
+			if( m_bSpacing ){
+				m_strPending = L"";
+			}
 			dwReadSize += dwReadBuff;
 		}
 	}
@@ -282,7 +287,7 @@ BOOL CARIB8CharDecode::C0( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 	switch(pbSrc[0]){
 	case 0x20:
 		//SP 背景色空白
-		m_strDecode += m_bLatin ? L' ' : L'　';
+		AddDecodedCharacters(m_bLatin ? L' ' : L'　');
 		ActivePositionForward(1);
 		m_bSpacing = TRUE;
 		break;
@@ -460,7 +465,7 @@ BOOL CARIB8CharDecode::C1( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwReadSiz
 	switch(b){
 	case 0x7F:
 		//DEL 前景色空白
-		m_strDecode += L'■';
+		AddDecodedCharacters(L'■');
 		ActivePositionForward(1);
 		m_bSpacing = TRUE;
 		break;
@@ -660,7 +665,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_JISX_KANA:
 				{
 				//JIS X0201片仮名
-				m_strDecode += JisXKanaTable[b - 0x21];
+				AddDecodedCharacters(JisXKanaTable[b - 0x21]);
 				ActivePositionForward(1);
 				}
 				break;
@@ -668,7 +673,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_ASCII:
 				{
 				//全角なのでテーブルからコード取得
-				m_strDecode += m_bLatin ? (WCHAR)b : AsciiTable[b - 0x21];
+				AddDecodedCharacters(m_bLatin ? (WCHAR)b : AsciiTable[b - 0x21]);
 				ActivePositionForward(1);
 				}
 				break;
@@ -676,7 +681,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_HIRA:
 				{
 				//Gセットのひらがな系集合
-				m_strDecode += HiraTable[b - 0x21];
+				AddDecodedCharacters(HiraTable[b - 0x21]);
 				ActivePositionForward(1);
 				}
 				break;
@@ -684,7 +689,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 			case MF_PROP_KANA:
 				{
 				//Gセットのカタカナ系集合
-				m_strDecode += KanaTable[b - 0x21];
+				AddDecodedCharacters(KanaTable[b - 0x21]);
 				ActivePositionForward(1);
 				}
 				break;
@@ -707,18 +712,42 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 				if( ToSJIS(&ucFirst, &ucSecond) == FALSE ){
 					AddGaijiToString(b, pbSrc[1]&0x7F);
 				}else{
-					AddSJISToString(ucFirst, ucSecond);
+					//ノンスペーシング文字「´｀¨＾￣＿◯」
+					if( ucFirst == 0x81 && ucSecond == 0x4C ){
+						m_strPending += (WCHAR)0x0301;
+						m_bSpacing = FALSE;
+					}else if( ucFirst == 0x81 && ucSecond == 0x4D ){
+						m_strPending += (WCHAR)0x0300;
+						m_bSpacing = FALSE;
+					}else if( ucFirst == 0x81 && ucSecond == 0x4E ){
+						m_strPending += (WCHAR)0x0308;
+						m_bSpacing = FALSE;
+					}else if( ucFirst == 0x81 && ucSecond == 0x4F ){
+						m_strPending += (WCHAR)0x0302;
+						m_bSpacing = FALSE;
+					}else if( ucFirst == 0x81 && ucSecond == 0x50 ){
+						m_strPending += (WCHAR)0x0305;
+						m_bSpacing = FALSE;
+					}else if( ucFirst == 0x81 && ucSecond == 0x51 ){
+						m_strPending += (WCHAR)0x0332;
+						m_bSpacing = FALSE;
+					}else if( ucFirst == 0x81 && ucSecond == 0xFC ){
+						m_strPending += (WCHAR)0x20DD;
+						m_bSpacing = FALSE;
+					}else{
+						AddSJISToString(ucFirst, ucSecond);
+					}
 				}
 				}
 				break;
 			case MF_LATIN_EXTENSION:
 				//ラテン文字拡張
-				m_strDecode += LatinExtensionTable[b - 0x21];
+				AddDecodedCharacters(LatinExtensionTable[b - 0x21]);
 				ActivePositionForward(1);
 				break;
 			case MF_LATIN_SPECIAL:
 				//ラテン文字特殊
-				m_strDecode += LatinSpecialTable[b - 0x21];
+				AddDecodedCharacters(LatinSpecialTable[b - 0x21]);
 				ActivePositionForward(1);
 				break;
 			default:
@@ -738,7 +767,7 @@ BOOL CARIB8CharDecode::GL_GR( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 				//1バイトDRCSは0x01xxから0x0Fxxに符号シフト
 				cc = (BYTE)(mode->iMF-MF_DRCS_0)<<8 | b;
 			}
-			m_strDecode += m_pDRCMap->MapUCS(cc);
+			AddDecodedCharacters(m_pDRCMap->MapUCS(cc));
 			ActivePositionForward(1);
 			m_bSpacing = TRUE;
 		}else if( mode->iMF == MF_MACRO ){
@@ -853,18 +882,24 @@ BOOL CARIB8CharDecode::G_UCS( const BYTE* pbSrc, DWORD dwSrcSize, DWORD* pdwRead
 	if( p != m_UCSToGaijiTable + _countof(m_UCSToGaijiTable) && p->first == code ){
 		//追加記号集合として処理
 		AddGaijiToString((BYTE)(p->second >> 8), (BYTE)p->second);
-	}else{
-		if( code >= 0x10000 ){
-			//サロゲートペア
-			m_strDecode += (WCHAR)((code - 0x10000) / 0x400 + 0xD800);
-			m_strDecode += (WCHAR)((code - 0x10000) % 0x400 + 0xDC00);
-		}else{
-			m_strDecode += (WCHAR)code;
-		}
+		m_bSpacing = TRUE;
+	}else if( code >= 0x10000 ){
+		//サロゲートペア
+		AddDecodedCharacters((WCHAR)((code - 0x10000) / 0x400 + 0xD800),
+		                     (WCHAR)((code - 0x10000) % 0x400 + 0xDC00));
 		ActivePositionForward(1);
+		m_bSpacing = TRUE;
+	}else if( code == 0x0301 || code == 0x0300 || code == 0x0308 || code == 0x0302 ||
+	          code == 0x0305 || code == 0x0332 || code == 0x20DD ){
+		//ノンスペーシング文字「´｀¨＾￣＿◯」
+		m_strPending += (WCHAR)code;
+		m_bSpacing = FALSE;
+	}else{
+		AddDecodedCharacters((WCHAR)code);
+		ActivePositionForward(1);
+		m_bSpacing = TRUE;
 	}
 
-	m_bSpacing = TRUE;
 	return TRUE;
 }
 
@@ -920,8 +955,7 @@ void CARIB8CharDecode::AddGaijiToString( const BYTE bFirst, const BYTE bSecond )
 	}else{
 		pszSrc = L"・";
 	}
-	wchar_t szDest[3] = { pszSrc[0], pszSrc[1], L'\0' };
-	m_strDecode += szDest;
+	AddDecodedCharacters(pszSrc[0], pszSrc[1]);
 
 	//文字列に置換するときは文字数を指定
 	ActivePositionForward(1);
@@ -934,9 +968,9 @@ void CARIB8CharDecode::AddSJISToString( unsigned char ucFirst, unsigned char ucS
 	wchar_t szDest[3];
 	int nSize = MultiByteToWideChar(932, 0, (char*)szSrc, -1, szDest, 3);
 	if( nSize <= 1 ){
-		m_strDecode += L'・';
+		AddDecodedCharacters(L'・');
 	}else{
-		m_strDecode += szDest;
+		AddDecodedCharacters(szDest[0], szDest[1]);
 	}
 	ActivePositionForward(1);
 }
@@ -1352,6 +1386,16 @@ const BOOL CARIB8CharDecode::IsCaptionPropertyChanged(void) const
 	}
 
 	return FALSE;
+}
+
+void CARIB8CharDecode::AddDecodedCharacters( WCHAR cFirst, WCHAR cSecond )
+{
+	m_strDecode += cFirst;
+	if( cSecond ){
+		m_strDecode += cSecond;
+	}
+	//保留中のノンスペーシング文字列があれば後置する
+	m_strDecode += m_strPending;
 }
 
 //動作位置前進する
